@@ -1,0 +1,12 @@
+.env
+backups/
+*.env.bak
+# real secret_key generated from searxng/settings.yml.example -- see
+# scripts/bootstrap.sh and docs/OPERATIONS.md
+searxng/settings.yml
+# editor swap/backup files -- .env is edited often enough that these
+# are worth excluding explicitly rather than trusting every editor's
+# own global ignore config
+.*.swp
+.*.swo
+*~

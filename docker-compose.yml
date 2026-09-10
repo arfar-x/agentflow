@@ -1,0 +1,229 @@
+# agentflow -- LibreChat + agent-skills MCP + Qwen (vLLM)
+#
+# Every service is a pinned image; every config a mounted file; every byte of
+# durable state a named volume (see docs/OPERATIONS.md). Nothing is baked
+# into an image build, so this maps 1:1 onto Deployments/PVCs later.
+#
+# mcp-agent-skills deliberately has no published port and is on the backend
+# network only -- fastmcp's HTTP transport has no authentication of any
+# kind. Reachability from `api` over the internal network is the only access
+# control it has; do not add a `ports:` entry to it.
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  mongodb_data:
+  pgvector_data:
+  meili_data:
+  librechat_uploads:
+  librechat_images:
+  librechat_logs:
+
+services:
+  api:
+    image: ghcr.io/danny-avila/librechat:${LIBRECHAT_IMAGE_TAG:?set LIBRECHAT_IMAGE_TAG in .env}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PORT:-3080}:${PORT:-3080}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      rag_api:
+        condition: service_started
+      mcp-agent-skills:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      MONGO_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
+      MEILI_HOST: http://meilisearch:7700
+      RAG_API_URL: http://rag_api:8000
+      ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
+    volumes:
+      - type: bind
+        source: ./config/librechat.yaml
+        target: /app/librechat.yaml
+        read_only: true
+      - librechat_uploads:/app/uploads
+      - librechat_images:/app/client/public/images
+      - librechat_logs:/app/api/logs
+    networks: [frontend, backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      # The LibreChat image ships wget, not curl -- confirmed by exec'ing in
+      # and checking, after curl-based healthchecks failed with
+      # "executable file not found in $PATH".
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:${PORT:-3080}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    mem_limit: 2g
+
+  # Standalone management UI (users, groups, roles, config overrides) --
+  # github.com/ClickHouse/librechat-admin-panel, LibreChat's own bundled
+  # service. Admin access is checked by `api` itself (role: 'ADMIN' in
+  # Mongo, or the access:admin grant), so this container can't grant
+  # itself anything -- see docs/CONFIGURATION.md.
+  admin-panel:
+    image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${ADMIN_PANEL_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      SESSION_SECRET: ${ADMIN_PANEL_SESSION_SECRET:?set ADMIN_PANEL_SESSION_SECRET in .env}
+      API_SERVER_URL: http://api:${PORT:-3080}
+      VITE_API_BASE_URL: http://localhost:${PORT:-3080}
+      SESSION_COOKIE_SECURE: "false"
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    mem_limit: 512m
+
+  mongodb:
+    image: mongo:8.0.20
+    restart: unless-stopped
+    command: ["--auth"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      # Read by mongo-init/init-librechat-user.sh, not by mongod itself --
+      # the official mongo image runs every /docker-entrypoint-initdb.d/
+      # script with the container's own env available, exactly once, only
+      # when mongodb_data is empty.
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init/init-librechat-user.sh:/docker-entrypoint-initdb.d/init-librechat-user.sh:ro
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    mem_limit: 1g
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.35.1
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY in .env}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili_data:/meili_data
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:7700/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+
+  vectordb:
+    image: pgvector/pgvector:0.8.0-pg15-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-mydatabase}"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    mem_limit: 1g
+
+  rag_api:
+    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:${RAG_API_IMAGE_TAG:?set RAG_API_IMAGE_TAG in .env}
+    restart: unless-stopped
+    depends_on:
+      vectordb:
+        condition: service_healthy
+    environment:
+      DB_HOST: vectordb
+      POSTGRES_DB: ${POSTGRES_DB:-mydatabase}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      RAG_OPENAI_BASEURL: ${VLLM_BASE_URL}
+      RAG_OPENAI_API_KEY: ${VLLM_API_KEY}
+      EMBEDDINGS_PROVIDER: ${RAG_EMBEDDINGS_PROVIDER:-openai}
+      EMBEDDINGS_MODEL: ${RAG_EMBEDDINGS_MODEL:?set RAG_EMBEDDINGS_MODEL in .env}
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    mem_limit: 1g
+
+  mcp-agent-skills:
+    build:
+      context: ./agent-skills
+      dockerfile: mcp-server/Dockerfile
+      args:
+        TOOLSETS: ${MCP_TOOLSETS:-jira}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Honors X-Agent-Skills-Env-<VAR> per-request headers (e.g. a
+      # different Jira credential per LibreChat user) instead of only this
+      # server process's own env. Safe to enable *here* specifically
+      # because this service has no published port and no Keycloak
+      # provider configured -- `api` on the backend network is the only
+      # caller that can reach it at all, which is the network-isolation
+      # exception server.py's own startup warning calls out. See
+      # agent-skills/AUTHENTICATION.md, Part 3.
+      MCP_TRUST_REQUEST_CREDENTIALS: "1"
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8321), timeout=3)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m
+
+  searxng:
+    image: searxng/searxng:2026.9.8-3fdc6d753
+    restart: unless-stopped
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), timeout=3)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m

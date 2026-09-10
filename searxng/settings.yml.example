@@ -1,0 +1,31 @@
+# Minimal override on top of SearXNG's own defaults (use_default_settings)
+# -- only what agentflow actually needs changed, not a duplicated copy of
+# their full default config.
+#
+# This is a template, not the live config -- scripts/bootstrap.sh copies it
+# to searxng/settings.yml (gitignored) on first run and substitutes a fresh
+# secret_key. Never fill in a real secret_key here; this file is committed.
+use_default_settings: true
+
+general:
+  # Internal-only instance behind mcp/agent tooling, not a public search
+  # engine -- no point advertising it or collecting telemetry.
+  instance_name: "agentflow-searxng"
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+server:
+  secret_key: "REPLACE_ME_SEARXNG_SECRET_KEY"
+  # No public HTTP UI needed -- LibreChat's api container is the only
+  # caller, over the backend compose network.
+  limiter: false
+  image_proxy: false
+
+search:
+  # html is SearXNG's own default UI; json is what LibreChat's
+  # webSearch integration actually calls (?format=json) -- SearXNG
+  # blocks that with a 403 unless the format is explicitly allowed.
+  formats:
+    - html
+    - json
