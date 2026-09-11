@@ -40,11 +40,11 @@ endpoints:
     recursionLimit: 25
     maxRecursionLimit: 50
     allowedProviders: ['Qwen']
-    # mode: bypass -- any tool call NOT matched below (every jira_* read,
-    # doc_gen, get_skill, list_skills, ...) runs without a prompt. `ask`
-    # is the actual allowlist of write/mutating calls that still pause for
-    # a human decision -- add the equivalent confluence_*/notion_* write
-    # tools here once those toolsets exist, same "<toolset>_<action>" naming
+    # mode: bypass -- any tool call NOT matched below (every jira_*/
+    # confluence_* read, doc_gen, get_skill, list_skills, ...) runs without
+    # a prompt. `ask` is the actual allowlist of write/mutating calls that
+    # still pause for a human decision -- add the equivalent write tools
+    # here for any future toolset, same "<toolset>_<action>" naming
     # (mcp-server/lib/mcp_tools.py's f"{toolset}_{spec.name}"). This stacks
     # with (doesn't replace) each toolset's own --confirm/*_AUTO_CONFIRM_WRITES
     # code gate -- see agent-skills/AGENTS.md's confirm-gating convention.
@@ -75,6 +75,12 @@ endpoints:
         - 'jira_worklog_delete_mcp_agent-skills'
         - 'jira_create_issue_mcp_agent-skills'
         - 'jira_edit_issue_mcp_agent-skills'
+        - 'confluence_create_page_mcp_agent-skills'
+        - 'confluence_update_page_mcp_agent-skills'
+        - 'confluence_delete_page_mcp_agent-skills'
+        - 'confluence_add_comment_mcp_agent-skills'
+        - 'confluence_add_label_mcp_agent-skills'
+        - 'confluence_remove_label_mcp_agent-skills'
       reason: 'The actions writing data must be approved by the user -- review before it runs.'
 
 mcpServers:
@@ -87,24 +93,30 @@ mcpServers:
     initTimeout: 20000
     serverInstructions: true
     chatMenu: true
-    # Per-user Jira credential: LibreChat substitutes each user's own
-    # customUserVars value into this header on every request to
-    # mcp-agent-skills. mcp-server only honors it because
+    # Per-user Jira/Confluence credentials: LibreChat substitutes each
+    # user's own customUserVars value into these headers on every request
+    # to mcp-agent-skills. mcp-server only honors them because
     # MCP_TRUST_REQUEST_CREDENTIALS=1 is set for that service
     # (docker-compose.yml) -- see agent-skills/AUTHENTICATION.md, Part 2.
     # A server with customUserVars gets a per-user connection automatically
     # (never a shared app-level one), so two LibreChat users never share a
-    # Jira identity through this server.
+    # Jira or Confluence identity through this server. Both toolsets'
+    # base URLs are per-user too, by deliberate choice here -- not just the
+    # credential -- so there's no shared server-level instance URL either.
     headers:
       X-Agent-Skills-Env-JIRA_BASE_URL: '{{JIRA_BASE_URL}}'
       X-Agent-Skills-Env-JIRA_USERNAME: '{{JIRA_USERNAME}}'
       X-Agent-Skills-Env-JIRA_PASSWORD: '{{JIRA_PASSWORD}}'
       X-Agent-Skills-Env-JIRA_DEFAULT_PROJECT: '{{JIRA_DEFAULT_PROJECT}}'
+      X-Agent-Skills-Env-CONFLUENCE_BASE_URL: '{{CONFLUENCE_BASE_URL}}'
+      X-Agent-Skills-Env-CONFLUENCE_USERNAME: '{{CONFLUENCE_USERNAME}}'
+      X-Agent-Skills-Env-CONFLUENCE_PASSWORD: '{{CONFLUENCE_PASSWORD}}'
+      X-Agent-Skills-Env-CONFLUENCE_DEFAULT_SPACE: '{{CONFLUENCE_DEFAULT_SPACE}}'
     customUserVars:
       JIRA_BASE_URL:
         title: 'Jira server URL'
         description: 'Jira server URL'
-        sensitive: true
+        sensitive: false
       JIRA_USERNAME:
         title: 'Jira username'
         description: 'Your own Jira username -- used only for your Jira tool calls, never stored by agent-skills itself.'
@@ -116,7 +128,23 @@ mcpServers:
       JIRA_DEFAULT_PROJECT:
         title: 'Jira default project'
         description: 'Jira default project board -- used for your Jira tool calls'
+        sensitive: false
+      CONFLUENCE_BASE_URL:
+        title: 'Confluence server URL'
+        description: 'Confluence server URL'
+        sensitive: false
+      CONFLUENCE_USERNAME:
+        title: 'Confluence username'
+        description: 'Your own Confluence username -- used only for your Confluence tool calls, never stored by agent-skills itself.'
+        sensitive: false
+      CONFLUENCE_PASSWORD:
+        title: 'Confluence password'
+        description: 'Confluence password -- used only for your Confluence tool calls, never stored by agent-skills itself.'
         sensitive: true
+      CONFLUENCE_DEFAULT_SPACE:
+        title: 'Confluence default space'
+        description: 'Confluence default space key -- used for your Confluence tool calls when a space is not given explicitly'
+        sensitive: false
 
 webSearch:
   searchProvider: 'searxng'

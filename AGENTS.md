@@ -68,8 +68,8 @@ substitute.
 - `api` (LibreChat) is the only service with a published port and the
   only thing end users talk to. It calls `mongodb` (users/conversations/
   agent defs), `meilisearch` (search), `rag_api` + `vectordb` (per-
-  conversation file RAG), `mcp-agent-skills` (Jira and other tools, over
-  MCP), and `searxng` (native web search).
+  conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
+  tools, over MCP), and `searxng` (native web search).
 - `mcp-agent-skills` and `searxng` are **internal-only, no published
   port, `backend` network only** -- reachability from `api` is their only
   access control (MCP's HTTP transport has no auth of its own). Never add
@@ -80,9 +80,9 @@ substitute.
 - **Tool approval is two-layered, deliberately**: LibreChat's own
   `toolApproval` (`config/librechat.yaml`) prompts before any tool call
   matching its `ask` list; independently, each write-capable toolset
-  inside `agent-skills` (Jira today) refuses to execute without its own
-  `--confirm`, enforced in that repo's own code. Neither layer is a
-  substitute for the other -- see that same file's inline comment for why
+  inside `agent-skills` (Jira and Confluence today) refuses to execute
+  without its own `--confirm`, enforced in that repo's own code. Neither
+  layer is a substitute for the other -- see that same file's inline comment for why
   the `ask` list uses LibreChat's real `<toolset>_<action>_mcp_<server>`
   tool-name format, not the colon-shaped form LibreChat's own docs show
   (confirmed wrong by reading the actual matching code).

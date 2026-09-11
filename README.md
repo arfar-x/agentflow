@@ -3,7 +3,7 @@
 Self-hosted, single-front-door agentic chatbot stack:
 [LibreChat](https://www.librechat.ai/) as the one UI end users see, talking
 to your own self-hosted, OpenAI-compatible LLM endpoint (vLLM), with Jira
-(and soon Confluence) exposed as tools via the
+and Confluence exposed as tools via the
 [`agent-skills`](https://github.com/arfar-x/agent-skills) MCP server.
 
 The first flow this stack supports end-to-end: a PM discusses a feature in
@@ -32,7 +32,9 @@ volume holds and how backup/restore works.
 
 - Docker Engine + Compose v2
 - A running, OpenAI-compatible vLLM endpoint (base URL + API key)
-- Jira credentials, if you want the `jira_*` tools live from the start
+- Jira and/or Confluence credentials, if you want those tools live from
+  the start (each user supplies their own via LibreChat's MCP Settings
+  form -- see "Managing users" below)
 - (Optional) An existing Keycloak instance, if you want SSO from day one --
   see [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md)
 
@@ -141,18 +143,13 @@ agentflow/
   `docs/CONFIGURATION.md` for how that's configured explicitly instead.
 - **Approval is two-layered, deliberately.** LibreChat's own
   `toolApproval` (in `config/librechat.yaml`) prompts before any tool call;
-  each write-capable toolset in `agent-skills` (Jira today, Confluence once
-  it lands) additionally refuses to execute without its own `--confirm`,
-  enforced in code, not just in a prompt. Neither layer alone is a
-  substitute for the other.
+  each write-capable toolset in `agent-skills` (Jira and Confluence today)
+  additionally refuses to execute without its own `--confirm`, enforced in
+  code, not just in a prompt. Neither layer alone is a substitute for the
+  other.
 
 ## Not yet in this stack
 
-- **Confluence tools** -- blocked on a `skills/confluence/` toolset that
-  doesn't exist yet in `agent-skills` (self-hosted Confluence Data Center
-  has no official MCP server). Once it lands, set
-  `MCP_TOOLSETS="jira confluence"` and the corresponding `CONFLUENCE_*`
-  variables, then rebuild `mcp-agent-skills`.
 - **n8n**, for event-driven flows with no user in the loop (e.g. a
   Sentry-triage workflow) -- deliberately out of scope for this launch, and
   architecturally independent of everything here.

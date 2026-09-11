@@ -72,11 +72,15 @@ to match.
 
 | Variable | Required | Notes |
 |---|---|---|
-| `MCP_TOOLSETS` | no | Default `jira`. Space-separated toolset names, each needing `skills/<name>/requirements.txt` to exist in the `agent-skills` submodule. Set to `jira confluence` once the Confluence toolset lands (Track B1 of the launch plan). Changing this requires `docker compose up -d --build mcp-agent-skills`. |
-| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | yes, if `jira` is in `MCP_TOOLSETS` | Required for every `jira_*` MCP tool. Missing any one of these makes every `jira_*` call return `{"error": {"type": "missing_environment_variables", ...}}` instead of a traceback -- see `docs/TROUBLESHOOTING.md`. |
+| `MCP_TOOLSETS` | no | Default `jira`. **Quote it** if it lists more than one (`MCP_TOOLSETS="jira confluence"`) -- `.env` is also `source`d directly by `scripts/bootstrap.sh`/`make up`, and an unquoted space-separated value breaks that (bash tries to run the second word as a command). Space-separated toolset names, each needing `skills/<name>/requirements.txt` to exist in the `agent-skills` submodule. Changing this requires `docker compose up -d --build mcp-agent-skills`. |
+| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | no (server-level) | Left blank in this deployment by design -- every Jira tool call's base URL and credential comes per-user instead, via LibreChat's `customUserVars` (`config/librechat.yaml`, injected as `X-Agent-Skills-Env-*` headers). Set these here only if you want a shared fallback identity instead of per-user. |
 | `JIRA_AUTO_CONFIRM_WRITES` | no | Leave `false` in production. LibreChat's own `toolApproval` gate (in `config/librechat.yaml`) is the intended approval surface; this variable existing at all is an escape hatch for automation you explicitly trust, not something to flip for convenience. |
-| `JIRA_DEFAULT_PROJECT` | no | Only used by `jira_triage`. |
+| `JIRA_DEFAULT_PROJECT` | no | Only used by `jira_triage`, and (in this deployment) supplied per-user via `customUserVars` like the credential -- see above. |
 | `JIRA_DEPLOYMENT_TYPE` | no | Only required the first time `create_issue`/`edit_issue` sets an assignee. |
+| `CONFLUENCE_BASE_URL` / `CONFLUENCE_USERNAME` / `CONFLUENCE_PASSWORD` | no (server-level) | Same per-user pattern as Jira above -- left blank here, supplied per-user via `customUserVars`. |
+| `CONFLUENCE_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. |
+| `CONFLUENCE_DEFAULT_SPACE` | no | Used by `my_pages`/`get_page_by_title` when no `--space_key` is given; supplied per-user via `customUserVars` in this deployment. |
+| `CONFLUENCE_DEPLOYMENT_TYPE` | yes, if `confluence` is in `MCP_TOOLSETS` | `cloud` or `server` -- unlike Jira, this one is required: Confluence's REST API is mounted at a different path per deployment (Cloud: `/wiki/rest/api`, Server/DC: `/rest/api`). Server-level, not per-user -- the whole org's Confluence instance is one deployment type. |
 
 ## Auth
 
