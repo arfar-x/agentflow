@@ -45,7 +45,7 @@ just stop decrypting. See `docs/OPERATIONS.md`.
 
 | Variable | Required | Notes |
 |---|---|---|
-| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | yes | Backing store for LibreChat's built-in RAG API -- per-conversation file uploads, not the curated company KB (that's the later Elasticsearch integration, out of scope for this launch). |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | yes | Backing store for LibreChat's built-in RAG API -- per-conversation file uploads. |
 | `RAG_EMBEDDINGS_PROVIDER` | yes | `openai` works against any OpenAI-compatible endpoint, including your vLLM one. |
 | `RAG_EMBEDDINGS_MODEL` | yes | Must be a model your `VLLM_BASE_URL` endpoint actually serves. If you haven't stood up a dedicated embeddings model yet, do that before enabling RAG uploads -- a chat model is not an embedding model. |
 

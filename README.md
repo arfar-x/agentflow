@@ -153,6 +153,3 @@ agentflow/
 - **n8n**, for event-driven flows with no user in the loop (e.g. a
   Sentry-triage workflow) -- deliberately out of scope for this launch, and
   architecturally independent of everything here.
-- **A curated company knowledge base over Elasticsearch** -- planned once
-  the PRD flow above is proven; will be exposed as another MCP tool, not
-  wired into LibreChat's own upload-only RAG.
