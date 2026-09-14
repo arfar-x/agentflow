@@ -3,10 +3,10 @@
 # that isn't already in one of those, this just saves typing.
 .DEFAULT_GOAL := help
 SHELL := /usr/bin/env bash
-SERVICE ?= api
+SERVICE ?= open-webui
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	user-create user-list user-ban user-delete user-invite user-reset-password
+	user-create user-list user-ban user-unban user-delete user-reset-password
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -19,7 +19,7 @@ bootstrap: up ## Alias for `up` (same idempotent first-run/re-run sequence)
 down: ## Stop the stack (volumes are kept)
 	docker compose down
 
-restart: ## Restart one service, e.g. `make restart SERVICE=api`
+restart: ## Restart one service, e.g. `make restart SERVICE=open-webui`
 	docker compose restart $(SERVICE)
 
 ps: ## Show service status/health
@@ -45,40 +45,33 @@ test: ## Run mcp-server's pytest suite inside the built mcp-agent-skills image
 		"pip install --no-cache-dir pytest -q >/dev/null && cd mcp-server && python3 -m pytest -q"
 
 # ---- User management -------------------------------------------------------
-# Thin wrappers over LibreChat's own officially-shipped config/*.js scripts
-# (the same tool bootstrap.sh uses for the admin account) -- nothing custom
-# here, just saved typing. For ROLE/PERMISSION management (promote to ADMIN,
-# grant capabilities, create groups) use the Admin Panel instead:
-# http://localhost:${ADMIN_PANEL_PORT:-3000} -- it edits existing accounts,
-# it doesn't create them.
+# Thin wrappers over Open WebUI's own admin REST API (scripts/openwebui-
+# admin.sh) -- nothing custom here beyond what that script does, just saved
+# typing. For ROLE/PERMISSION management beyond ban/unban (custom roles,
+# delegated grants, groups) use the Admin Panel instead, built into Open
+# WebUI itself: http://localhost:$${PORT:-3080}/admin -- log in with an
+# existing admin account.
 
-user-create: ## Create a user, e.g. `make user-create EMAIL=a@b.com NAME="A B" USERNAME=ab [PASSWORD=...]`
-	@test -n "$(EMAIL)" && test -n "$(NAME)" && test -n "$(USERNAME)" || \
-		{ echo "Usage: make user-create EMAIL=... NAME=... USERNAME=... [PASSWORD=...]" >&2; exit 1; }
-	@pw="$(PASSWORD)"; \
-	if [ -z "$$pw" ]; then pw="$$(openssl rand -hex 12)"; fi; \
-	echo "y" | docker compose exec -T api node config/create-user.js "$(EMAIL)" "$(NAME)" "$(USERNAME)" "$$pw" && \
-	echo "Login: $(EMAIL) / $$pw"
+user-create: ## Create a user, e.g. `make user-create EMAIL=a@b.com NAME="A B" [PASSWORD=...]`
+	@test -n "$(EMAIL)" && test -n "$(NAME)" || \
+		{ echo "Usage: make user-create EMAIL=... NAME=... [PASSWORD=...]" >&2; exit 1; }
+	scripts/openwebui-admin.sh create "$(EMAIL)" "$(NAME)" "$(PASSWORD)"
 
 user-list: ## List every user account
-	docker compose exec -T api node config/list-users.js
+	scripts/openwebui-admin.sh list
 
-user-ban: ## Ban a user for N minutes, e.g. `make user-ban EMAIL=a@b.com MINUTES=60`
-	@test -n "$(EMAIL)" && test -n "$(MINUTES)" || \
-		{ echo "Usage: make user-ban EMAIL=... MINUTES=..." >&2; exit 1; }
-	docker compose exec -T api node config/ban-user.js "$(EMAIL)" "$(MINUTES)"
+user-ban: ## Block a user's access, e.g. `make user-ban EMAIL=a@b.com` -- NOT time-limited, see docs/CONFIGURATION.md
+	@test -n "$(EMAIL)" || { echo "Usage: make user-ban EMAIL=..." >&2; exit 1; }
+	scripts/openwebui-admin.sh ban "$(EMAIL)"
 
-user-invite: ## Email an invite link instead of setting a password yourself -- needs email sending configured
-	@test -n "$(EMAIL)" || { echo "Usage: make user-invite EMAIL=..." >&2; exit 1; }
-	docker compose exec -T api node config/invite-user.js "$(EMAIL)"
+user-unban: ## Reverse `make user-ban`, e.g. `make user-unban EMAIL=a@b.com`
+	@test -n "$(EMAIL)" || { echo "Usage: make user-unban EMAIL=..." >&2; exit 1; }
+	scripts/openwebui-admin.sh unban "$(EMAIL)"
 
 user-delete: ## Delete a user and ALL their data -- interactive, asks you to confirm (irreversible)
-	# This deployment has no Redis, so LibreChat can't coordinate a live
-	# generation abort across processes -- delete-user.js additionally
-	# asks you to confirm every LibreChat process (this `api` included)
-	# is stopped before it'll proceed. Only answer y there if that's true;
-	# otherwise stop `api` first (`make down`), then run this.
-	docker compose exec api node config/delete-user.js $(EMAIL)
+	@test -n "$(EMAIL)" || { echo "Usage: make user-delete EMAIL=..." >&2; exit 1; }
+	scripts/openwebui-admin.sh delete "$(EMAIL)"
 
-user-reset-password: ## Reset a user's password -- interactive (email + new password prompts)
-	docker compose exec api node config/reset-password.js
+user-reset-password: ## Reset a user's password, e.g. `make user-reset-password EMAIL=a@b.com [PASSWORD=...]`
+	@test -n "$(EMAIL)" || { echo "Usage: make user-reset-password EMAIL=..." >&2; exit 1; }
+	scripts/openwebui-admin.sh reset-password "$(EMAIL)" "$(PASSWORD)"

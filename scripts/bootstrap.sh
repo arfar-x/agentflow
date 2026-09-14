@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # One command to bring the stack up from a filled-in .env to a working
-# login: docker compose up, wait for api to actually be healthy, then
-# create the admin account via LibreChat's own config/create-user.js if
-# no user exists yet.
+# login: docker compose up, wait for open-webui to actually be healthy
+# (open-webui creates the admin account itself on startup, from
+# WEBUI_ADMIN_EMAIL/WEBUI_ADMIN_PASSWORD/WEBUI_ADMIN_NAME in .env, if no
+# user exists yet -- see docker-compose.yml's comment on that service),
+# then push config/tools/agent_skills.py into Open WebUI as that admin's
+# Tool (creating it the first time, updating its content on every
+# subsequent run) and make it usable by every signed-in user.
 #
-# Idempotent -- safe to rerun. It never creates a second admin account
-# and never touches Mongo directly (the LibreChat app user itself is
-# created declaratively by mongo-init/init-librechat-user.sh via the
-# official mongo image's /docker-entrypoint-initdb.d/ convention, not by
-# this script).
+# Idempotent -- safe to rerun. It never creates a second admin account,
+# and re-pushing the Tool's content on every run is deliberate: this
+# repo's file is always the source of truth, the same way
+# config/librechat.yaml being mounted read-only kept LibreChat's config
+# in sync with this repo on every restart.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -27,38 +31,82 @@ fi
 echo "==> docker compose up -d --build"
 docker compose up -d --build
 
-echo "==> Waiting for api to report healthy..."
+echo "==> Waiting for open-webui to report healthy..."
 for _ in $(seq 1 60); do
-  status="$(docker compose ps --format '{{.Health}}' api 2>/dev/null || true)"
+  status="$(docker compose ps --format '{{.Health}}' open-webui 2>/dev/null || true)"
   if [ "${status}" = "healthy" ]; then
     break
   fi
   sleep 5
 done
 if [ "${status}" != "healthy" ]; then
-  echo "api did not become healthy in time. Check: docker compose logs api" >&2
+  echo "open-webui did not become healthy in time. Check: docker compose logs open-webui" >&2
   exit 1
 fi
-echo "    api is healthy."
+echo "    open-webui is healthy (creates its own admin account on first boot -- see"
+echo "    docker compose logs open-webui if ${WEBUI_ADMIN_EMAIL:-your admin email} can't log in)."
 
-echo "==> Checking for an existing user..."
 # shellcheck disable=SC1091
 source .env
-user_count="$(docker compose exec -T api node config/list-users.js 2>/dev/null | grep -oE 'Total Users: [0-9]+' | grep -oE '[0-9]+' || echo 0)"
+: "${WEBUI_ADMIN_EMAIL:?set WEBUI_ADMIN_EMAIL in .env}"
+: "${WEBUI_ADMIN_PASSWORD:?set WEBUI_ADMIN_PASSWORD in .env -- scripts/generate-secrets.sh generates one}"
 
-if [ "${user_count}" -gt 0 ]; then
-  echo "    ${user_count} user(s) already exist -- skipping account creation."
+BASE_URL="http://127.0.0.1:${PORT:-3080}"
+
+echo "==> Signing in as ${WEBUI_ADMIN_EMAIL} to push config/tools/agent_skills.py..."
+signin_resp="$(mktemp)"
+signin_http_code="$(curl -s -o "${signin_resp}" -w '%{http_code}' \
+  -X POST "${BASE_URL}/api/v1/auths/signin" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg email "${WEBUI_ADMIN_EMAIL}" --arg password "${WEBUI_ADMIN_PASSWORD}" '{email:$email,password:$password}')")"
+
+if [ "${signin_http_code}" != "200" ]; then
+  echo "    Could not sign in as ${WEBUI_ADMIN_EMAIL} (http ${signin_http_code}) -- skipping the" >&2
+  echo "    Tools upload. This usually means WEBUI_ADMIN_PASSWORD in .env no longer matches a" >&2
+  echo "    real admin account (e.g. it was reset by hand). Import config/tools/agent_skills.py" >&2
+  echo "    by hand instead: Admin Panel -> Workspace -> Tools -> Import (upload the file)," >&2
+  echo "    then set its sharing to Public so every user can use their own Jira/Confluence Valves." >&2
+  rm -f "${signin_resp}"
 else
-  : "${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}"
-  : "${ADMIN_NAME:?set ADMIN_NAME in .env}"
-  : "${ADMIN_USERNAME:?set ADMIN_USERNAME in .env}"
-  : "${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env -- scripts/generate-secrets.sh generates one}"
-  echo "==> Creating admin account (${ADMIN_EMAIL})..."
-  echo "y" | docker compose exec -T api node config/create-user.js \
-    "${ADMIN_EMAIL}" "${ADMIN_NAME}" "${ADMIN_USERNAME}" "${ADMIN_PASSWORD}" >/dev/null
-  echo "    Created. Log in at the chat host with:"
-  echo "      email:    ${ADMIN_EMAIL}"
-  echo "      password: ${ADMIN_PASSWORD}"
+  TOKEN="$(jq -r .token "${signin_resp}")"
+  rm -f "${signin_resp}"
+
+  TOOL_ID="agent_skills"
+  TOOL_NAME="Agent Skills (Jira & Confluence)"
+  BODY="$(jq -n --arg id "${TOOL_ID}" --arg name "${TOOL_NAME}" --rawfile content config/tools/agent_skills.py '{
+    id: $id,
+    name: $name,
+    content: $content,
+    meta: {description: "Jira and Confluence tools, backed by this deployment'\''s mcp-agent-skills MCP server."},
+    access_grants: [{principal_type: "user", principal_id: "*", permission: "read"}]
+  }')"
+
+  tool_resp="$(mktemp)"
+  update_http_code="$(curl -s -o "${tool_resp}" -w '%{http_code}' \
+    -X POST "${BASE_URL}/api/v1/tools/id/${TOOL_ID}/update" \
+    -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+    -d "${BODY}")"
+
+  if [ "${update_http_code}" = "200" ]; then
+    echo "    Updated the existing Agent Skills tool."
+  else
+    create_http_code="$(curl -s -o "${tool_resp}" -w '%{http_code}' \
+      -X POST "${BASE_URL}/api/v1/tools/create" \
+      -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' \
+      -d "${BODY}")"
+    if [ "${create_http_code}" = "200" ]; then
+      echo "    Created the Agent Skills tool -- every user can now open Workspace -> Tools ->"
+      echo "    Agent Skills (Jira & Confluence) -> the wrench icon to enter their own Jira/"
+      echo "    Confluence credentials, same one-time step LibreChat's MCP Settings form was."
+    else
+      echo "    Could not create or update the Agent Skills tool (update: http ${update_http_code}," >&2
+      echo "    create: http ${create_http_code}):" >&2
+      cat "${tool_resp}" >&2
+      echo "    Import config/tools/agent_skills.py by hand instead: Admin Panel -> Workspace ->" >&2
+      echo "    Tools -> Import." >&2
+    fi
+  fi
+  rm -f "${tool_resp}"
 fi
 
 echo "==> Done. docker compose ps:"

@@ -6,7 +6,7 @@
 #
 # Does NOT restore .env automatically -- confirm the backup's .env matches
 # what you intend to run before overwriting your current one by hand. See
-# docs/OPERATIONS.md for why the CREDS_KEY/CREDS_IV pairing matters.
+# docs/OPERATIONS.md for why WEBUI_SECRET_KEY matters.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -38,8 +38,8 @@ done
 
 echo
 echo "Volumes restored. If this backup's .env differs from your current one"
-echo "(especially CREDS_KEY/CREDS_IV/JWT_SECRET/JWT_REFRESH_SECRET), copy"
-echo "${BACKUP_DIR}/.env into place BEFORE starting the stack, or Mongo's"
-echo "stored credentials will not decrypt."
+echo "(especially WEBUI_SECRET_KEY), copy ${BACKUP_DIR}/.env into place"
+echo "BEFORE starting the stack, or Postgres's stored credentials"
+echo "(including every user's own Jira/Confluence Valves) will not decrypt."
 echo
 echo "Then: docker compose up -d"

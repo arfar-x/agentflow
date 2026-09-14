@@ -10,3 +10,8 @@ searxng/settings.yml
 .*.swp
 .*.swo
 *~
+# config/tools/agent_skills.py is plain Python, not a package with its
+# own build step -- but a local syntax check or import test can still
+# leave one of these behind.
+__pycache__/
+*.pyc
