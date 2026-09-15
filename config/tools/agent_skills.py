@@ -24,11 +24,14 @@ version: 1.0.0
 #   - UserValves below == LibreChat's customUserVars, field for field
 #     (same 8 vars: JIRA_BASE_URL/USERNAME/PASSWORD/DEFAULT_PROJECT,
 #     CONFLUENCE_BASE_URL/USERNAME/PASSWORD/DEFAULT_SPACE). Each user fills
-#     these in once, in their own Open WebUI account (Workspace -> Tools ->
-#     wrench icon on this tool -> Valves), same one-time-enrollment UX
-#     LibreChat's MCP Settings form gave them, stored encrypted at rest by
-#     Open WebUI itself the same way it already stores every other Tool's
-#     UserValves.
+#     these in once, right from any chat -- the '+' button next to the
+#     message box, then the sliders icon (tooltip: "Valves") next to this
+#     tool's name -- no admin and no .env edit needed, same one-time-
+#     enrollment UX LibreChat's MCP Settings form gave them, stored
+#     encrypted at rest by Open WebUI itself the same way it already
+#     stores every other Tool's UserValves. _with_setup_hint() below turns
+#     a missing-credential error into exactly these instructions, so a
+#     user's first attempt doubles as onboarding.
 #   - Every write method below (see WRITE_TOOLS) calls _confirm() first,
 #     which raises an Allow/Deny card via __event_call__ and refuses to
 #     call mcp-agent-skills at all on Deny. This is deliberately
@@ -98,6 +101,49 @@ def _error(kind: str, message: str) -> str:
     return json.dumps({"error": {"type": kind, "message": message}}, ensure_ascii=False)
 
 
+# Shown to the model (which relays it to the user, per skills/jira/SKILL.md
+# and skills/confluence/SKILL.md rule 1's "relay the tool's actual error
+# text") whenever mcp-agent-skills reports it's missing a credential this
+# specific user hasn't set up yet. Deliberately describes a path that needs
+# no admin, no .env, and no concept of "Tools"/"Valves" beyond clicking two
+# things in the chat the user is already looking at -- this is the whole
+# point of the per-user Valves design: a non-technical user connects their
+# own Jira/Confluence exactly the way they'd connect any other app, without
+# anyone editing a config file on their behalf.
+_SETUP_HINTS = {
+    "jira": (
+        "This user hasn't connected their own Jira account to this deployment yet -- that's "
+        "why this call is missing a credential, not a bug. Tell them, in their own language, "
+        "exactly these steps (no administrator and no config file involved): in this same "
+        "chat, click the '+' button next to the message box, find \"Agent Skills (Jira & "
+        "Confluence)\" in the list, click the small sliders icon next to it (tooltip: "
+        "\"Valves\"), then fill in Jira Base URL, Username, and Password (their normal Jira "
+        "login -- or an API token instead of a password, if their Jira Cloud organization "
+        "requires one) and save. Once saved, this exact same request will work, with no other "
+        "change needed."
+    ),
+    "confluence": (
+        "This user hasn't connected their own Confluence account to this deployment yet -- "
+        "that's why this call is missing a credential, not a bug. Tell them, in their own "
+        "language, exactly these steps (no administrator and no config file involved): in "
+        "this same chat, click the '+' button next to the message box, find \"Agent Skills "
+        "(Jira & Confluence)\" in the list, click the small sliders icon next to it (tooltip: "
+        "\"Valves\"), then fill in Confluence Base URL, Deployment Type (cloud or server), "
+        "Username, and Password (their normal Confluence login -- or an API token instead of "
+        "a password, if their Confluence Cloud organization requires one) and save. Once "
+        "saved, this exact same request will work, with no other change needed."
+    ),
+}
+
+
+def _toolset_of(tool_name: str) -> Optional[str]:
+    if tool_name.startswith("jira_"):
+        return "jira"
+    if tool_name.startswith("confluence_"):
+        return "confluence"
+    return None
+
+
 class Tools:
     class Valves(BaseModel):
         MCP_URL: str = Field(
@@ -159,11 +205,36 @@ class Tools:
             return "\n".join(parts) if parts else json.dumps({"result": None})
 
         try:
-            return await asyncio.wait_for(_run(), timeout=self.valves.MCP_TIMEOUT_SECONDS)
+            result_text = await asyncio.wait_for(_run(), timeout=self.valves.MCP_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
             return _error("timeout", f"{tool_name} did not respond within {self.valves.MCP_TIMEOUT_SECONDS:.0f}s.")
         except Exception as exc:  # noqa: BLE001 -- surfaced to the model as tool output, not raised
             return _error("mcp_call_failed", str(exc))
+        return self._with_setup_hint(tool_name, result_text)
+
+    @staticmethod
+    def _with_setup_hint(tool_name: str, result_text: str) -> str:
+        """mcp-agent-skills already tells us plainly when a call is missing
+        a required credential (error.type == "missing_environment_variables")
+        -- this only augments that response with the actual click path a
+        user (who has never heard of "Valves" or "Tools") needs to fix it
+        themselves, right in this chat. Leaves every other response,
+        including every other error shape, completely untouched.
+        """
+        toolset = _toolset_of(tool_name)
+        if toolset is None:
+            return result_text
+        try:
+            parsed = json.loads(result_text)
+        except (TypeError, ValueError):
+            return result_text
+        if not isinstance(parsed, dict):
+            return result_text
+        error = parsed.get("error")
+        if not isinstance(error, dict) or error.get("type") != "missing_environment_variables":
+            return result_text
+        error["setup_instructions"] = _SETUP_HINTS[toolset]
+        return json.dumps(parsed, ensure_ascii=False)
 
     @staticmethod
     def _jira_headers(uv: "Tools.UserValves") -> dict:

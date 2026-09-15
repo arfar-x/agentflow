@@ -102,6 +102,15 @@ substitute.
   as `X-Agent-Skills-Env-*` headers. See that file's own top-of-file
   comment before changing it, and `docs/OPERATIONS.md` "Updating the
   agent-skills submodule" for what a version bump requires here.
+- **A user connecting their own Jira/Confluence is meant to need no
+  administrator and no `.env` edit, ever** -- the whole reason the Valves
+  form exists. `config/tools/agent_skills.py`'s `_with_setup_hint` turns
+  mcp-agent-skills' own `missing_environment_variables` error into a
+  `setup_instructions` field naming the exact click path (the **+** menu
+  next to the message box -> the sliders icon on this Tool), so a user's
+  first attempt at a Jira/Confluence action doubles as onboarding instead
+  of a dead end -- see `docs/CONFIGURATION.md` "Per-user Jira/Confluence
+  credentials" for the reasoning.
 - **Tool approval is two-layered, deliberately**: every write method in
   `config/tools/agent_skills.py` (the 12 in its `WRITE_TOOLS` set) shows
   an Allow/Deny card via `__event_call__` before ever calling
@@ -135,8 +144,10 @@ substitute.
   interpolation -- if you're about to write a literal secret value into
   it, stop; it belongs in `.env` instead.
 - Per-user Jira/Confluence credentials live in Open WebUI's own encrypted
-  Tool-Valves storage (each user's own, filled in via Workspace -> Tools
-  -> the wrench icon on "Agent Skills (Jira & Confluence)"), never in
+  Tool-Valves storage (each user's own, filled in from inside any chat --
+  the **+** button next to the message box -> the sliders icon on "Agent
+  Skills (Jira & Confluence)" -- no admin path required, though
+  Workspace -> Tools has the same form for whoever prefers it), never in
   `.env` -- `config/tools/agent_skills.py` reads them per-call from
   `__user__["valves"]` and injects them as `X-Agent-Skills-Env-<VAR>`
   headers, trusted by `mcp-agent-skills` only because

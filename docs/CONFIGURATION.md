@@ -82,15 +82,35 @@ configured (or none).
 WebUI that *does* support this natively: a **Tool**'s per-user **Valves**.
 Each user fills in `JIRA_BASE_URL`/`JIRA_USERNAME`/`JIRA_PASSWORD`/
 `JIRA_DEFAULT_PROJECT`/`CONFLUENCE_BASE_URL`/`CONFLUENCE_USERNAME`/
-`CONFLUENCE_PASSWORD`/`CONFLUENCE_DEFAULT_SPACE` once, in **Workspace ->
-Tools -> the wrench icon on "Agent Skills (Jira & Confluence)" -> Valves**
--- Open WebUI stores it encrypted at rest (keyed from `WEBUI_SECRET_KEY`)
-and never shows it to any other user. On every Jira/Confluence tool call,
-the plugin builds the exact same `X-Agent-Skills-Env-<VAR>` headers
-LibreChat used to send, from that specific caller's own Valves, so
-Jira/Confluence's own audit log shows the real person -- see
-`agent-skills/AUTHENTICATION.md` Part 2 for how `mcp-agent-skills` honors
-those headers, unchanged from before.
+`CONFLUENCE_PASSWORD`/`CONFLUENCE_DEFAULT_SPACE` once -- Open WebUI stores
+it encrypted at rest (keyed from `WEBUI_SECRET_KEY`) and never shows it to
+any other user. On every Jira/Confluence tool call, the plugin builds the
+exact same `X-Agent-Skills-Env-<VAR>` headers LibreChat used to send, from
+that specific caller's own Valves, so Jira/Confluence's own audit log
+shows the real person -- see `agent-skills/AUTHENTICATION.md` Part 2 for
+how `mcp-agent-skills` honors those headers, unchanged from before.
+
+**Where a user actually does this -- no admin, no `.env`, no concept of
+"Tools" required up front:** in any chat, the **+** button next to the
+message box opens a list of available tools; next to
+"Agent Skills (Jira & Confluence)" is a small sliders icon (tooltip:
+**Valves**) that opens exactly that user's own settings form (confirmed
+against Open WebUI's own `IntegrationsMenu.svelte`/`Controls/Valves.svelte`
+-- this is a first-class, built-in per-chat entry point, not something
+this repo bolts on). The same form is also reachable from **Workspace ->
+Tools -> the sliders icon on "Agent Skills (Jira & Confluence)"** for
+whoever prefers the admin-side path, or wants to walk a colleague through
+it screen-share. Both paths edit the same stored Valves.
+
+**If a user tries a Jira/Confluence action before doing this**, they don't
+hit a cryptic error: `config/tools/agent_skills.py` recognizes
+`mcp-agent-skills`' own `missing_environment_variables` response and
+appends a `setup_instructions` field spelling out these exact same steps,
+which the model relays in conversation (per `skills/jira/SKILL.md` and
+`skills/confluence/SKILL.md`'s own "relay the tool's actual error text"
+rule) -- so the very first attempt doubles as onboarding, in whatever
+language the user is chatting in, with no separate documentation to hand
+them.
 
 ### Tool approval
 

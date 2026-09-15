@@ -103,13 +103,19 @@ make user-reset-password EMAIL=a@b.com   # PASSWORD=... optional, generated if o
 ```
 
 Once an account exists, each user connects their own Jira/Confluence
-identity themselves, in the UI: **Workspace -> Tools -> the wrench icon on
-"Agent Skills (Jira & Confluence)" -> Valves**, and fills in their own
-`JIRA_USERNAME`/`JIRA_PASSWORD`/etc. Nobody else's chat ever uses that
-credential, and agent-skills' own audit trail on Jira/Confluence shows the
-real person, not a shared service account -- see
-[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Per-user Jira/Confluence
-credentials".
+identity themselves -- entirely inside the chat, no admin and no `.env`
+editing involved: open a chat, click the **+** button next to the message
+box, find **"Agent Skills (Jira & Confluence)"** in the list, click the
+small sliders icon next to it (tooltip: **Valves**), and fill in their own
+Jira/Confluence URL, username, and password (or an API token, if their
+Cloud org requires one). Nobody else's chat ever uses that credential, and
+agent-skills' own audit trail on Jira/Confluence shows the real person,
+not a shared service account. If someone tries a Jira/Confluence action
+before doing this, the error they get back already explains these exact
+steps -- see [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Per-user
+Jira/Confluence credentials" for the full reasoning, and the same steps
+from the Admin side (Workspace -> Tools) if you'd rather walk someone
+through it directly.
 
 For **roles and permissions** -- promoting someone to admin, building
 groups, delegating a specific admin capability -- use the **Admin Panel**,

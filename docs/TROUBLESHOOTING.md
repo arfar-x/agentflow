@@ -24,10 +24,16 @@
 
 The calling user hasn't filled in their own credentials yet, and no
 server-level fallback (`JIRA_USERNAME`/`JIRA_PASSWORD` etc. in `.env`) is
-set either. Point them at **Workspace -> Tools -> the wrench icon on
-"Agent Skills (Jira & Confluence)" -> Valves** to enter their own
-`JIRA_BASE_URL`/`JIRA_USERNAME`/`JIRA_PASSWORD` (or the `CONFLUENCE_*`
-equivalents).
+set either. This should be self-service: `config/tools/agent_skills.py`
+appends a `setup_instructions` field to exactly this error (see
+`_with_setup_hint`/`_SETUP_HINTS` in that file) telling the model to relay
+the click path -- **+ button next to the message box -> "Agent Skills
+(Jira & Confluence)" -> the sliders icon next to it (tooltip: Valves)** --
+in the user's own language. If a user reports getting a raw, unexplained
+error instead, the model likely paraphrased past the `setup_instructions`
+field rather than relaying it; the same click path also works from
+**Workspace -> Tools -> the sliders icon on "Agent Skills (Jira &
+Confluence)" -> Valves** if you'd rather walk them through it directly.
 
 ## Every Jira/Confluence call hits the same account regardless of who's chatting
 
