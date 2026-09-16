@@ -51,14 +51,28 @@ source .env
 BASE_URL="http://127.0.0.1:${EXPOSE_NGINX_PORT:-80}"
 
 echo "==> Waiting for nginx to route console API requests..."
+code=""
 for _ in $(seq 1 30); do
   code="$(curl -s -o /dev/null -w '%{http_code}' "${BASE_URL}/console/api/setup" || true)"
   [ "${code}" = "200" ] && break
   sleep 2
 done
+if [ "${code}" != "200" ]; then
+  echo "nginx never returned 200 for ${BASE_URL}/console/api/setup (last status: ${code:-none})." >&2
+  echo "Check: docker compose logs nginx api -- and confirm EXPOSE_NGINX_PORT" >&2
+  echo "(${EXPOSE_NGINX_PORT:-80}) isn't already bound to something else on this host." >&2
+  exit 1
+fi
 
 echo "==> Creating admin account (${DIFY_ADMIN_EMAIL}) if none exists yet..."
-setup_step="$(curl -s "${BASE_URL}/console/api/setup" | jq -r '.step // empty')"
+setup_resp_raw="$(curl -s "${BASE_URL}/console/api/setup")"
+if ! printf '%s' "${setup_resp_raw}" | jq empty 2>/dev/null; then
+  echo "Unexpected (non-JSON) response from ${BASE_URL}/console/api/setup:" >&2
+  printf '%s\n' "${setup_resp_raw}" >&2
+  echo "Check docker compose logs nginx api for what's actually answering this port." >&2
+  exit 1
+fi
+setup_step="$(printf '%s' "${setup_resp_raw}" | jq -r '.step // empty')"
 if [ "${setup_step}" = "finished" ]; then
   echo "    An account already exists -- skipping creation."
 else
