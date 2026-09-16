@@ -17,15 +17,16 @@ general:
 
 server:
   secret_key: "REPLACE_ME_SEARXNG_SECRET_KEY"
-  # No public HTTP UI needed -- LibreChat's api container is the only
-  # caller, over the backend compose network.
+  # No public HTTP UI needed -- reachable only from whatever Dify tool or
+  # workflow node you wire up to query it, over the compose network.
   limiter: false
   image_proxy: false
 
 search:
-  # html is SearXNG's own default UI; json is what LibreChat's
-  # webSearch integration actually calls (?format=json) -- SearXNG
-  # blocks that with a 403 unless the format is explicitly allowed.
+  # html is SearXNG's own default UI; json is the format a Dify
+  # HTTP-Request-node/custom tool calling it programmatically would use
+  # (?format=json) -- SearXNG blocks that with a 403 unless the format is
+  # explicitly allowed.
   formats:
     - html
     - json

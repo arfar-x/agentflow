@@ -5,18 +5,17 @@
 SHELL := /usr/bin/env bash
 SERVICE ?= api
 
-.PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	user-create user-list user-ban user-delete user-invite user-reset-password
+.PHONY: help bootstrap up down restart ps logs build secrets backup restore test
 
 help: ## Show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start the whole stack -- build, wait healthy, create admin if needed. Safe to rerun.
+up: ## Start the whole stack -- build, wait healthy, create admin + declarative config if needed. Safe to rerun.
 	scripts/bootstrap.sh
 
 bootstrap: up ## Alias for `up` (same idempotent first-run/re-run sequence)
 
-down: ## Stop the stack (volumes are kept)
+down: ## Stop the stack (volumes/ bind mounts are kept)
 	docker compose down
 
 restart: ## Restart one service, e.g. `make restart SERVICE=api`
@@ -34,7 +33,7 @@ build: ## Rebuild one service's image, e.g. `make build SERVICE=mcp-agent-skills
 secrets: ## Generate the secrets .env needs (refuses to run on a live deployment)
 	scripts/generate-secrets.sh
 
-backup: ## Snapshot every named volume + .env into backups/<timestamp>/
+backup: ## Snapshot volumes/ + .env into backups/<timestamp>/
 	scripts/backup.sh
 
 restore: ## Restore from a backup dir, e.g. `make restore DIR=backups/20260101-000000`
@@ -44,41 +43,10 @@ test: ## Run mcp-server's pytest suite inside the built mcp-agent-skills image
 	docker compose run --rm --user root --entrypoint sh mcp-agent-skills -c \
 		"pip install --no-cache-dir pytest -q >/dev/null && cd mcp-server && python3 -m pytest -q"
 
-# ---- User management -------------------------------------------------------
-# Thin wrappers over LibreChat's own officially-shipped config/*.js scripts
-# (the same tool bootstrap.sh uses for the admin account) -- nothing custom
-# here, just saved typing. For ROLE/PERMISSION management (promote to ADMIN,
-# grant capabilities, create groups) use the Admin Panel instead:
-# http://localhost:${ADMIN_PANEL_PORT:-3000} -- it edits existing accounts,
-# it doesn't create them.
-
-user-create: ## Create a user, e.g. `make user-create EMAIL=a@b.com NAME="A B" USERNAME=ab [PASSWORD=...]`
-	@test -n "$(EMAIL)" && test -n "$(NAME)" && test -n "$(USERNAME)" || \
-		{ echo "Usage: make user-create EMAIL=... NAME=... USERNAME=... [PASSWORD=...]" >&2; exit 1; }
-	@pw="$(PASSWORD)"; \
-	if [ -z "$$pw" ]; then pw="$$(openssl rand -hex 12)"; fi; \
-	echo "y" | docker compose exec -T api node config/create-user.js "$(EMAIL)" "$(NAME)" "$(USERNAME)" "$$pw" && \
-	echo "Login: $(EMAIL) / $$pw"
-
-user-list: ## List every user account
-	docker compose exec -T api node config/list-users.js
-
-user-ban: ## Ban a user for N minutes, e.g. `make user-ban EMAIL=a@b.com MINUTES=60`
-	@test -n "$(EMAIL)" && test -n "$(MINUTES)" || \
-		{ echo "Usage: make user-ban EMAIL=... MINUTES=..." >&2; exit 1; }
-	docker compose exec -T api node config/ban-user.js "$(EMAIL)" "$(MINUTES)"
-
-user-invite: ## Email an invite link instead of setting a password yourself -- needs email sending configured
-	@test -n "$(EMAIL)" || { echo "Usage: make user-invite EMAIL=..." >&2; exit 1; }
-	docker compose exec -T api node config/invite-user.js "$(EMAIL)"
-
-user-delete: ## Delete a user and ALL their data -- interactive, asks you to confirm (irreversible)
-	# This deployment has no Redis, so LibreChat can't coordinate a live
-	# generation abort across processes -- delete-user.js additionally
-	# asks you to confirm every LibreChat process (this `api` included)
-	# is stopped before it'll proceed. Only answer y there if that's true;
-	# otherwise stop `api` first (`make down`), then run this.
-	docker compose exec api node config/delete-user.js $(EMAIL)
-
-user-reset-password: ## Reset a user's password -- interactive (email + new password prompts)
-	docker compose exec api node config/reset-password.js
+# ---- Managing workspace members ---------------------------------------------
+# Dify has no CLI equivalent to LibreChat's/Open WebUI's user-management
+# scripts -- workspace members are invited from inside the app itself:
+# Studio -> Settings -> Members -> Invite Members (email + role: admin/
+# editor/normal/dataset operator). The account created by `make up` (from
+# DIFY_ADMIN_EMAIL in .env) is the first member and always an owner; invite
+# everyone else that same way. See docs/CONFIGURATION.md "Auth".

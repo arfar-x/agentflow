@@ -4,6 +4,9 @@ backups/
 # real secret_key generated from searxng/settings.yml.example -- see
 # scripts/bootstrap.sh and docs/OPERATIONS.md
 searxng/settings.yml
+# Dify's own bind-mounted durable state (Postgres data, uploaded files,
+# plugin packages, sandbox deps, ...) -- see docs/OPERATIONS.md "Volumes".
+/volumes/
 # editor swap/backup files -- .env is edited often enough that these
 # are worth excluding explicitly rather than trusting every editor's
 # own global ignore config
