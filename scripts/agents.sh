@@ -2,7 +2,10 @@
 # Declarative agent management -- wrapper behind `make agent-export` and
 # `make agent-import`. The real work is scripts/agent-sync.js, streamed into
 # the running `api` container (it needs LibreChat's own models); this
-# script only moves files across the container boundary.
+# script only moves files across the container boundary, as a tar stream
+# through `docker compose exec` rather than `docker cp`, so Docker never has to
+# read a path on this host (a snap-packaged Docker can't see /tmp, and a remote
+# DOCKER_HOST can't see any of it).
 #
 #   scripts/agents.sh export    database -> agents/*.yaml (replaces them)
 #   scripts/agents.sh import    agents/*.yaml -> database. Optional, per run:
@@ -66,7 +69,7 @@ run_sync() {
 
 if [ "${mode}" = "export" ]; then
   run_sync
-  docker compose cp "api:${remote_dir}/." "${stage}/"
+  docker compose exec -T api tar -C "${remote_dir}" -cf - . | tar -C "${stage}" -xf -
   mkdir -p "${host_dir}"
   # The export mirrors the database: agents deleted there stop having a file here.
   # Only *.yaml is replaced -- a README or anything else in the directory stays.
@@ -88,7 +91,9 @@ else
     echo "No agent files in ${host_dir}/ -- run \`make agent-export\` first." >&2
     exit 1
   fi
-  cp "${files[@]}" "${stage}/"
-  docker compose cp "${stage}/." "api:${remote_dir}"
+  names=()
+  for f in "${files[@]}"; do names+=("$(basename "${f}")"); done
+  docker compose exec -T api mkdir -p "${remote_dir}"
+  tar -C "${host_dir}" -cf - "${names[@]}" | docker compose exec -T api tar -C "${remote_dir}" -xf -
   run_sync
 fi
