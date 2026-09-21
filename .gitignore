@@ -10,3 +10,17 @@ searxng/settings.yml
 .*.swp
 .*.swo
 *~
+
+# Local state and config of AI coding agents -- per-developer, not part of
+# this repo. (Project instructions live in AGENTS.md, which every tool reads;
+# CLAUDE.md is a symlink to it.)
+.kilo/
+.claude/
+.cursor/
+.codex/
+.gemini/
+.opencode/
+.roo/
+.cline/
+.windsurf/
+.continue/
