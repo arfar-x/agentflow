@@ -17,7 +17,7 @@ mcpSettings:
 
 endpoints:
   custom:
-    - name: 'Qwen'
+    - name: 'OpenAI Compatible'
       apiKey: '${VLLM_API_KEY}'
       baseURL: '${VLLM_BASE_URL}'
       models:
@@ -39,7 +39,7 @@ endpoints:
   agents:
     recursionLimit: 25
     maxRecursionLimit: 50
-    allowedProviders: ['Qwen']
+    allowedProviders: ['OpenAI Compatible']
     # mode: bypass -- any tool call NOT matched below (every jira_*/
     # confluence_* read, doc_gen, get_skill, list_skills, ...) runs without
     # a prompt. `ask` is the actual allowlist of write/mutating calls that

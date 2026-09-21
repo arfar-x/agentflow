@@ -1,4 +1,4 @@
-# agentflow -- LibreChat + agent-skills MCP + Qwen (vLLM)
+# agentflow -- LibreChat + agent-skills MCP + an OpenAI-compatible LLM (vLLM)
 #
 # Every service is a pinned image; every config a mounted file; every byte of
 # durable state a named volume (see docs/OPERATIONS.md). Nothing is baked
