@@ -48,6 +48,12 @@ users" for the full list and what each wraps. Role/permission management
 the Admin Panel UI, not the CLI -- see README.md and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Admin panel".
 
+Agents are managed declaratively: `make agent-export` writes every agent
+(definition, handoff/subagent links, sharing) from the database to
+`agents/*.yaml`, and `make agent-import` (preview with `DRY_RUN=1`) applies
+those files back. The files are the source of truth for the agents they list --
+see [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md).
+
 ## Testing
 
 There's no application code here to unit-test. The one test command that
@@ -127,6 +133,10 @@ substitute.
   variable, what breaks if it's wrong.
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) -- backup/restore, upgrades,
   bumping the `agent-skills` submodule pin, restart ordering.
+- [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md) -- `make agent-export` /
+  `agent-import`: agent file format, sharing, import semantics.
+- `agents/` -- one YAML per agent, from `make agent-export` or hand-written;
+  start from `agents/base-agent-template.yaml.example`.
 - [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md) -- optional SSO, and how to
   switch to/from local email/password auth.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) -- specific known

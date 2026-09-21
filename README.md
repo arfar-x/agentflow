@@ -108,6 +108,20 @@ auto-admin) and the [LibreChat Admin Panel
 docs](https://www.librechat.ai/docs/features/admin_panel) for the full
 feature set.
 
+## Managing agents
+
+Agents (instructions, tools, handoffs/delegation and who they're shared with)
+live in LibreChat's database. Mirror them to files, and back, with:
+
+```bash
+make agent-export              # database -> agents/*.yaml
+make agent-import DRY_RUN=1    # preview
+make agent-import              # agents/*.yaml -> database (OWNER_EMAIL=a@b.com forces the owner)
+```
+
+See [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md) for the file format, what an
+import does and doesn't touch, and how to restore onto another deployment.
+
 ## Where things live
 
 ```
@@ -115,9 +129,11 @@ agentflow/
 ├── docker-compose.yml       # the whole stack
 ├── config/librechat.yaml    # model + MCP + tool-approval config
 ├── agent-skills/            # git submodule -> arfar-x/agent-skills, pinned to a tag
+├── agents/                  # one YAML per agent (`make agent-export`, or write your own from base-agent-template.yaml.example)
 ├── mongo-init/              # declarative Mongo app-user creation (official mongo image convention)
-├── scripts/                 # bootstrap, secret generation, backup, restore
+├── scripts/                 # bootstrap, secret generation, backup, restore, agent sync
 └── docs/
+    ├── AGENT_SYNC.md        # agent export/import: file format and semantics
     ├── CONFIGURATION.md     # every .env variable, what breaks if it's wrong
     ├── KEYCLOAK.md          # SSO setup and how to switch to/from it
     ├── OPERATIONS.md        # backups, upgrades, submodule bumps, restart order

@@ -6,10 +6,11 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	user-create user-list user-ban user-delete user-invite user-reset-password
+	user-create user-list user-ban user-delete user-invite user-reset-password \
+	agent-export agent-import
 
 help: ## Show this list
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 up: ## Start the whole stack -- build, wait healthy, create admin if needed. Safe to rerun.
 	scripts/bootstrap.sh
@@ -82,3 +83,15 @@ user-delete: ## Delete a user and ALL their data -- interactive, asks you to con
 
 user-reset-password: ## Reset a user's password -- interactive (email + new password prompts)
 	docker compose exec api node config/reset-password.js
+
+# ---- Declarative agent management -------------------------------------------
+# Agents live in LibreChat's database, not in librechat.yaml. These two
+# targets mirror them (definition + handoffs/subagents + sharing) to and
+# from agents/*.yaml -- see docs/AGENT_SYNC.md.
+
+agent-export: ## Export every agent + its sharing from the database to agents/*.yaml (replaces those files)
+	scripts/agents.sh export
+
+agent-import: ## Sync agents/*.yaml into the database; options: DRY_RUN=1 OWNER_EMAIL= MODEL_PROVIDER= MODEL_NAME= ALLOW_RENAME=1
+	DRY_RUN=$(DRY_RUN) OWNER_EMAIL=$(OWNER_EMAIL) MODEL_PROVIDER=$(MODEL_PROVIDER) MODEL_NAME=$(MODEL_NAME) \
+		ALLOW_RENAME=$(ALLOW_RENAME) scripts/agents.sh import

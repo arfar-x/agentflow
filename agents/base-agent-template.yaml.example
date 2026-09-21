@@ -1,0 +1,134 @@
+# =============================================================================
+# Base agent template -- how to write an agent declaratively
+# =============================================================================
+#
+# Copy this file, drop the `.example`, and edit it:
+#
+#   cp agents/base-agent-template.yaml.example agents/my-agent.yaml
+#   make agent-import DRY_RUN=1     # preview: validates the file, writes nothing
+#   make agent-import               # create/update the agent in LibreChat
+#
+# Files ending in `.yaml`/`.yml` in this directory are agents; this `.example`
+# file is ignored by import and left alone by `make agent-export`.
+#
+# You never need to export first. The importer treats this file as the source
+# of truth for the agent it describes: anything you leave out gets LibreChat's
+# own default, and editing the file and re-importing updates the agent in place
+# (LibreChat keeps its version history). Running the import twice with no edits
+# changes nothing. Full reference: docs/AGENT_SYNC.md.
+#
+# One file = one agent. Structure: `agent:` (what it is) and `access:` (who else
+# can use it).
+
+version: 1                # optional; 1 is the only supported value
+
+agent:
+  # ---- Required ------------------------------------------------------------
+  # These four must be present; a file missing any of them is skipped with a
+  # message saying which.
+
+  id: agent_base-example  # The agent's identity. `agent_` + letters, digits,
+                          # `-` or `_`. Choose something readable and keep it:
+                          # handoffs, subagents and modelSpecs all refer to it.
+                          # Changing `name` renames the agent; changing `id`
+                          # creates a NEW agent (the old one stays until you
+                          # delete it in LibreChat).
+  name: Base Example      # Shown in the agent picker.
+  provider: OpenAI Compatible   # A custom endpoint's `name` in config/librechat.yaml
+                          # (or a built-in provider). Must be listed in
+                          # endpoints.agents.allowedProviders when that is set.
+  model: claude-sonnet-4-6   # A model that provider serves.
+                          # provider/model that don't exist on the instance you
+                          # import into don't stop the import: a new agent gets
+                          # that instance's default, and the import lists it to
+                          # review in the LibreChat UI. To point every agent at
+                          # another model without editing files, import with
+                          # MODEL_PROVIDER= / MODEL_NAME= (or set them in .env).
+
+  # ---- Common --------------------------------------------------------------
+
+  description: One line on what this agent is for.   # shown in the picker
+  category: general       # groups agents in the marketplace; default `general`
+
+  # The system prompt. `|` keeps line breaks; indent every line by two spaces
+  # more than `instructions`.
+  instructions: |
+    You are a helpful assistant.
+
+    Say what you don't know instead of guessing.
+
+  conversation_starters:  # suggested first messages (optional)
+    - Summarise what I should work on next.
+
+  model_parameters:       # optional; passed to the model
+    temperature: 0.7
+
+  # ---- Tools ---------------------------------------------------------------
+  # Stored exactly as written and NOT validated here, so a typo only shows up
+  # when the agent runs. Names to use:
+  #   - LibreChat built-ins:  web_search
+  #   - MCP tools:            <toolset>_<action>_mcp_<server>
+  #                           e.g. jira_my_work_mcp_agent-skills
+  #                           (same format as the `ask:` list in
+  #                           config/librechat.yaml). Easiest way to get the
+  #                           exact names: `make agent-export` an agent that
+  #                           has the tools you want, and copy from its file.
+  tools:
+    - web_search
+    # - jira_my_work_mcp_agent-skills
+
+  # ---- Working with other agents -------------------------------------------
+  # Both refer to other agents by `id`, so the targets must exist: as another
+  # file in this directory, or already in LibreChat. A target that doesn't is
+  # reported after the import (the agent is still applied).
+  #
+  # Handoff: this agent can pass the conversation over to another agent.
+  # `from` is this agent's own id.
+  # edges:
+  #   - from: agent_base-example
+  #     to: agent_some-specialist
+  #     edgeType: handoff
+  #
+  # Delegation: this agent can spawn others as isolated sub-agents and use
+  # their result.
+  # subagents:
+  #   enabled: true
+  #   allowSelf: false
+  #   agent_ids:
+  #     - agent_some-specialist
+
+  # ---- Advanced ------------------------------------------------------------
+  # Leave these out unless you need them; the defaults are what LibreChat's own
+  # agent builder uses.
+  # recursion_limit: 25
+  # is_promoted: false
+  # support_contact: { name: "", email: "" }
+
+  # ---- Don't write these by hand -------------------------------------------
+  # `avatar`, `actions`, `tool_resources` (attached files) and `skills` point at
+  # things stored elsewhere in LibreChat; they aren't portable between
+  # deployments. Set them in the UI. `author`, `versions` and timestamps are
+  # managed by LibreChat and rejected here.
+
+# =============================================================================
+# Sharing -- who besides the owner can use the agent
+# =============================================================================
+# There is deliberately no owner here: people differ between deployments, so
+# the importer picks one (OWNER_EMAIL, else the agent's current owner, else
+# ADMIN_EMAIL from .env, else the oldest admin) and always gives them full
+# access. See "Who owns an imported agent" in docs/AGENT_SYNC.md.
+#
+# `grants: []` = private to the owner. Leave `access:` out entirely to keep an
+# existing agent's current sharing untouched. Roles: agent_viewer (use it),
+# agent_editor (use and edit it), agent_owner (full control).
+access:
+  grants: []
+  # grants:
+  #   - principal: { type: role, name: USER }     # everyone with the USER role
+  #     role: agent_viewer
+  #   - principal: { type: public }               # anyone, even signed out
+  #     role: agent_viewer
+  #   - principal: { type: group, name: qa, source: local }
+  #     role: agent_editor
+  #   - principal: { type: user, email: someone@example.com }
+  #     role: agent_viewer
