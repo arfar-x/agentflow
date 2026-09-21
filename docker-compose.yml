@@ -26,7 +26,17 @@ services:
     image: ghcr.io/danny-avila/librechat:${LIBRECHAT_IMAGE_TAG:?set LIBRECHAT_IMAGE_TAG in .env}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${PORT:-3080}:${PORT:-3080}"
+      # Bound to all interfaces (0.0.0.0) so clients on the LAN can reach the
+      # UI directly. The repo's upstream default is 127.0.0.1-only -- if this
+      # box ever gets a public interface, or you want TLS, re-bind to
+      # 127.0.0.1 and put a reverse proxy in front instead.
+      - "${PORT:-3080}:${PORT:-3080}"
+    # Pin the model host (VLLM_BASE_URL's host) to a fixed IP for container
+    # DNS, for the services that call the model. Defaults are harmless
+    # placeholders -- set MODEL_HOSTNAME / MODEL_HOST_IP in .env to pin a real
+    # host (needed when it doesn't resolve from this box the way you want).
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
     depends_on:
       mongodb:
         condition: service_healthy
@@ -163,6 +173,10 @@ services:
   rag_api:
     image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:${RAG_API_IMAGE_TAG:?set RAG_API_IMAGE_TAG in .env}
     restart: unless-stopped
+    # Same model-host pin as `api` -- rag_api also calls VLLM_BASE_URL (for
+    # embeddings). See the api.extra_hosts comment above.
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
     depends_on:
       vectordb:
         condition: service_healthy

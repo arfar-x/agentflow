@@ -8,7 +8,7 @@ it's wrong or missing. Copy `.env.example` to `.env`, fill these in, then
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `PORT` | no | `3080` | Port `api` listens on, bound to `127.0.0.1` only -- put a reverse proxy in front for TLS. |
+| `PORT` | no | `3080` | Port `api` listens on, bound to all interfaces (`0.0.0.0`) so LAN clients can reach the UI directly. The upstream repo default is `127.0.0.1`-only -- re-bind to `127.0.0.1` and put a reverse proxy in front if you want TLS, or if this box has a public interface. |
 | `LIBRECHAT_IMAGE_TAG` | yes | none | Pin a real published tag before production. `latest` on a dev channel moves under you without warning. |
 | `RAG_API_IMAGE_TAG` | yes | none | Same reasoning as above, for the RAG sidecar. |
 
