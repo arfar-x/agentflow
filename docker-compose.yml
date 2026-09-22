@@ -85,7 +85,9 @@ services:
     image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${ADMIN_PANEL_PORT:-3000}:3000"
+      # Bound to all interfaces (0.0.0.0) so the panel is reachable over the
+      # network, not just from this box -- same shape as `api` above.
+      - "0.0.0.0:${ADMIN_PANEL_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
