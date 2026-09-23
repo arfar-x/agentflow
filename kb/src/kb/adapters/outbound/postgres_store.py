@@ -23,6 +23,7 @@ later sync (FR-OVR-06) without sync knowing overrides exist.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -35,7 +36,24 @@ from kb.domain.merge import Override, apply_override
 from kb.domain.policies import is_indexable
 from kb.domain.text import normalize_all
 
-MIGRATIONS_DIR = Path(__file__).resolve().parents[4] / "migrations"
+def _default_migrations_dir() -> Path:
+    """Where the .sql files live.
+
+    `KB_MIGRATIONS_DIR` wins (the image sets it, since once this package is
+    installed into site-packages nothing relative to it leads back to them).
+    Otherwise walk up from this file, which finds `kb/migrations/` in a checkout.
+    """
+    configured = os.environ.get("KB_MIGRATIONS_DIR")
+    if configured:
+        return Path(configured)
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "migrations"
+        if candidate.is_dir():
+            return candidate
+    return Path("migrations")
+
+
+MIGRATIONS_DIR = _default_migrations_dir()
 
 #: Trigram indexes cannot help with a fragment shorter than three characters,
 #: and a one- or two-letter term matches almost everything. Dropped unless it is
@@ -86,8 +104,17 @@ class PostgresEntryStore:
     @classmethod
     def connect(cls, dsn: str, *, connect_timeout: int = 5) -> "PostgresEntryStore":
         """A search must fail fast rather than hang a tool call, so the connect
-        timeout is short and explicit instead of the driver's default."""
-        return cls(psycopg.connect(dsn, connect_timeout=connect_timeout, autocommit=False))
+        timeout is short and explicit instead of the driver's default.
+
+        **autocommit=True is load-bearing, not a shortcut.** Without it, the
+        first read starts an implicit transaction, and every later
+        `connection.transaction()` block becomes a nested savepoint that
+        releases without ever committing -- so writes are silently rolled back
+        when the connection closes. With it, each `transaction()` block below is
+        a real BEGIN/COMMIT. It also stops a long-lived reader (the MCP server)
+        from holding a transaction open between tool calls.
+        """
+        return cls(psycopg.connect(dsn, connect_timeout=connect_timeout, autocommit=True))
 
     def close(self) -> None:
         self._connection.close()
@@ -96,7 +123,7 @@ class PostgresEntryStore:
     def migrate(self, migrations_dir: Path | None = None) -> list[str]:
         """Apply every migration not yet recorded. Returns the ones applied, so
         a caller can log "nothing to do" rather than guess. Safe to re-run."""
-        directory = migrations_dir or MIGRATIONS_DIR
+        directory = migrations_dir or _default_migrations_dir()
         applied: list[str] = []
         with self._connection.transaction(), self._connection.cursor() as cursor:
             cursor.execute(
@@ -313,6 +340,67 @@ class PostgresEntryStore:
             for entry_id in entry_ids:
                 self._rebuild_search(cursor, entry_id)
         return len(entry_ids)
+
+    def top_misses(self, *, limit: int = 20) -> list[dict[str, object]]:
+        """The gap log, most frequent first: a ranked list of what the
+        organization has not written down."""
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT query, count(*) AS times, max(at) AS last_seen
+                  FROM search_miss
+                 GROUP BY query
+                 ORDER BY times DESC, last_seen DESC
+                 LIMIT %s
+                """,
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def status(self) -> dict[str, object]:
+        """What the catalog actually contains.
+
+        Exists so "is this thing working?" is answerable without opening psql --
+        the question an operator asks first, and the one a README cannot answer.
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT count(*) FILTER (WHERE deleted_at IS NULL)  AS live,
+                       count(*) FILTER (WHERE deleted_at IS NOT NULL) AS deleted
+                  FROM entry
+                """
+            )
+            totals = cursor.fetchone()
+            cursor.execute(
+                "SELECT source_id, count(*) AS entries FROM entry WHERE deleted_at IS NULL"
+                " GROUP BY source_id ORDER BY source_id"
+            )
+            by_source = [dict(row) for row in cursor.fetchall()]
+            cursor.execute(
+                "SELECT type, count(*) AS entries FROM entry WHERE deleted_at IS NULL"
+                " GROUP BY type ORDER BY type"
+            )
+            by_type = [dict(row) for row in cursor.fetchall()]
+            cursor.execute("SELECT count(*) AS overrides FROM entry_override")
+            overrides = cursor.fetchone()["overrides"]
+            cursor.execute("SELECT count(*) AS indexed FROM entry_search WHERE indexable")
+            indexed = cursor.fetchone()["indexed"]
+            cursor.execute("SELECT count(*) AS gaps FROM search_miss")
+            gaps = cursor.fetchone()["gaps"]
+            cursor.execute("SELECT name FROM schema_migration ORDER BY name")
+            migrations = [row["name"] for row in cursor.fetchall()]
+            cursor.execute("SELECT source_id, cursor, updated_at FROM source_checkpoint ORDER BY source_id")
+            checkpoints = [dict(row) for row in cursor.fetchall()]
+        return {
+            "entries": {"live": totals["live"], "soft_deleted": totals["deleted"], "searchable": indexed},
+            "by_source": by_source,
+            "by_type": by_type,
+            "overrides": overrides,
+            "gaps": gaps,
+            "migrations": migrations,
+            "checkpoints": checkpoints,
+        }
 
     # -- checkpoints (used by the incremental mechanism, phase 7) -----------
     def get_checkpoint(self, source_id: str) -> str | None:

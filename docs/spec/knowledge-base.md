@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.1.0 |
+| **Version** | 1.2.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -175,7 +175,23 @@ adapter or agent wiring that completes the scenario is not built yet.
 | FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate disabled, and MUST NOT rewrite a line an operator has edited. | planned |
 | FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | planned |
 
-### 6.7 Sources — `FR-SRC`
+### 6.7 Front doors — `FR-CLI`, `FR-MCP`
+
+The CLI is the operator's door; the MCP server is the agent's. Both are thin:
+they parse input, call a use case, and serialize the result.
+
+| id | Requirement | Status |
+|---|---|---|
+| FR-CLI-01 | The CLI MUST print exactly one JSON document to stdout for every invocation, success or failure alike, and MUST exit 0 for any handled outcome — including a reported error. | done |
+| FR-CLI-02 | The CLI MUST expose, at minimum: search, get, override (set and clear), gaps, migrate, and status. | done |
+| FR-CLI-03 | A failure the operator can act on (no database, a malformed argument) MUST be reported as a structured error naming what failed, never as a traceback. | done |
+| FR-CLI-04 | `status` MUST report what the catalog actually contains — entry counts by source and type, soft-deleted count, override count, the applied migrations, and the recorded gaps — so "is this thing working" is answerable without SQL. | done |
+| FR-MCP-01 | The MCP server MUST expose exactly two tools, `kb_search` and `kb_get`, both read-only. | done |
+| FR-MCP-02 | Each tool's schema MUST describe its arguments well enough for a model to call it correctly without reading the spec, and `kb_search` MUST accept several query strings in one call. | done |
+| FR-MCP-03 | A tool MUST return a structured error rather than raising when the catalog is unreachable, so an agent can say so and carry on instead of failing the turn. | done |
+| FR-MCP-04 | The server MUST NOT accept credentials or per-user variables: the catalog is shared, and there is nothing user-specific for a caller to supply. | done |
+
+### 6.8 Sources — `FR-SRC`
 
 | id | Requirement | Status |
 |---|---|---|
@@ -186,11 +202,11 @@ adapter or agent wiring that completes the scenario is not built yet.
 | FR-SRC-05 | Local files under configured paths. | planned |
 | FR-SRC-06 | Adding a source MUST require only one adapter and one config entry, with no change to `domain/` or `application/`. | planned |
 
-### 6.8 Agent integration — `FR-AGT`
+### 6.9 Agent integration — `FR-AGT`
 
 | id | Requirement | Status |
 |---|---|---|
-| FR-AGT-01 | `kb_search` and `kb_get` MUST be read-only, and therefore MUST NOT require a `toolApproval` entry. | planned |
+| FR-AGT-01 | `kb_search` and `kb_get` MUST be read-only, and therefore MUST NOT require a `toolApproval` entry. | done |
 | FR-AGT-02 | The front-door agent MUST search the catalog before answering or delegating, MUST NOT answer from assumption, MUST answer in the user's language, and MUST name the source document it used. | planned |
 | FR-AGT-03 | Document-producing agents MUST ground their drafts in catalog results. | planned |
 
@@ -210,11 +226,12 @@ adapter or agent wiring that completes the scenario is not built yet.
 | id | Requirement | Status |
 |---|---|---|
 | NFR-DEP-01 | The catalog MUST have its own database instance, separate from LibreChat's `vectordb`. | done |
-| NFR-DEP-02 | `mcp-kb` MUST have no published port and MUST be reachable only on the internal network. | planned |
+| NFR-DEP-02 | `mcp-kb` MUST have no published port and MUST be reachable only on the internal network. | done |
 | NFR-DEP-03 | Scheduled work MUST run in its own service, not inside the MCP server. | planned |
 | NFR-DEP-04 | The webhook receiver MUST be a separate component on a private interface. | planned |
 | NFR-DEP-05 | The query path MUST use a least-privilege database role. | done |
 | NFR-DEP-06 | The index MUST be rebuildable from sources; only the gap log and checkpoints require backup. | done |
+| NFR-DEP-07 | A completed write MUST be committed: visible to other connections, and surviving the writing connection closing. | done |
 
 ### 7.3 Performance and cost — `NFR-PRF`
 
@@ -235,9 +252,10 @@ adapter or agent wiring that completes the scenario is not built yet.
 
 ### 8.2 CLI / make targets
 
-`kb-init` and `kb-test` exist today. Planned with their phases:
-`kb-sources-discover`, `kb-sync SOURCE=… [DRY_RUN=1]`, `kb-reconcile`,
-`kb-override`, `kb-export`, `kb-misses`, `kb-status`.
+`kb-init` and `kb-test` are make targets. The module's own CLI
+(`python -m kb`) carries the rest: `search`, `get`, `override set|clear`,
+`gaps`, `migrate`, `status` (phase 5), then `sync`, `reconcile`, `discover`
+and `export` with their phases.
 
 ### 8.3 Source configuration
 
@@ -354,7 +372,7 @@ which a flat catalog cannot answer.
 | 2 | Pure rules: normalization, ids and hashing, ranking, override merging, validation | done |
 | 3 | Use cases against in-memory fakes: search, reconcile | done |
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
-| 5 | Front doors: CLI, then the MCP server — usable end to end | next |
+| 5 | Front doors: CLI, then the MCP server — usable end to end | done |
 | 6 | Sources: Confluence and Jira, then GitLab, HTTP API, local files; discovery | |
 | 7 | The four freshness mechanisms, the scheduler, the webhook receiver | |
 | 8 | Agent tools and instructions | |
@@ -372,4 +390,5 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 1.2.0 | 2026-09-24 | Phase 5 (front doors): added FR-CLI-01..04, FR-MCP-01..04, and NFR-DEP-07 (writes must actually commit — a defect the single-connection tests could not see). FR-AGT-01 and NFR-DEP-02 now done. |
 | 1.1.0 | 2026-09-24 | Phase 4 (storage). Added FR-SRCH-10 (field weighting), which the Postgres adapter made an explicit decision rather than an implicit one. FR-OVR-06, NFR-DEP-01, NFR-DEP-05, NFR-DEP-06 now done. |

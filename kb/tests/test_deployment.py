@@ -76,3 +76,37 @@ def test_the_two_database_identities_are_documented(compose):
     assert "KB_READER_PASSWORD" in env_example
     secrets = (REPO_ROOT / "scripts" / "generate-secrets.sh").read_text(encoding="utf-8")
     assert "KB_POSTGRES_PASSWORD" in secrets and "KB_READER_PASSWORD" in secrets
+
+
+def test_the_mcp_server_is_internal_only(compose):
+    # Covers: NFR-DEP-02
+    # Same rule as mcp-agent-skills: MCP's HTTP transport has no auth of its
+    # own, so reachability from `api` is the only access control there is.
+    assert "\n  mcp-kb:" in compose
+    block = _service_block(compose, "mcp-kb")
+    assert "ports:" not in block
+    assert "networks: [backend]" in block
+
+
+def test_the_mcp_server_connects_as_the_read_only_role(compose):
+    # Covers: NFR-DEP-05
+    block = _service_block(compose, "mcp-kb")
+    assert "postgresql://kb_reader:" in block
+    assert "KB_POSTGRES_PASSWORD" not in block, "the query path must not get the owner credential"
+
+
+def test_librechat_is_told_about_the_catalog_and_asks_it_for_no_credentials():
+    # Covers: FR-MCP-04, FR-AGT-01
+    template_path = REPO_ROOT / "config" / "librechat.yaml.example"
+    if not template_path.exists():
+        pytest.skip("LibreChat template not present -- kb checked out on its own?")
+    template = template_path.read_text(encoding="utf-8")
+    assert "http://mcp-kb:8322/mcp" in template
+    assert "'mcp-kb:8322'" in template, "SSRF allowlist entry is required for an internal address"
+
+    kb_block = template[template.index("  kb:\n    type: streamable-http") :]
+    kb_block = kb_block[: kb_block.index("\nwebSearch:")]
+    # The catalog is shared: nothing per-user to inject, so nothing to spoof.
+    assert "customUserVars" not in kb_block and "headers" not in kb_block
+    # Both tools are read-only, so neither belongs in the approval list.
+    assert "kb_search" not in template and "kb_get" not in template

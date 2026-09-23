@@ -255,6 +255,35 @@ services:
       start_period: 20s
     mem_limit: 512m
 
+  # The knowledge catalog's MCP server: two read-only tools (kb_search, kb_get)
+  # for the agents. Same isolation rule as mcp-agent-skills -- no published
+  # port, backend network only, reachability from `api` is the access control.
+  # Unlike that server it takes no credentials at all: the catalog is shared, so
+  # there is nothing per-user for a caller to supply. It connects as kb_reader
+  # (read-only, plus the gap log), never as the database owner.
+  mcp-kb:
+    build:
+      context: ./kb
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    environment:
+      KB_DATABASE_URL: postgresql://kb_reader:${KB_READER_PASSWORD:?set KB_READER_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_MCP_HOST: 0.0.0.0
+      KB_MCP_PORT: "8322"
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8322), timeout=3)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m
+
   searxng:
     image: searxng/searxng:2026.9.8-3fdc6d753
     restart: unless-stopped

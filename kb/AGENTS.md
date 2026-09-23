@@ -106,6 +106,20 @@ Dependencies point inward only: `adapters → application → domain`.
   satisfy it (`tests/application/test_ports_models.py` asserts this with
   `isinstance`).
 
+## Front doors
+
+- **The CLI prints exactly one JSON document and exits 0 for anything handled**,
+  errors included -- the same contract `agent-skills`' toolsets follow, so
+  scripts never have to tell "the tool failed" from "the tool reported a
+  failure". A genuine bug still raises.
+- **An MCP tool returns a structured error rather than raising.** An exception
+  fails the agent's whole turn over a search that was only meant to add context.
+- **fastmcp takes only a docstring's summary line as a tool's description**, so
+  anything a model needs in order to call a tool correctly is passed explicitly
+  as `description=`. Per-argument help does come from the docstring's `Args:`
+  section. A test asserts both, because this is silent when it regresses.
+- **Nothing a model can call may write.** Writes belong to the CLI.
+
 ## Storage
 
 - **Migrations are append-only.** A shipped file is never edited; a change is a
@@ -121,7 +135,6 @@ Dependencies point inward only: `adapters → application → domain`.
 
 ## Not built yet
 
-The MCP server, the CLI, the scheduler, the webhook receiver and every source
-adapter are phases 5–9 in [`README.md`](README.md#status). Don't document them
+The scheduler, the webhook receiver and every source adapter are phases 6–9 in [`README.md`](README.md#status). Don't document them
 here as if they exist, and don't assume a missing module means something was
 deleted.

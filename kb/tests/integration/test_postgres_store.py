@@ -252,3 +252,33 @@ def test_the_query_role_can_read_and_log_gaps_and_nothing_else(store):
         rights = cursor.fetchone()
     assert rights["read_entry"] and rights["log_gap"]
     assert not rights["write_entry"] and not rights["delete_entry"] and not rights["write_override"]
+
+
+def test_a_write_is_committed_not_just_visible_to_its_own_connection(dsn, catalog):
+    # Covers: NFR-DEP-07
+    # Every other test in this file reads through the same connection that
+    # wrote, where uncommitted data is visible -- so all of them passed while
+    # writes were silently rolled back at close. A second connection is the
+    # only thing that can tell the difference.
+    from kb.adapters.outbound.postgres_store import PostgresEntryStore
+
+    catalog.set_override(Override(entry_id=REFUNDS.id, note="written by the first connection"))
+
+    observer = PostgresEntryStore.connect(dsn)
+    try:
+        assert observer.get(REFUNDS.id) == REFUNDS
+        assert observer.get_override(REFUNDS.id).note == "written by the first connection"
+        assert observer.search(normalize("refund retries"))[0] == REFUNDS.id
+    finally:
+        observer.close()
+
+
+def test_writes_survive_the_writing_connection_closing(dsn, store):
+    # Covers: NFR-DEP-07
+    from kb.adapters.outbound.postgres_store import PostgresEntryStore
+
+    writer = PostgresEntryStore.connect(dsn)
+    writer.upsert(REFUNDS)
+    writer.close()
+
+    assert store.get(REFUNDS.id) == REFUNDS

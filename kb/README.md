@@ -18,16 +18,16 @@ true. Change the spec first, then the code.
 | 2 | Pure rules: normalization, ids, hashing, ranking, override merging, validation | done |
 | 3 | Use cases against in-memory fakes: search, reconcile | done |
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
-| 5 | CLI and MCP server — usable from LibreChat | next |
-| 6 | Sources: Confluence, Jira, GitLab, HTTP API, local files | |
+| 5 | CLI and MCP server — usable from LibreChat | done |
+| 6 | Sources: Confluence, Jira, GitLab, HTTP API, local files | next |
 | 7 | Freshness mechanisms, scheduler, webhook receiver | |
 | 8 | Agent tools and instructions | |
 | 9 | Operator documentation | |
 
-**There is no front door yet** — no CLI, no MCP server, so nothing in LibreChat
-can reach the catalog until phase 5. What exists is the behavior (phases 2–3)
-and real storage behind it (phase 4): entries can be written, searched, ranked,
-overridden and soft-deleted in Postgres today, from Python or a test.
+**Both front doors work; the catalog is empty.** The CLI and the MCP server are
+live (phase 5), backed by real storage (phase 4). What is missing is anything
+that *fills* it: source adapters arrive in phase 6, so until then entries are
+written by hand or by a test.
 
 ## Getting it running
 
@@ -70,9 +70,45 @@ python -m pytest -k persian -v           # one behavior, by name
 The repo root's `make test` still runs only `agent-skills`' suite; `make
 kb-test` is this module's.
 
-### Against the real database
+### The CLI
 
-Once the stack is up and `make kb-init` has run, the store is usable directly:
+Once the stack is up and `make kb-init` has run:
+
+```bash
+export KB_DATABASE_URL='postgresql://kb:<KB_POSTGRES_PASSWORD>@localhost:5432/agentflow_kb'
+
+python -m kb status                                   # what the catalog contains
+python -m kb search --query 'refund retries' --query 'بازپرداخت'
+python -m kb get --id confluence-eng:123456
+python -m kb override set --id confluence-eng:123456 \
+    --summary 'en=A better summary' --note 'the generated one missed the retry cap'
+python -m kb override clear --id confluence-eng:123456
+python -m kb gaps                                     # what nobody has written down
+python -m kb migrate                                  # same as make kb-init
+```
+
+`kb-db` publishes no port, so from the host use `docker compose exec kb-db`, or
+run the CLI inside the `mcp-kb` container:
+`docker compose exec mcp-kb python -m kb status`.
+
+Every command prints one JSON document and exits 0, errors included:
+
+```json
+{"error": {"type": "database_unavailable", "message": "connection refused"}}
+```
+
+### The MCP server
+
+`mcp-kb` serves `kb_search` and `kb_get` on `http://mcp-kb:8322/mcp`, internal
+to the backend network, with no credentials of its own — the catalog is shared.
+It connects to Postgres as `kb_reader`, which can read and append to the gap log
+and nothing else.
+
+LibreChat picks it up from `config/librechat.yaml.example`'s `mcpServers.kb`
+entry after `make render-config && make restart SERVICE=api`. Attaching the two
+tools to agents is phase 8.
+
+### Against the real database, from Python
 
 ```python
 from kb.adapters.outbound.postgres_store import PostgresEntryStore
