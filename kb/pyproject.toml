@@ -1,0 +1,31 @@
+[project]
+name = "kb"
+version = "0.1.0"
+description = "Knowledge catalog: what knowledge exists in an organization, and exactly where it lives."
+requires-python = ">=3.12"
+# pydantic is the one library the inner layers use, and deliberately so: it is
+# validation and serialization, not I/O, and it is what makes an invalid entry
+# impossible to construct on any path (source adapter, database row, JSON
+# payload). Everything that actually talks to the outside world -- psycopg,
+# requests, fastmcp, yaml -- stays behind an adapter and is installed through
+# the optional groups below. tests/test_boundaries.py enforces that split.
+dependencies = ["pydantic>=2.7,<3"]
+
+[project.optional-dependencies]
+store = ["psycopg[binary]>=3.2,<4"]
+sources = ["requests>=2.31,<3", "PyYAML>=6.0,<7"]
+mcp = ["fastmcp>=3.4,<4"]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# src/ on the path, so the suite runs against the working tree without an
+# install step -- `python3 -m pytest` from kb/ is all it takes.
+pythonpath = ["src"]

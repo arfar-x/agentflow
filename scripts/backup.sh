@@ -14,7 +14,7 @@ TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
 OUT_DIR="${1:-backups/${TIMESTAMP}}"
 mkdir -p "${OUT_DIR}"
 
-VOLUMES=(mongodb_data pgvector_data meili_data librechat_uploads librechat_images librechat_logs)
+VOLUMES=(mongodb_data pgvector_data kb_data meili_data librechat_uploads librechat_images librechat_logs)
 COMPOSE_PROJECT="$(basename "$(pwd)")"
 
 echo "Backing up to ${OUT_DIR}/"

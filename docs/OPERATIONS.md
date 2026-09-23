@@ -58,6 +58,7 @@ for what that means for rotating the underlying passwords.
 |---|---|---|
 | `mongodb_data` | users, conversations, **agent definitions**, MCP tool state | Total loss. This is the volume that matters most. |
 | `pgvector_data` | RAG embeddings for user-uploaded files | Re-upload and re-embed affected files. |
+| `kb_data` | The knowledge catalog: entries, overrides, sync checkpoints, gap log | The catalog and its search index rebuild from the sources (`make kb-sync`, once phase 6 lands); the **overrides, checkpoints and gap log do not** -- those are the reason this volume is backed up. |
 | `meili_data` | search index | Rebuildable from Mongo; not backup-critical but included for convenience. |
 | `librechat_uploads` | user-uploaded files | Those files are gone. |
 | `librechat_images` | generated/attached images | Those images are gone. |

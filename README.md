@@ -22,6 +22,7 @@ approval gate sitting in front of every write.
 | `rag_api` | LibreChat's RAG sidecar, backed by `vectordb` |
 | `mcp-agent-skills` | this repo's `agent-skills` submodule, built and served as an MCP server -- **internal only, no published port** |
 | `admin-panel` | [ClickHouse/librechat-admin-panel](https://github.com/ClickHouse/librechat-admin-panel) -- users/groups/roles/grants UI, see "Managing users" below |
+| `kb-db` | the knowledge catalog's own Postgres (`kb/`, see [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) -- **internal only, no published port** |
 | `searxng` | self-hosted search backing LibreChat's native Web Search tool -- **internal only, no published port** |
 
 Everything durable lives in named Docker volumes; every service config is a
@@ -128,6 +129,7 @@ import does and doesn't touch, and how to restore onto another deployment.
 agentflow/
 ├── docker-compose.yml       # the whole stack
 ├── config/librechat.yaml    # model + MCP + tool-approval config
+├── kb/                      # the knowledge catalog module (its own tests: make kb-test)
 ├── agent-skills/            # git submodule -> arfar-x/agent-skills, pinned to a tag
 ├── agents/                  # one YAML per agent (`make agent-export`, or write your own from base-agent-template.yaml.example)
 ├── mongo-init/              # declarative Mongo app-user creation (official mongo image convention)

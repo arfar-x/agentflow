@@ -24,3 +24,12 @@ searxng/settings.yml
 .cline/
 .windsurf/
 .continue/
+
+# Python build/test artifacts from kb/ (see kb/README.md for the venv setup --
+# the virtualenv and the editable install's metadata are per-developer, like
+# the AI-agent directories above)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/

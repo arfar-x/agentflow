@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	user-create user-list user-ban user-delete user-invite user-reset-password \
+	kb-init kb-test user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -40,6 +40,12 @@ backup: ## Snapshot every named volume + .env into backups/<timestamp>/
 
 restore: ## Restore from a backup dir, e.g. `make restore DIR=backups/20260101-000000`
 	scripts/restore.sh $(DIR)
+
+kb-init: ## Create/upgrade the knowledge base schema + its read-only role (idempotent)
+	scripts/kb-init.sh
+
+kb-test: ## Run kb's own suite, including the Postgres-backed tests, against a throwaway database
+	scripts/kb-test.sh
 
 test: ## Run mcp-server's pytest suite inside the built mcp-agent-skills image
 	docker compose run --rm --user root --entrypoint sh mcp-agent-skills -c \

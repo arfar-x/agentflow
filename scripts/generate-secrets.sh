@@ -27,6 +27,10 @@ echo "MONGO_ROOT_PASSWORD=$(openssl rand -hex 24)"
 echo "MONGO_APP_PASSWORD=$(openssl rand -hex 24)"
 echo "MEILI_MASTER_KEY=$(openssl rand -hex 32)"
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+# The knowledge base has its own database and its own two identities: the owner
+# that sync writes as, and the read-only role the query path runs as.
+echo "KB_POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+echo "KB_READER_PASSWORD=$(openssl rand -hex 24)"
 echo "OPENID_SESSION_SECRET=$(openssl rand -hex 32)  # only needed if using Keycloak"
 echo "ADMIN_PASSWORD=$(openssl rand -hex 12)"
 echo "ADMIN_PANEL_SESSION_SECRET=$(openssl rand -hex 32)"
