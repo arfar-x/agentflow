@@ -37,19 +37,22 @@ sources:
     enabled: false
     jql: 'project = PAY AND issuetype = Epic'
 
-  # Not built yet (FR-SRC-03/04/05); the shape is settled, the adapters are not.
-  # - id: gitlab-platform
-  #   kind: gitlab
-  #   enabled: false
-  #   base_url: ${GITLAB_BASE_URL}
-  #   token_env: GITLAB_TOKEN
-  #   projects:
-  #     - path: platform/specs                 # a whole repo
-  #       scopes: [{ dir: ".", type: spec }]
-  #     - path: media-service                  # one directory inside a repo
-  #       ref: main
-  #       scopes:
-  #         - { dir: docs/ADRs, type: spec, tags: [adr] }
-  #         - dir: docs
-  #           patterns: ["**/*.md", "**/*.mdx"]
-  #           exclude: ["**/CHANGELOG.md"]
+  # Repositories. A scope is a directory walked recursively; dir: "." is the
+  # whole repo, and a scope's type/tags are inherited by everything beneath it.
+  - id: gitlab-platform
+    kind: gitlab
+    enabled: false
+    base_url: ${GITLAB_BASE_URL}
+    token_env: GITLAB_TOKEN          # the name; the value stays in .env
+    projects:
+      - path: platform/specs                 # a whole repo
+        scopes: [{ dir: ".", type: spec }]
+      - path: media-service                  # one directory inside a repo
+        ref: main                            # defaults to the default branch
+        scopes:
+          - { dir: docs/ADRs, type: spec, tags: [adr] }
+          - dir: docs
+            patterns: ["**/*.md", "**/*.mdx"]
+            exclude: ["**/CHANGELOG.md"]
+
+  # Not built yet (FR-SRC-04/05): an internal HTTP API, and local files.

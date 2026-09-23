@@ -19,7 +19,7 @@ true. Change the spec first, then the code.
 | 3 | Use cases against in-memory fakes: search, reconcile | done |
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
 | 5 | CLI and MCP server — usable from LibreChat | done |
-| 6 | Sources: Confluence and Jira (done); GitLab, HTTP API, local files | in progress |
+| 6 | Sources: Confluence, Jira, GitLab (done); HTTP API, local files | in progress |
 | 7 | Freshness mechanisms, scheduler, webhook receiver | next |
 | 8 | Agent tools and instructions | |
 | 9 | Operator documentation | |
@@ -111,6 +111,13 @@ make kb-sync SOURCE=confluence-eng             # full pass: catalogs, and soft-d
 make kb-sync SOURCE=confluence-eng MODE=incremental  # only what changed since the checkpoint
 make kb-status
 ```
+
+GitLab repositories are read by **scopes**: a scope is a directory walked
+recursively with file patterns, `dir: "."` means the whole repository, and a
+scope's `type`/`tags` are inherited by everything beneath it — so `docs/ADRs`
+becomes a set of specs without labelling each file. A file's blob SHA is its
+version, so an unchanged file costs no model call, and incremental runs compare
+commits and read only what changed.
 
 Sync needs a **read-only service account** (`KB_CONFLUENCE_*` / `KB_JIRA_*` in
 `.env`, falling back to the stack's existing `CONFLUENCE_*`/`JIRA_*`): it has to

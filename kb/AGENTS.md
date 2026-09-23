@@ -133,6 +133,10 @@ Dependencies point inward only: `adapters → application → domain`.
   real page later does so as the user, through agent-skills.
 - **The summarizer's output is data.** The document went into a prompt; what
   comes back is parsed, validated and stored, never followed.
+- **Prefer a marker the source already gives you over an extra request.** A
+  GitLab blob SHA comes free with the tree listing and changes exactly when the
+  file does; asking the commits API per file would turn one sync into hundreds
+  of round trips.
 - **Interpolation skips comments.** The config file documents `${VAR}` in its
   own header, and resolving that would break the file it explains.
 
@@ -151,7 +155,7 @@ Dependencies point inward only: `adapters → application → domain`.
 
 ## Not built yet
 
-The GitLab, HTTP API and local-file sources, the scheduler and the webhook
-receiver are phases 6–9 in [`README.md`](README.md#status). Don't document them
+The HTTP API and local-file sources, the scheduler and the webhook receiver
+are phases 6–9 in [`README.md`](README.md#status). Don't document them
 here as if they exist, and don't assume a missing module means something was
 deleted.

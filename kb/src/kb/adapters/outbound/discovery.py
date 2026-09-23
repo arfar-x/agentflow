@@ -22,6 +22,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+from urllib.parse import quote
 
 logger = logging.getLogger("kb.discovery")
 
@@ -144,6 +145,94 @@ def discover_jira(session: Any, base_url: str) -> list[Candidate]:
     return candidates
 
 
+#: Below this, a directory isn't a documentation home -- it's a stray README,
+#: and proposing a scope for it is noise in a file meant to be read.
+MIN_FILES_PER_SCOPE = 3
+
+
+def discover_gitlab(session: Any, base_url: str, *, max_projects: int = 50) -> list[Candidate]:
+    """Projects the token can reach, **with proposed scopes**.
+
+    Reporting the directories where Markdown actually clusters
+    (`docs/ADRs: 14 files`) is the whole point: it answers "which part of this
+    repo is documentation?" so an operator doesn't have to go looking.
+    """
+    api = f"{base_url.rstrip('/')}/api/v4"
+    response = session.get(
+        f"{api}/projects", params={"membership": True, "per_page": max_projects, "simple": True}, timeout=30
+    )
+    response.raise_for_status()
+
+    candidates: list[Candidate] = []
+    for project in response.json() or []:
+        path = project.get("path_with_namespace")
+        if not path:
+            continue
+        clusters = _markdown_clusters(session, api, project.get("id") or quote(path, safe=""))
+        if not clusters:
+            continue
+        total = sum(clusters.values())
+        scopes, described = _propose_scopes(clusters)
+        slug = path.replace("/", "-").lower()
+        candidates.append(
+            Candidate(
+                id=f"gitlab-{slug}",
+                kind="gitlab",
+                size=f"{total} markdown files -- {described}",
+                body=(
+                    f"  - id: gitlab-{slug}\n"
+                    f"    kind: gitlab\n"
+                    f"    enabled: false\n"
+                    f"    base_url: ${{GITLAB_BASE_URL}}\n"
+                    f"    token_env: GITLAB_TOKEN\n"
+                    f"    projects:\n"
+                    f"      - path: {path}\n"
+                    f"        scopes:\n" + scopes
+                ),
+            )
+        )
+    return candidates
+
+
+def _markdown_clusters(session: Any, api: str, project_id: Any) -> dict[str, int]:
+    """Markdown file counts per top-level directory ('.' for the root)."""
+    counts: dict[str, int] = {}
+    page = 1
+    while page <= 5:  # a bounded look: this is a proposal, not an index
+        try:
+            response = session.get(
+                f"{api}/projects/{project_id}/repository/tree",
+                params={"recursive": True, "per_page": 100, "page": page},
+                timeout=30,
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            logger.debug("could not list %s: %s", project_id, exc)
+            return counts
+        entries = response.json() or []
+        for entry in entries:
+            path = entry.get("path") or ""
+            if entry.get("type") != "blob" or not path.endswith(".md"):
+                continue
+            directory = path.rsplit("/", 1)[0] if "/" in path else "."
+            counts[directory] = counts.get(directory, 0) + 1
+        if len(entries) < 100:
+            break
+        page += 1
+    return counts
+
+
+def _propose_scopes(clusters: dict[str, int]) -> tuple[str, str]:
+    """The YAML for the scopes, plus a one-line description of what was found."""
+    ranked = sorted(clusters.items(), key=lambda pair: (-pair[1], pair[0]))
+    worthwhile = [(d, n) for d, n in ranked if n >= MIN_FILES_PER_SCOPE and d != "."]
+    if not worthwhile:
+        return ('          - { dir: "." }\n', "scattered; proposing the whole repository")
+    lines = "".join(f"          - {{ dir: {directory} }}\n" for directory, _ in worthwhile[:5])
+    described = ", ".join(f"{directory}: {count} files" for directory, count in worthwhile[:5])
+    return lines, described
+
+
 def existing_source_ids(text: str) -> set[str]:
     """Ids already in the file, however they were written.
 
@@ -216,6 +305,13 @@ def discover_all(env: Mapping[str, str], *, session_factory: Any = None) -> list
         )
         deployment = env.get("KB_CONFLUENCE_DEPLOYMENT_TYPE") or env.get("CONFLUENCE_DEPLOYMENT_TYPE") or "server"
         candidates += discover_confluence(session, confluence_url, deployment=deployment)
+
+    gitlab_url = env.get("GITLAB_BASE_URL") or env.get("KB_GITLAB_BASE_URL")
+    gitlab_token = env.get("GITLAB_TOKEN") or env.get("KB_GITLAB_TOKEN")
+    if gitlab_url and gitlab_token:
+        session = make_session(None, None, None)
+        session.headers.update({"PRIVATE-TOKEN": gitlab_token})
+        candidates += discover_gitlab(session, gitlab_url)
 
     jira_url = env.get("KB_JIRA_BASE_URL") or env.get("JIRA_BASE_URL")
     if jira_url:

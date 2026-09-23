@@ -92,10 +92,21 @@ def build_source(config: AnySource, env: Mapping[str, str] | None = None) -> Kno
             config, base_url=base_url, username=username, password=password, token=token
         )
 
-    if isinstance(config, (GitLabSource, HttpApiSource, LocalFilesSource)):
+    if isinstance(config, GitLabSource):
+        from kb.adapters.outbound.gitlab_source import GitLabKnowledgeSource
+
+        token = environment.get(config.token_env)
+        if not token:
+            # The config names the variable; the value lives in .env. A
+            # self-hosted GitLab may allow anonymous reads of public projects,
+            # but a catalog built from only what is public is a trap.
+            raise MissingCredential(config.id, (config.token_env,))
+        return GitLabKnowledgeSource(config, token=token)
+
+    if isinstance(config, (HttpApiSource, LocalFilesSource)):
         raise NotImplementedError(
             f"the {config.kind!r} source is specified but not built yet -- see "
-            "docs/spec/knowledge-base.md, FR-SRC-03/04/05"
+            "docs/spec/knowledge-base.md, FR-SRC-04/05"
         )
 
     raise NotImplementedError(f"no adapter for source kind {config.kind!r}")

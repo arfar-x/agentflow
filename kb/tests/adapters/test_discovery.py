@@ -119,3 +119,53 @@ def test_existing_ids_are_found_even_when_the_file_cannot_be_parsed():
     # to be able to append to it without duplicating a source.
     text = "sources:\n  - id: confluence-eng\n    base_url: ${NOT_SET}\n"
     assert existing_source_ids(text) == {"confluence-eng"}
+
+
+def test_gitlab_projects_are_proposed_with_the_directories_that_hold_docs():
+    # Covers: FR-CFG-06
+    # "which part of this repo is documentation?" is the question discovery
+    # exists to answer -- otherwise an operator goes spelunking for it.
+    from kb.adapters.outbound.discovery import discover_gitlab
+
+    tree = [{"type": "blob", "path": p} for p in (
+        *[f"docs/ADRs/{n}.md" for n in range(14)],
+        *[f"specs/{n}.md" for n in range(5)],
+        "README.md",
+        "src/main.py",
+    )]
+    session = StubSession([
+        StubResponse([{"id": 7, "path_with_namespace": "platform/media-service"}]),
+        StubResponse(tree),
+    ])
+
+    candidate = discover_gitlab(session, "https://gitlab.internal")[0]
+
+    assert candidate.id == "gitlab-platform-media-service"
+    assert "docs/ADRs: 14 files" in candidate.size and "specs: 5 files" in candidate.size
+    assert "{ dir: docs/ADRs }" in candidate.body and "{ dir: specs }" in candidate.body
+    assert "token_env: GITLAB_TOKEN" in candidate.body, "the name, never the secret"
+    assert "enabled: false" in candidate.body
+
+
+def test_a_repository_with_scattered_markdown_is_proposed_whole():
+    from kb.adapters.outbound.discovery import discover_gitlab
+
+    session = StubSession([
+        StubResponse([{"id": 8, "path_with_namespace": "platform/specs"}]),
+        StubResponse([{"type": "blob", "path": "one.md"}, {"type": "blob", "path": "two.md"}]),
+    ])
+
+    candidate = discover_gitlab(session, "https://gitlab.internal")[0]
+
+    assert 'dir: "."' in candidate.body
+    assert "whole repository" in candidate.size
+
+
+def test_a_repository_with_no_markdown_is_not_proposed_at_all():
+    from kb.adapters.outbound.discovery import discover_gitlab
+
+    session = StubSession([
+        StubResponse([{"id": 9, "path_with_namespace": "platform/binary"}]),
+        StubResponse([{"type": "blob", "path": "src/main.py"}]),
+    ])
+    assert discover_gitlab(session, "https://gitlab.internal") == []

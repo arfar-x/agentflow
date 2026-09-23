@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.3.0 |
+| **Version** | 1.4.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -197,7 +197,7 @@ they parse input, call a use case, and serialize the result.
 |---|---|---|
 | FR-SRC-01 | Confluence: selected spaces, page label to entry type, label exclusions. | done |
 | FR-SRC-02 | Jira: documents selected by JQL. | done |
-| FR-SRC-03 | GitLab: each project lists scopes; a scope is a directory walked recursively with file patterns and exclusions; `dir: "."` means the whole repository; a scope's `type` and `tags` are inherited by every entry beneath it. | planned |
+| FR-SRC-03 | GitLab: each project lists scopes; a scope is a directory walked recursively with file patterns and exclusions; `dir: "."` means the whole repository; a scope's `type` and `tags` are inherited by every entry beneath it. | done |
 | FR-SRC-04 | An internal HTTP API, with field mapping in config. | planned |
 | FR-SRC-05 | Local files under configured paths. | planned |
 | FR-SRC-06 | Adding a source MUST require only one adapter and one config entry, with no change to `domain/` or `application/`. | planned |
@@ -390,6 +390,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 1.4.0 | 2026-09-24 | Phase 6, part two: the GitLab source (FR-SRC-03) -- scopes, glob matching, blob SHAs as versions, per-project commit checkpoints -- and GitLab discovery. The HTTP API and local files remain planned. |
 | 1.3.0 | 2026-09-24 | Phase 6, part one: source configuration with `${VAR}` interpolation and the review gate (FR-CFG-*), the Confluence and Jira sources (FR-SRC-01/02), sync in full and incremental modes (FR-REC-08/09), and discovery. GitLab, the HTTP API and local files remain planned. |
 | 1.2.0 | 2026-09-24 | Phase 5 (front doors): added FR-CLI-01..04, FR-MCP-01..04, and NFR-DEP-07 (writes must actually commit — a defect the single-connection tests could not see). FR-AGT-01 and NFR-DEP-02 now done. |
 | 1.1.0 | 2026-09-24 | Phase 4 (storage). Added FR-SRCH-10 (field weighting), which the Postgres adapter made an explicit decision rather than an implicit one. FR-OVR-06, NFR-DEP-01, NFR-DEP-05, NFR-DEP-06 now done. |
