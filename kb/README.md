@@ -19,15 +19,19 @@ true. Change the spec first, then the code.
 | 3 | Use cases against in-memory fakes: search, reconcile | done |
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
 | 5 | CLI and MCP server — usable from LibreChat | done |
-| 6 | Sources: Confluence, Jira, GitLab (done); HTTP API, local files | in progress |
+| 6 | Sources: Confluence, Jira, GitLab, plus discovery | done |
 | 7 | Freshness mechanisms, scheduler, webhook receiver | next |
 | 8 | Agent tools and instructions | |
 | 9 | Operator documentation | |
 
-**The catalog can now fill itself from Confluence and Jira.** Configure the
-sources, review the file, and sync. GitLab, an HTTP API and local files are
-specified but not built; scheduling all of this is phase 7, so today sync is
-something you run.
+**The catalog can now fill itself from Confluence, Jira and GitLab.** Configure
+the sources, review the file, and sync. Scheduling all of this is phase 7, so
+today sync is something you run.
+
+Two more source kinds — an internal HTTP API and local files — are specified and
+deliberately unbuilt. The config shape is settled, so adding one later is an
+adapter and a config entry; building either now would mean guessing at a mapping
+and then maintaining the guess.
 
 ## Getting it running
 

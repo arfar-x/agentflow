@@ -55,4 +55,6 @@ sources:
             patterns: ["**/*.md", "**/*.mdx"]
             exclude: ["**/CHANGELOG.md"]
 
-  # Not built yet (FR-SRC-04/05): an internal HTTP API, and local files.
+  # An internal HTTP API (http_api) and local files (local_files) are
+  # specified but deliberately unbuilt -- see docs/spec/knowledge-base.md
+  # §6.8. Ask for one when you have something real to catalog through it.

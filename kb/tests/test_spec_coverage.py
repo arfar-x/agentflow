@@ -25,7 +25,7 @@ TESTS = Path(__file__).resolve().parent
 
 #: A requirement row: `| FR-ENT-01 | The entry MUST ... | done |`
 REQUIREMENT_ROW = re.compile(
-    r"^\|\s*((?:FR|NFR|AS)-[A-Z]*-?\d{2})\s*\|.*\|\s*(done|partial|planned)\s*\|\s*$",
+    r"^\|\s*((?:FR|NFR|AS)-[A-Z]*-?\d{2})\s*\|.*\|\s*(done|partial|planned|deferred)\s*\|\s*$",
     re.MULTILINE,
 )
 #: A claim: `# Covers: FR-ENT-01, FR-REC-05`
@@ -74,13 +74,18 @@ def test_no_test_claims_a_requirement_the_spec_does_not_define():
     assert not unknown, "claimed by tests but not defined in the spec: " + "; ".join(unknown)
 
 
-def test_planned_requirements_are_not_quietly_implemented():
-    """A planned requirement with tests is not an error -- it means the spec's
-    status is stale. Failing here forces the status to be updated in the same
-    change that implements it, which is the whole point of tracking status."""
-    planned = {rid for rid, status in spec_requirements().items() if status == "planned"}
+def test_unbuilt_requirements_are_not_quietly_implemented():
+    """A planned or deferred requirement with tests is not an error -- it means
+    the spec's status is stale. Failing here forces the status to be updated in
+    the same change that implements it, which is the point of tracking status.
+
+    It also catches the opposite drift: something marked *deferred* ("we chose
+    not to build this") that quietly grew an implementation anyway."""
+    planned = {
+        rid for rid, status in spec_requirements().items() if status in {"planned", "deferred"}
+    }
     claimed_but_planned = sorted(planned & set(claims()))
     assert not claimed_but_planned, (
-        "tests cover these, but the spec still says planned -- update the status: "
+        "tests cover these, but the spec still says planned/deferred -- update the status: "
         + ", ".join(claimed_but_planned)
     )

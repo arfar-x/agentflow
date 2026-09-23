@@ -155,7 +155,14 @@ Dependencies point inward only: `adapters → application → domain`.
 
 ## Not built yet
 
-The HTTP API and local-file sources, the scheduler and the webhook receiver
-are phases 6–9 in [`README.md`](README.md#status). Don't document them
-here as if they exist, and don't assume a missing module means something was
-deleted.
+The scheduler and the webhook receiver are phases 7–9 in
+[`README.md`](README.md#status).
+
+The `http_api` and `local_files` sources are **deferred, not missing**: the
+config shape is settled and tested, and the adapter gets written when a real
+document has to be catalogued through it. `source_factory` says so when one is
+enabled. Don't build either on spec alone -- guessing at a mapping means
+maintaining the guess.
+
+Don't document anything here as if it exists, and don't read a missing module as
+something that was deleted.

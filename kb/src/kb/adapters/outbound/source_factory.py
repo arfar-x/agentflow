@@ -105,8 +105,9 @@ def build_source(config: AnySource, env: Mapping[str, str] | None = None) -> Kno
 
     if isinstance(config, (HttpApiSource, LocalFilesSource)):
         raise NotImplementedError(
-            f"the {config.kind!r} source is specified but not built yet -- see "
-            "docs/spec/knowledge-base.md, FR-SRC-04/05"
+            f"the {config.kind!r} source is specified but deliberately not built "
+            "(FR-SRC-04/05 are deferred): the shape is settled, and an adapter "
+            "gets written when a real document needs cataloguing through it"
         )
 
     raise NotImplementedError(f"no adapter for source kind {config.kind!r}")
