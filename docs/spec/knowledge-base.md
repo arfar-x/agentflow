@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.2.0 |
+| **Version** | 1.3.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -76,10 +76,10 @@ sources and reviews overrides.
 | AS-01 | **Given** a wiki page titled "Payment reconciliation" describing refund retries, **when** a user asks "how do we handle refund retries?", **then** the agent finds that page and answers from its live content, naming it. | done |
 | AS-02 | **Given** a document summarized in English and Persian, **when** a user asks in Persian, **then** the catalog returns it and the agent answers in Persian. | done |
 | AS-03 | **Given** nothing in the catalog matches, **when** a user asks, **then** the agent says so and asks, rather than guessing, and the query is recorded as a gap. | partial |
-| AS-04 | **Given** a page edited at the source, **when** the next sync runs, **then** the entry reflects the edit without a human touching the catalog. | planned |
-| AS-05 | **Given** a page deleted at the source, **when** reconciliation runs, **then** the entry stops appearing in search and is reported, not erased. | partial |
-| AS-06 | **Given** a generated summary an operator disagrees with, **when** they record an override, **then** search returns their text, and it survives every later sync. | partial |
-| AS-07 | **Given** a new wiki space or repository, **when** the operator runs discovery, **then** it is proposed as a disabled candidate for review, not silently indexed. | planned |
+| AS-04 | **Given** a page edited at the source, **when** the next sync runs, **then** the entry reflects the edit without a human touching the catalog. | done |
+| AS-05 | **Given** a page deleted at the source, **when** reconciliation runs, **then** the entry stops appearing in search and is reported, not erased. | done |
+| AS-06 | **Given** a generated summary an operator disagrees with, **when** they record an override, **then** search returns their text, and it survives every later sync. | done |
+| AS-07 | **Given** a new wiki space or repository, **when** the operator runs discovery, **then** it is proposed as a disabled candidate for review, not silently indexed. | done |
 
 *partial* = the domain and application behavior exists and is tested; the
 adapter or agent wiring that completes the scenario is not built yet.
@@ -147,8 +147,8 @@ adapter or agent wiring that completes the scenario is not built yet.
 | FR-REC-05 | A document that vanishes MUST be soft-deleted and reported, never hard-deleted; one that returns MUST be revived, not duplicated. | done |
 | FR-REC-06 | A summarizer returning nothing usable MUST still leave the document catalogued under its real title. | done |
 | FR-REC-07 | Renaming a document MUST NOT fork it into a second entry. | done |
-| FR-REC-08 | Incremental sync MUST ask each source only what changed since a stored per-source checkpoint, and MUST advance that checkpoint only after a successful run. | planned |
-| FR-REC-09 | Nightly full reconciliation MUST list every document in a source and soft-delete entries it no longer yields. | planned |
+| FR-REC-08 | Incremental sync MUST ask each source only what changed since a stored per-source checkpoint, and MUST advance that checkpoint only after a successful run. | done |
+| FR-REC-09 | Nightly full reconciliation MUST list every document in a source and soft-delete entries it no longer yields. | done |
 | FR-REC-10 | Reading a stale entry MUST queue a refresh of that entry. | planned |
 | FR-REC-11 | A webhook MUST refresh only the paths in its payload, and MUST be rejected without a valid secret token. | planned |
 
@@ -167,13 +167,13 @@ adapter or agent wiring that completes the scenario is not built yet.
 
 | id | Requirement | Status |
 |---|---|---|
-| FR-CFG-01 | The source config MUST support `${VAR}` and `${VAR:-default}` anywhere, for any variable, with no predefined set. | planned |
-| FR-CFG-02 | An unset `${VAR}` MUST fail naming the file, line and variable. | planned |
-| FR-CFG-03 | Interpolated values MUST be coerced to the type the field expects. | planned |
-| FR-CFG-04 | Credentials MUST be referenced by variable name only; no secret may appear in the config, and resolved secrets MUST be redacted from logs and errors. | planned |
-| FR-CFG-05 | Sync MUST refuse to run while the config says `reviewed: false`. | planned |
-| FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate disabled, and MUST NOT rewrite a line an operator has edited. | planned |
-| FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | planned |
+| FR-CFG-01 | The source config MUST support `${VAR}` and `${VAR:-default}` anywhere, for any variable, with no predefined set. | done |
+| FR-CFG-02 | An unset `${VAR}` MUST fail naming the file, line and variable. | done |
+| FR-CFG-03 | Interpolated values MUST be coerced to the type the field expects. | done |
+| FR-CFG-04 | Credentials MUST be referenced by variable name only; no secret may appear in the config, and resolved secrets MUST be redacted from logs and errors. | done |
+| FR-CFG-05 | Sync MUST refuse to run while the config says `reviewed: false`. | done |
+| FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate disabled, and MUST NOT rewrite a line an operator has edited. | done |
+| FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | done |
 
 ### 6.7 Front doors — `FR-CLI`, `FR-MCP`
 
@@ -195,8 +195,8 @@ they parse input, call a use case, and serialize the result.
 
 | id | Requirement | Status |
 |---|---|---|
-| FR-SRC-01 | Confluence: selected spaces, page label to entry type, label exclusions. | planned |
-| FR-SRC-02 | Jira: documents selected by JQL. | planned |
+| FR-SRC-01 | Confluence: selected spaces, page label to entry type, label exclusions. | done |
+| FR-SRC-02 | Jira: documents selected by JQL. | done |
 | FR-SRC-03 | GitLab: each project lists scopes; a scope is a directory walked recursively with file patterns and exclusions; `dir: "."` means the whole repository; a scope's `type` and `tags` are inherited by every entry beneath it. | planned |
 | FR-SRC-04 | An internal HTTP API, with field mapping in config. | planned |
 | FR-SRC-05 | Local files under configured paths. | planned |
@@ -239,7 +239,7 @@ they parse input, call a use case, and serialize the result.
 |---|---|---|
 | NFR-PRF-01 | Sync cost MUST scale with changed documents, not catalogued ones. | done |
 | NFR-PRF-02 | A search MUST complete without waiting on any external system other than the catalog database. | done |
-| NFR-PRF-03 | A full reconciliation of a steady-state catalog SHOULD make no model calls. | planned |
+| NFR-PRF-03 | A full reconciliation of a steady-state catalog SHOULD make no model calls. | done |
 
 ## 8. Interfaces
 
@@ -390,5 +390,6 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 1.3.0 | 2026-09-24 | Phase 6, part one: source configuration with `${VAR}` interpolation and the review gate (FR-CFG-*), the Confluence and Jira sources (FR-SRC-01/02), sync in full and incremental modes (FR-REC-08/09), and discovery. GitLab, the HTTP API and local files remain planned. |
 | 1.2.0 | 2026-09-24 | Phase 5 (front doors): added FR-CLI-01..04, FR-MCP-01..04, and NFR-DEP-07 (writes must actually commit — a defect the single-connection tests could not see). FR-AGT-01 and NFR-DEP-02 now done. |
 | 1.1.0 | 2026-09-24 | Phase 4 (storage). Added FR-SRCH-10 (field weighting), which the Postgres adapter made an explicit decision rather than an implicit one. FR-OVR-06, NFR-DEP-01, NFR-DEP-05, NFR-DEP-06 now done. |

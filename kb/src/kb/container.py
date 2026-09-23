@@ -12,12 +12,27 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from kb.application.ports.clock import SystemClock
+from kb.application.ports.summarizer import SummaryDraft
 from kb.application.use_cases.get_entry import GetEntry
+from kb.application.use_cases.reconcile_document import ReconcileDocument
 from kb.application.use_cases.search_catalog import SearchCatalog
+from kb.application.use_cases.sync_source import SyncSource
 from kb.config import Settings
 
 if TYPE_CHECKING:  # the adapter is imported lazily, see below
     from kb.adapters.outbound.postgres_store import PostgresEntryStore
+
+
+class NullSummarizer:
+    """Used when no model endpoint is configured.
+
+    Sync then still runs: documents are catalogued under their real titles and
+    remain findable by title and location, just undescribed. Blocking instead
+    would make the catalog hostage to an endpoint it only needs while writing.
+    """
+
+    def draft(self, document) -> SummaryDraft:  # noqa: ANN001 - port shape
+        return SummaryDraft()
 
 
 @dataclass(slots=True)
@@ -26,6 +41,7 @@ class Container:
     store: "PostgresEntryStore"
     search: SearchCatalog
     get_entry: GetEntry
+    sync: SyncSource
 
     def close(self) -> None:
         self.store.close()
@@ -50,4 +66,19 @@ def build(settings: Settings | None = None) -> Container:
             store, clock, default_limit=settings.default_limit, stale_after=settings.stale_after
         ),
         get_entry=GetEntry(store, clock, stale_after=settings.stale_after),
+        sync=SyncSource(store, ReconcileDocument(store, build_summarizer(settings), clock), clock),
+    )
+
+
+def build_summarizer(settings: Settings):
+    """The model endpoint, or a stand-in that describes nothing."""
+    if not settings.summarizer_configured:
+        return NullSummarizer()
+    from kb.adapters.outbound.llm_summarizer import LlmSummarizer
+
+    return LlmSummarizer(
+        base_url=settings.summarizer_url,
+        model=settings.summarizer_model,
+        api_key=settings.summarizer_api_key,
+        languages=settings.summary_languages,
     )

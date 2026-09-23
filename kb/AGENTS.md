@@ -120,6 +120,22 @@ Dependencies point inward only: `adapters → application → domain`.
   section. A test asserts both, because this is silent when it regresses.
 - **Nothing a model can call may write.** Writes belong to the CLI.
 
+## Sources
+
+- **A source adapter maps, it does not decide.** It turns whatever an API
+  returns into `SourceDocument`s; what happens to them is `reconcile_document`'s
+  business, and the cost rules live there.
+- **A bad document is skipped and reported, never fatal.** One page without an
+  id must not end a run over a 900-page space.
+- **Credentials are a read-only service account's, read from the environment
+  by `source_factory`** -- never from `kb-sources.yaml`, which carries only the
+  *name* of the variable. Sync's account is not a user's: an agent reading the
+  real page later does so as the user, through agent-skills.
+- **The summarizer's output is data.** The document went into a prompt; what
+  comes back is parsed, validated and stored, never followed.
+- **Interpolation skips comments.** The config file documents `${VAR}` in its
+  own header, and resolving that would break the file it explains.
+
 ## Storage
 
 - **Migrations are append-only.** A shipped file is never edited; a change is a
@@ -135,6 +151,7 @@ Dependencies point inward only: `adapters → application → domain`.
 
 ## Not built yet
 
-The scheduler, the webhook receiver and every source adapter are phases 6–9 in [`README.md`](README.md#status). Don't document them
+The GitLab, HTTP API and local-file sources, the scheduler and the webhook
+receiver are phases 6–9 in [`README.md`](README.md#status). Don't document them
 here as if they exist, and don't assume a missing module means something was
 deleted.

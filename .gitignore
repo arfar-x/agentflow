@@ -25,6 +25,10 @@ searxng/settings.yml
 .windsurf/
 .continue/
 
+# real source configuration -- space keys, repo paths, project keys. The
+# tracked template is config/kb-sources.yaml.example
+config/kb-sources.yaml
+
 # Python build/test artifacts from kb/ (see kb/README.md for the venv setup --
 # the virtualenv and the editable install's metadata are per-developer, like
 # the AI-agent directories above)

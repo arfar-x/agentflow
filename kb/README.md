@@ -19,15 +19,15 @@ true. Change the spec first, then the code.
 | 3 | Use cases against in-memory fakes: search, reconcile | done |
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
 | 5 | CLI and MCP server — usable from LibreChat | done |
-| 6 | Sources: Confluence, Jira, GitLab, HTTP API, local files | next |
-| 7 | Freshness mechanisms, scheduler, webhook receiver | |
+| 6 | Sources: Confluence and Jira (done); GitLab, HTTP API, local files | in progress |
+| 7 | Freshness mechanisms, scheduler, webhook receiver | next |
 | 8 | Agent tools and instructions | |
 | 9 | Operator documentation | |
 
-**Both front doors work; the catalog is empty.** The CLI and the MCP server are
-live (phase 5), backed by real storage (phase 4). What is missing is anything
-that *fills* it: source adapters arrive in phase 6, so until then entries are
-written by hand or by a test.
+**The catalog can now fill itself from Confluence and Jira.** Configure the
+sources, review the file, and sync. GitLab, an HTTP API and local files are
+specified but not built; scheduling all of this is phase 7, so today sync is
+something you run.
 
 ## Getting it running
 
@@ -96,6 +96,40 @@ Every command prints one JSON document and exits 0, errors included:
 ```json
 {"error": {"type": "database_unavailable", "message": "connection refused"}}
 ```
+
+### Filling it
+
+```bash
+make kb-sources-discover            # what Confluence and Jira actually contain
+make kb-sources-discover WRITE=1    # append them to config/kb-sources.yaml, disabled
+
+# then edit config/kb-sources.yaml: enable what belongs, set reviewed: true
+
+make kb-sources                     # what is configured, and what each mechanism is set to
+make kb-sync SOURCE=confluence-eng DRY_RUN=1   # what would change; writes nothing
+make kb-sync SOURCE=confluence-eng             # full pass: catalogs, and soft-deletes what vanished
+make kb-sync SOURCE=confluence-eng MODE=incremental  # only what changed since the checkpoint
+make kb-status
+```
+
+Sync needs a **read-only service account** (`KB_CONFLUENCE_*` / `KB_JIRA_*` in
+`.env`, falling back to the stack's existing `CONFLUENCE_*`/`JIRA_*`): it has to
+see a space in order to catalog it. That is a different thing from the per-user
+credential an agent uses to read a page later — that check still happens at the
+source, as the user.
+
+The summarizer (`KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL`, any OpenAI-compatible
+endpoint) is what writes each entry's title, summary and keywords in every
+language in `KB_SUMMARY_LANGUAGES`. Leave it unset and sync still runs: entries
+get their real titles and stay findable, just undescribed.
+
+Two properties hold regardless of source:
+
+- **A second sync over unchanged content makes no model calls and no writes.**
+  Re-running is close to free; that is what makes a frequent cadence sane.
+- **A full pass soft-deletes what the source no longer lists; an incremental one
+  never does.** An incremental feed only yields what changed, so treating
+  silence as deletion would empty the catalog.
 
 ### The MCP server
 

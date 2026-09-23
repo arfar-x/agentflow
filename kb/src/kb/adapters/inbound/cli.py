@@ -68,6 +68,24 @@ def build_parser() -> argparse.ArgumentParser:
     gaps = sub.add_parser("gaps", help="Searches that found nothing, most frequent first.")
     gaps.add_argument("--limit", type=int, default=20)
 
+    sync = sub.add_parser("sync", help="Bring the catalog in line with one configured source.")
+    sync.add_argument("--source", required=True, metavar="ID", help="A source id from kb-sources.yaml.")
+    sync.add_argument("--mode", choices=["full", "incremental"], default="full",
+                      help="full lists everything (and detects deletions); incremental asks only "
+                           "for what changed since the stored checkpoint.")
+    sync.add_argument("--dry-run", action="store_true",
+                      help="Read the source and report what would change. Writes nothing, "
+                           "summarizes nothing, and does not advance the checkpoint.")
+
+    sub.add_parser("sources", help="The configured sources, and whether each is enabled.")
+
+    discover = sub.add_parser(
+        "discover", help="Propose sources from what the connected systems contain."
+    )
+    discover.add_argument("--write", action="store_true",
+                          help="Append the candidates to kb-sources.yaml (disabled, for review). "
+                               "Without it, they are only printed.")
+
     sub.add_parser("migrate", help="Apply any pending schema migration. Idempotent.")
     sub.add_parser("status", help="What the catalog contains, and whether it looks healthy.")
     return parser
@@ -175,6 +193,9 @@ def _dispatch(args: argparse.Namespace, container: Any) -> dict[str, Any]:
         container.store.set_override(override)
         return {"override": override.model_dump(mode="json", exclude_none=True)}
 
+    if args.command in {"sync", "sources", "discover"}:
+        return _sources_command(args, container)
+
     if args.command == "gaps":
         return {"gaps": container.store.top_misses(limit=args.limit)}
 
@@ -186,6 +207,93 @@ def _dispatch(args: argparse.Namespace, container: Any) -> dict[str, Any]:
         return container.store.status()
 
     raise _Reportable("unknown_command", f"no such command: {args.command!r}")
+
+
+def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]:
+    import os
+    from pathlib import Path
+
+    from kb.adapters.outbound import discovery
+    from kb.adapters.outbound.source_factory import MissingCredential, build_source
+    from kb.sources_config import ConfigError, NotReviewed, load
+
+    if args.command == "discover":
+        candidates = discovery.discover_all(os.environ)
+        payload: dict[str, Any] = {
+            "candidates": [
+                {"id": c.id, "kind": c.kind, "found": c.size} for c in candidates
+            ]
+        }
+        if args.write:
+            path = Path(container.settings.sources_file)
+            added, skipped = discovery.merge_into(path, candidates)
+            payload |= {"file": str(path), "added": added, "already_configured": skipped}
+            # Said plainly, because the next question is always "why is nothing
+            # being synced?".
+            payload["next"] = (
+                f"edit {path}: enable the sources you want, then set reviewed: true"
+            )
+        return payload
+
+    from pathlib import Path
+
+    try:
+        config = load(Path(container.settings.sources_file))
+    except ConfigError as exc:
+        raise _Reportable("bad_source_config", str(exc)) from exc
+
+    if args.command == "sources":
+        return {
+            "file": container.settings.sources_file,
+            "reviewed": config.reviewed,
+            "sources": [
+                {
+                    "id": source.id,
+                    "kind": source.kind,
+                    "enabled": source.enabled,
+                    "mechanisms": config.mechanisms_for(source).model_dump(exclude_none=True),
+                }
+                for source in config.sources
+            ],
+        }
+
+    # sync
+    try:
+        config.require_reviewed()
+    except NotReviewed as exc:
+        raise _Reportable("not_reviewed", str(exc)) from exc
+    try:
+        source_config = config.source(args.source)
+    except ConfigError as exc:
+        raise _Reportable("unknown_source", str(exc)) from exc
+    if not source_config.enabled:
+        raise _Reportable(
+            "source_disabled",
+            f"source {source_config.id!r} is disabled in {container.settings.sources_file}",
+        )
+    try:
+        source = build_source(source_config)
+    except MissingCredential as exc:
+        raise _Reportable("missing_credential", str(exc), variables=list(exc.variables)) from exc
+    except NotImplementedError as exc:
+        raise _Reportable("unsupported_source", str(exc)) from exc
+
+    from kb.application.use_cases.sync_source import Mode
+
+    mode = Mode(args.mode)
+    checkpoint = container.store.get_checkpoint(source.source_id)
+    try:
+        report = container.sync.execute(
+            source, mode=mode, dry_run=args.dry_run, checkpoint=checkpoint
+        )
+    except Exception as exc:  # the source is unreachable, auth failed, ...
+        raise _Reportable("source_unavailable", str(exc).strip()) from exc
+
+    if report.checkpoint and not args.dry_run:
+        # Only after a successful run: a checkpoint advanced past a failure
+        # would skip whatever that run never saw.
+        container.store.set_checkpoint(source.source_id, report.checkpoint)
+    return report.model_dump(mode="json")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

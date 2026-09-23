@@ -1,0 +1,55 @@
+# Which spaces, repositories, projects and endpoints the knowledge catalog reads.
+#
+# Copy to config/kb-sources.yaml (gitignored), or let discovery draft it for you:
+#
+#   make kb-sources-discover          # print what it finds
+#   make kb-sources-discover WRITE=1  # append it here, disabled, for review
+#
+# Everything discovery proposes is `enabled: false`, and sync refuses to run
+# while `reviewed: false` -- so nothing it finds can take effect unseen.
+#
+# ${VAR} and ${VAR:-default} work anywhere except in comments. Credentials are
+# named, never written here: the value stays in .env.
+
+reviewed: false
+
+defaults:
+  mechanisms:
+    incremental:  { enabled: true,  every: 15m }
+    full_scrape:  { enabled: true,  at: "03:00" }
+    webhook:      { enabled: false }
+    lazy_refresh: { enabled: true,  stale_after: 24h }
+
+sources:
+  # A wiki space. A page's labels decide its entry type, so curation happens
+  # where the authors already work.
+  - id: confluence-eng
+    kind: confluence
+    enabled: false
+    spaces: [ENG]
+    type_from_labels: { kb-glossary: term, kb-product: product, kb-team: team }
+    exclude_labels: [archive, draft]
+
+  # Epics as product context. Most issues are work items, not knowledge, so the
+  # query is deliberately narrow.
+  - id: jira-product
+    kind: jira
+    enabled: false
+    jql: 'project = PAY AND issuetype = Epic'
+
+  # Not built yet (FR-SRC-03/04/05); the shape is settled, the adapters are not.
+  # - id: gitlab-platform
+  #   kind: gitlab
+  #   enabled: false
+  #   base_url: ${GITLAB_BASE_URL}
+  #   token_env: GITLAB_TOKEN
+  #   projects:
+  #     - path: platform/specs                 # a whole repo
+  #       scopes: [{ dir: ".", type: spec }]
+  #     - path: media-service                  # one directory inside a repo
+  #       ref: main
+  #       scopes:
+  #         - { dir: docs/ADRs, type: spec, tags: [adr] }
+  #         - dir: docs
+  #           patterns: ["**/*.md", "**/*.mdx"]
+  #           exclude: ["**/CHANGELOG.md"]

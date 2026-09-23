@@ -74,6 +74,27 @@ is rebuilt from its sources. See [`OPERATIONS.md`](OPERATIONS.md) "Volumes".
 
 | Variable | Required | Notes |
 |---|---|---|
+The `mcp-kb` service builds its own `KB_DATABASE_URL` from the variables above,
+connecting as `kb_reader` -- you do not set it in `.env`. Set it yourself only to
+run the CLI (`python -m kb status`) against the catalog from elsewhere:
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `KB_DATABASE_URL` | for the CLI | none | `postgresql://…` DSN. The stack's own services set it themselves. |
+| `KB_SEARCH_DEFAULT_LIMIT` | no | `8` | Hits returned when a caller doesn't say. |
+| `KB_STALE_AFTER_HOURS` | no | `24` | How long an entry may go unverified before results mark it `stale`. |
+| `KB_MCP_HOST` / `KB_MCP_PORT` | no | `127.0.0.1` / `8322` | The container sets `0.0.0.0` so `api` can reach it; it publishes no port. |
+| `KB_MIGRATIONS_DIR` | no | found relative to the code | Set in the image, where the package is installed away from the `.sql` files. |
+| `KB_SOURCES_FILE` | no | `/opt/kb/config/kb-sources.yaml` | Which sources sync reads. Only sync and discovery load it; the MCP server never does, so a malformed source config cannot break search. |
+| `KB_CONFLUENCE_*` / `KB_JIRA_*` | for sync | falls back to `CONFLUENCE_*`/`JIRA_*` | A **read-only service account**: sync must see a space to catalog it. Not the per-user credential an agent reads a page with. |
+| `KB_SUMMARIZER_URL` / `KB_SUMMARIZER_MODEL` / `KB_SUMMARIZER_API_KEY` | no | none | Any OpenAI-compatible endpoint. Unset means sync catalogs documents under their real titles, undescribed. |
+| `KB_SUMMARY_LANGUAGES` | no | `en` | Comma-separated, e.g. `en,fa`. Every entry is catalogued in each, which is what lets a question in one language find a document written in another. |
+
+Sources themselves live in `config/kb-sources.yaml` (gitignored; the template is
+`config/kb-sources.yaml.example`). `make kb-sources-discover` drafts it from
+what Confluence and Jira actually contain, writing every candidate disabled, and
+**sync refuses to run until the file says `reviewed: true`**.
+
 | `VLLM_BASE_URL` | yes | OpenAI-compatible base URL, e.g. `https://vllm.internal/v1`. |
 | `VLLM_API_KEY` | yes (or blank if your endpoint has none) | Passed as a Bearer token. |
 

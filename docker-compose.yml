@@ -288,6 +288,34 @@ services:
     image: searxng/searxng:2026.9.8-3fdc6d753
     restart: unless-stopped
     volumes:
+  # Operator commands for the catalog: sync, discovery, overrides, status.
+  # Never started by `make up` -- it runs one command and exits (`make kb-sync`,
+  # `make kb-sources-discover`). Separate from mcp-kb on purpose: writing needs
+  # the database owner, while the query path holds the read-only role and must
+  # keep holding only that.
+  kb-cli:
+    build:
+      context: ./kb
+    profiles: ["cli"]
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    # Source credentials (a read-only service account for sync) and the
+    # summarizer endpoint come from .env, same as every other service.
+    env_file: .env
+    environment:
+      KB_DATABASE_URL: postgresql://${KB_POSTGRES_USER:-kb}:${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+    # The summarizer calls the model endpoint, so this needs the same host pin
+    # `api` and `rag_api` carry.
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
+    volumes:
+      # Writable: `make kb-sources-discover WRITE=1` appends candidates to it.
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml
+    networks: [backend]
+    entrypoint: ["python3", "-m", "kb"]
+
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     networks: [backend]
     logging:

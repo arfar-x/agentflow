@@ -34,6 +34,19 @@ class Settings(BaseModel):
     mcp_host: str = "127.0.0.1"
     mcp_port: int = Field(default=8322, ge=1, le=65535)
 
+    #: Where kb-sources.yaml lives. Only sync and discovery read it; the MCP
+    #: server never does, so a malformed source config cannot break search.
+    sources_file: str = "/opt/kb/config/kb-sources.yaml"
+    #: The summarizer: any OpenAI-compatible endpoint. Unset means sync still
+    #: runs and catalogs documents under their real titles, undescribed --
+    #: degraded rather than blocked.
+    summarizer_url: str | None = None
+    summarizer_model: str | None = None
+    summarizer_api_key: str | None = None
+    #: Which languages every entry is catalogued in. Two languages is what lets
+    #: a question in one find a document written in the other.
+    summary_languages: tuple[str, ...] = ("en",)
+
     @field_validator("database_url")
     @classmethod
     def _looks_like_a_dsn(cls, value: str) -> str:
@@ -60,13 +73,28 @@ class Settings(BaseModel):
             ("stale_after_hours", "KB_STALE_AFTER_HOURS"),
             ("mcp_host", "KB_MCP_HOST"),
             ("mcp_port", "KB_MCP_PORT"),
+            ("sources_file", "KB_SOURCES_FILE"),
+            ("summarizer_url", "KB_SUMMARIZER_URL"),
+            ("summarizer_model", "KB_SUMMARIZER_MODEL"),
+            ("summarizer_api_key", "KB_SUMMARIZER_API_KEY"),
+            ("summary_languages", "KB_SUMMARY_LANGUAGES"),
         ):
             raw = source.get(variable)
             if raw not in (None, ""):
                 values[field] = raw
         if "database_url" not in values:
             raise MissingSetting("KB_DATABASE_URL")
+        if isinstance(values.get("summary_languages"), str):
+            # "en,fa" -- a list in an environment variable has to be spelled
+            # somehow, and comma-separated is what every other tool here uses.
+            values["summary_languages"] = tuple(
+                part.strip() for part in values["summary_languages"].split(",") if part.strip()
+            )
         return cls.model_validate(values)
+
+    @property
+    def summarizer_configured(self) -> bool:
+        return bool(self.summarizer_url and self.summarizer_model)
 
 
 class MissingSetting(RuntimeError):
