@@ -22,6 +22,7 @@ approval gate sitting in front of every write.
 | `rag_api` | LibreChat's RAG sidecar, backed by `vectordb` |
 | `mcp-agent-skills` | this repo's `agent-skills` submodule, built and served as an MCP server -- **internal only, no published port** |
 | `admin-panel` | [ClickHouse/librechat-admin-panel](https://github.com/ClickHouse/librechat-admin-panel) -- users/groups/roles/grants UI, see "Managing users" below |
+| `mcp-kb` | the knowledge catalog's MCP server (`kb_search`, `kb_get`) -- **internal only, no published port** |
 | `kb-db` | the knowledge catalog's own Postgres (`kb/`, see [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) -- **internal only, no published port** |
 | `searxng` | self-hosted search backing LibreChat's native Web Search tool -- **internal only, no published port** |
 
@@ -59,11 +60,14 @@ make up
 
 The one command that brings the whole stack up, every time -- first run or
 the hundredth. Generates `searxng/settings.yml` from its template if it
-doesn't exist yet, builds and starts every service, waits for `api` to
-actually be healthy, and creates the admin account (via LibreChat's own
-`config/create-user.js`) if none exists yet -- prints the login email and
-password when it does. Safe to rerun after a restart or upgrade; it skips
-account creation once a user exists. (`scripts/bootstrap.sh` / `make
+doesn't exist yet, renders `config/librechat.yaml` from
+`config/librechat.yaml.example` + `.env` (re-rendered every run, so it
+always reflects your current `AGENTS_RECURSION_LIMIT`/
+`AGENTS_MAX_RECURSION_LIMIT` etc.), builds and starts every service, waits
+for `api` to actually be healthy, and creates the admin account (via
+LibreChat's own `config/create-user.js`) if none exists yet -- prints the
+login email and password when it does. Safe to rerun after a restart or
+upgrade; it skips account creation once a user exists. (`scripts/bootstrap.sh` / `make
 bootstrap` do the exact same thing -- `up` is just the name you already
 reach for.) See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) "First run" for
 exactly what it does and doesn't do. Then open
@@ -128,7 +132,7 @@ import does and doesn't touch, and how to restore onto another deployment.
 ```
 agentflow/
 ├── docker-compose.yml       # the whole stack
-├── config/librechat.yaml    # model + MCP + tool-approval config
+├── config/librechat.yaml.example  # model + MCP + tool-approval config template -- rendered to config/librechat.yaml (gitignored) by `make up`
 ├── kb/                      # the knowledge catalog module (its own tests: make kb-test)
 ├── agent-skills/            # git submodule -> arfar-x/agent-skills, pinned to a tag
 ├── agents/                  # one YAML per agent (`make agent-export`, or write your own from base-agent-template.yaml.example)

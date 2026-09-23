@@ -26,9 +26,24 @@ make up
 `make up` (alias `make bootstrap`, same target) is the one idempotent
 command for both first run and every re-run: generates
 `searxng/settings.yml` from its template with a fresh secret if missing,
+renders `config/librechat.yaml` from `config/librechat.yaml.example` +
+`.env` (re-rendered every run -- see "Configuration is generated" below),
 builds and starts every service, waits for `api` to report healthy, and
 creates the admin account if none exists yet. Safe to rerun. Full variable
 reference: [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
+### Configuration is generated
+
+`config/librechat.yaml` is gitignored and generated, the same way
+`searxng/settings.yml` is: `make up` / `make render-config`
+(`scripts/render-librechat-config.sh`) render it from
+`config/librechat.yaml.example` + `.env`, filling in the `REPLACE_ME_*`
+placeholders (currently `AGENTS_RECURSION_LIMIT`/
+`AGENTS_MAX_RECURSION_LIMIT`). **Edit `config/librechat.yaml.example`, not
+`config/librechat.yaml`** -- the latter is overwritten on the next render.
+`docs/CONFIGURATION.md` "Agents" covers the two env variables; anything
+else in the file (models, MCP, toolApproval) is edited directly in the
+`.example` template, same as before this split existed.
 
 ## Day to day
 
@@ -94,10 +109,12 @@ substitute.
   agent defs), `meilisearch` (search), `rag_api` + `vectordb` (per-
   conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
   tools, over MCP), and `searxng` (native web search).
-- `mcp-agent-skills` and `searxng` are **internal-only, no published
-  port, `backend` network only** -- reachability from `api` is their only
-  access control (MCP's HTTP transport has no auth of its own). Never add
-  a `ports:` entry to either.
+- `mcp-agent-skills`, `mcp-kb` and `searxng` are **internal-only, no
+  published port, `backend` network only** -- reachability from `api` is
+  their only access control (MCP's HTTP transport has no auth of its own).
+  Never add a `ports:` entry to any of them. `mcp-kb` goes further and takes
+  no credentials at all: the catalog is shared, so there is nothing per-user
+  for a caller to supply.
 - `kb-db` is the knowledge catalog's **own Postgres instance**, not another
   database inside `vectordb` -- so restoring LibreChat's RAG store can't touch
   the catalog, and `kb` never holds a credential to LibreChat's data. Schema and

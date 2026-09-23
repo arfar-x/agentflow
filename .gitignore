@@ -4,6 +4,14 @@ backups/
 # real secret_key generated from searxng/settings.yml.example -- see
 # scripts/bootstrap.sh and docs/OPERATIONS.md
 searxng/settings.yml
+# real source configuration -- space keys, repo paths, project keys. The
+# tracked template is config/kb-sources.yaml.example
+config/kb-sources.yaml
+
+# rendered from config/librechat.yaml.example + .env by
+# scripts/render-librechat-config.sh (make up / make render-config) --
+# edit the .example file, never this one
+config/librechat.yaml
 # editor swap/backup files -- .env is edited often enough that these
 # are worth excluding explicitly rather than trusting every editor's
 # own global ignore config
@@ -24,10 +32,6 @@ searxng/settings.yml
 .cline/
 .windsurf/
 .continue/
-
-# real source configuration -- space keys, repo paths, project keys. The
-# tracked template is config/kb-sources.yaml.example
-config/kb-sources.yaml
 
 # Python build/test artifacts from kb/ (see kb/README.md for the venv setup --
 # the virtualenv and the editable install's metadata are per-developer, like

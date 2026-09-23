@@ -18,11 +18,16 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# shellcheck disable=SC1091
+source .env
+
 if [ ! -f searxng/settings.yml ]; then
   echo "==> Generating searxng/settings.yml (gitignored) from its template..."
   cp searxng/settings.yml.example searxng/settings.yml
   sed -i "s/REPLACE_ME_SEARXNG_SECRET_KEY/$(openssl rand -hex 32)/" searxng/settings.yml
 fi
+
+scripts/render-librechat-config.sh
 
 echo "==> docker compose up -d --build"
 docker compose up -d --build
@@ -42,8 +47,6 @@ fi
 echo "    api is healthy."
 
 echo "==> Checking for an existing user..."
-# shellcheck disable=SC1091
-source .env
 user_count="$(docker compose exec -T api node config/list-users.js 2>/dev/null | grep -oE 'Total Users: [0-9]+' | grep -oE '[0-9]+' || echo 0)"
 
 if [ "${user_count}" -gt 0 ]; then

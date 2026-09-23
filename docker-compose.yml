@@ -55,6 +55,10 @@ services:
       RAG_API_URL: http://rag_api:8000
       ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
     volumes:
+      # Generated (gitignored) from config/librechat.yaml.example by
+      # scripts/render-librechat-config.sh -- `make up` runs this before
+      # every `docker compose up`, so it always exists by the time this
+      # mount is needed. See AGENTS.md "Configuration is generated".
       - type: bind
         source: ./config/librechat.yaml
         target: /app/librechat.yaml
@@ -284,10 +288,6 @@ services:
       start_period: 15s
     mem_limit: 512m
 
-  searxng:
-    image: searxng/searxng:2026.9.8-3fdc6d753
-    restart: unless-stopped
-    volumes:
   # Operator commands for the catalog: sync, discovery, overrides, status.
   # Never started by `make up` -- it runs one command and exits (`make kb-sync`,
   # `make kb-sources-discover`). Separate from mcp-kb on purpose: writing needs
@@ -316,6 +316,10 @@ services:
     networks: [backend]
     entrypoint: ["python3", "-m", "kb"]
 
+  searxng:
+    image: searxng/searxng:2026.9.8-3fdc6d753
+    restart: unless-stopped
+    volumes:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
     networks: [backend]
     logging:
