@@ -75,6 +75,45 @@ class LlmSummarizer:
         self._timeout = timeout
         self._session = session or requests.Session()
 
+    def check(self) -> dict[str, Any]:
+        """Ask the endpoint what it serves.
+
+        `GET {base}/models` is the one call every OpenAI-compatible server
+        answers, so it doubles as "is this actually OpenAI-compatible?" and
+        "does it serve the model we were told to use?" -- both worth knowing at
+        setup rather than after a sync has quietly catalogued a few hundred
+        documents with no summaries.
+        """
+        url = self._url.removesuffix("/chat/completions") + "/models"
+        headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+        try:
+            response = self._session.get(url, headers=headers, timeout=self._timeout)
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            return {"ok": False, "url": url, "error": str(exc)}
+
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if data is None:
+            # Answered, but not in the shape the API defines -- a proxy, a login
+            # page, or something that is not this protocol.
+            return {
+                "ok": False,
+                "url": url,
+                "error": "the endpoint answered but not with an OpenAI /models list",
+            }
+
+        served = [str(entry.get("id")) for entry in data if isinstance(entry, dict) and entry.get("id")]
+        return {
+            "ok": True,
+            "url": url,
+            "models": served[:20],
+            "model": self._model,
+            # A vLLM deployment can advertise an id that differs from the model
+            # it serves, so this is reported rather than enforced.
+            "model_served": self._model in served,
+        }
+
     def draft(self, document: SourceDocument) -> SummaryDraft:
         try:
             content = self._complete(self._user_prompt(document))

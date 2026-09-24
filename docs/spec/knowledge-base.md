@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.0.0 |
+| **Version** | 2.1.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -187,6 +187,7 @@ case.
 | FR-CFG-04 | Credentials MUST be referenced by variable name only; no secret may appear in the config, and resolved secrets MUST be redacted from logs and errors. | done |
 | FR-CFG-05 | Syncing MUST be switchable off for every source at once, from the configuration (`approved: false`) or from the environment (`KB_SOURCES_APPROVED`), with the environment winning and every command reporting which one it used. It defaults to on: the gate that protects a newly discovered source is that source's own `enabled: false`. | done |
 | FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate `enabled: false`, and MUST NOT rewrite a line an operator has edited. | done |
+| FR-CFG-08 | The summarizer URL MUST be an OpenAI-compatible **base** URL, normalized on the way in (a trailing `/chat/completions` or slash is accepted and stripped), and rejected at startup if it is not a URL at all. Compatibility MUST be verifiable against the running endpoint, not assumed. | done |
 | FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | done |
 
 ### 6.7 Front doors — `FR-CLI`, `FR-MCP`
@@ -199,6 +200,7 @@ they parse input, call a use case, and serialize the result.
 | FR-CLI-01 | The CLI MUST print exactly one JSON document to stdout for every invocation, success or failure alike, and MUST exit 0 for any handled outcome — including a reported error. | done |
 | FR-CLI-02 | The CLI MUST expose, at minimum: search, get, override (set and clear), gaps, migrate, and status. | done |
 | FR-CLI-03 | A failure the operator can act on (no database, a malformed argument) MUST be reported as a structured error naming what failed, never as a traceback. | done |
+| FR-CLI-05 | A `check` command MUST report whether each dependency is actually usable — the database, the summarizer endpoint, the source configuration — and name the one that is not, rather than leaving it to be discovered by a sync that quietly produces undescribed entries. | done |
 | FR-CLI-04 | `status` MUST report what the catalog actually contains — entry counts by source and type, soft-deleted count, override count, the applied migrations, and the recorded gaps — so "is this thing working" is answerable without SQL. | done |
 | FR-MCP-01 | The MCP server MUST expose exactly two tools, `kb_search` and `kb_get`, both read-only. | done |
 | FR-MCP-02 | Each tool's schema MUST describe its arguments well enough for a model to call it correctly without reading the spec, and `kb_search` MUST accept several query strings in one call. | done |
@@ -409,6 +411,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.1.0 | 2026-09-24 | Added FR-CFG-08 and FR-CLI-05: the summarizer URL is normalized and its compatibility is checkable against the live endpoint, and `kb check` reports which dependency is not ready. |
 | 2.0.0 | 2026-09-24 | All nine phases delivered. `make up` now brings the catalog up with the stack and reports what is still needed; `docs/KNOWLEDGE_BASE.md` is the operator guide. Two source kinds remain deferred by choice. |
 | 1.10.0 | 2026-09-24 | Added FR-SCH-06: times of day are read in `KB_TIMEZONE`. A nightly job written as `at: "03:00"` by people in Tehran was firing at 06:30 their time, because the clock reported UTC. |
 | 1.9.0 | 2026-09-24 | `reviewed` became `approved`, defaulting to on and overridable by `KB_SOURCES_APPROVED`. The rename says what the flag is (a decision about syncing) rather than what somebody did (read the file), and the safety it was carrying was always really per source: discovery writes candidates `enabled: false`, and that is what keeps a newly found space out of the catalog. What is left is a coarse switch for an incident, which is more useful in the environment than in a file. |

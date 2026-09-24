@@ -37,8 +37,15 @@ scripts/kb-init.sh | sed 's/^/    /'
 
 # 3. What is still missing, in the order it matters.
 missing=()
-[ -n "${KB_SUMMARIZER_URL:-}" ] && [ -n "${KB_SUMMARIZER_MODEL:-}" ] || \
-  missing+=("KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work")
+if [ -n "${KB_SUMMARIZER_URL:-}" ] && [ -n "${KB_SUMMARIZER_MODEL:-}" ]; then
+  # Configured is not the same as working: ask the endpoint what it serves,
+  # rather than finding out after a sync has catalogued 400 undescribed pages.
+  if ! docker compose run --rm -T kb-cli check 2>/dev/null | grep -q '"summarizer": {"ok": true'; then
+    missing+=("a reachable OpenAI-compatible summarizer -- KB_SUMMARIZER_URL is set but the endpoint did not answer GET \${KB_SUMMARIZER_URL}/models; run 'make kb-check' for the error")
+  fi
+else
+  missing+=("KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL (+ KB_SUMMARIZER_API_KEY if it needs one) -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work")
+fi
 
 has_source_creds=false
 [ -n "${KB_CONFLUENCE_BASE_URL:-${CONFLUENCE_BASE_URL:-}}" ] && has_source_creds=true

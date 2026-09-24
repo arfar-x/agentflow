@@ -185,3 +185,57 @@ def test_an_unknown_timezone_fails_at_startup_with_the_name_that_was_wrong():
     with pytest.raises(_VE) as excinfo:
         Settings(database_url="postgresql://x/y", timezone="Mars/Olympus")
     assert "Mars/Olympus" in str(excinfo.value) and "IANA" in str(excinfo.value)
+
+
+def test_check_reports_each_dependency_and_which_one_is_not_ready(wired, capsys, monkeypatch):
+    # Covers: FR-CLI-05
+    # Each of these fails quietly otherwise: no summarizer means undescribed
+    # entries, an unreadable source config means a scheduler that logs and
+    # sleeps.
+    import pathlib
+
+    sources = pathlib.Path(wired.settings.sources_file)
+
+    payload = run(capsys, "check")
+
+    assert payload["ready"] is False
+    assert payload["checks"]["database"]["ok"] is True
+    summarizer = payload["checks"]["summarizer"]
+    assert summarizer["ok"] is False
+    assert "KB_SUMMARIZER_URL" in summarizer["error"]
+    assert "undescribed" in summarizer["consequence"]
+    assert payload["checks"]["sources"]["ok"] is False
+    del sources
+
+
+def test_check_reports_a_database_that_is_down_rather_than_raising(wired, capsys):
+    # Covers: FR-CLI-05
+    def explode():
+        raise OSError("connection refused")
+
+    wired.store.status = explode
+    payload = run(capsys, "check")
+    assert payload["checks"]["database"] == {"ok": False, "error": "connection refused"}
+
+
+def test_check_probes_the_summarizer_when_one_is_configured(wired, capsys, monkeypatch, tmp_path):
+    # Covers: FR-CLI-05, FR-CFG-08
+    from kb.config import Settings
+
+    wired.settings = Settings(
+        database_url="postgresql://fake/kb",
+        summarizer_url="https://llm.internal/v1",
+        summarizer_model="a-model",
+        summarizer_api_key="k",
+        sources_file=str(tmp_path / "absent.yaml"),
+    )
+    monkeypatch.setattr(
+        "kb.container.build_summarizer",
+        lambda settings: type("S", (), {"check": lambda self: {"ok": True, "models": ["a-model"], "model_served": True}})(),
+    )
+
+    payload = run(capsys, "check")
+
+    assert payload["checks"]["summarizer"]["ok"] is True
+    assert payload["checks"]["summarizer"]["authenticated"] is True
+    assert payload["checks"]["sources"]["ok"] is False, "the file does not exist"

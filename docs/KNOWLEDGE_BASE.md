@@ -41,14 +41,31 @@ KB_JIRA_PAT=...
 GITLAB_BASE_URL=https://gitlab.internal
 GITLAB_TOKEN=...                               # read_api scope is enough
 
-KB_SUMMARIZER_URL=${VLLM_BASE_URL}             # any OpenAI-compatible endpoint
-KB_SUMMARIZER_MODEL=<the model it serves>
+KB_SUMMARIZER_URL=${VLLM_BASE_URL}             # the BASE url, ending in /v1
+KB_SUMMARIZER_MODEL=<the model it serves>      # see its GET /v1/models
+KB_SUMMARIZER_API_KEY=${VLLM_API_KEY}          # empty if the endpoint needs none
 KB_SUMMARY_LANGUAGES=en,fa                     # what makes cross-language search work
 KB_TIMEZONE=Asia/Tehran                        # `at: "03:00"` means 03:00 here
 ```
 
 Without the summarizer everything still runs — documents are catalogued under
 their real titles, just undescribed, and cross-language search will not work.
+
+Then confirm it is actually usable, rather than merely configured:
+
+```bash
+make kb-check
+```
+
+It reports each dependency separately — the database, the summarizer, the
+source configuration — and names the one that is not ready. The summarizer
+check asks the endpoint `GET <url>/models`, which is the call every
+OpenAI-compatible server answers: it proves the protocol, and reports whether
+the model you named is among the ones served. (A vLLM deployment can advertise
+an id different from what it serves, so that part is reported, not enforced.)
+
+The URL is the **base**, ending in `/v1`. A pasted `/v1/chat/completions` is
+accepted and trimmed; something that is not a URL fails at startup.
 
 ### 2. Choose sources
 
@@ -186,6 +203,7 @@ an upgrade is always "apply what is new, skip what is recorded".
 | The catalog is not updating | `make logs SERVICE=kb-scheduler`. A failing source is recorded and retried at its next cadence, not every tick |
 | `{"error": {"type": "not_approved"}}` | Syncing is switched off; the message says whether it was the file or `KB_SOURCES_APPROVED` |
 | `{"error": {"type": "missing_credential"}}` | The named variables are unset — sync needs a service account, not a user's credential |
+| `make kb-check` says the summarizer is not ok | The error is in the report: a 401 means `KB_SUMMARIZER_API_KEY`, "not an OpenAI /models list" means the URL points at something else (a proxy, a login page) |
 | Entries exist but have no summaries | `KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL` are unset, or the endpoint was down when they were catalogued. Re-syncing after fixing it fills them in |
 | The nightly pass runs at the wrong hour | `KB_TIMEZONE`. `at: "03:00"` is read in that zone; the default is UTC |
 | An agent answers without searching | `make agent-import` — the instruction and the two tools live in `agents/*.yaml` |

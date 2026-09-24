@@ -347,3 +347,76 @@ def test_a_model_endpoint_that_is_down_does_not_stop_a_sync():
     # Covers: FR-REC-06
     summarize, _ = summarizer([StubResponse(None, status_code=503)])
     assert summarize.draft(source_document()).title == {}
+
+
+# ------------------------------------------------- summarizer compatibility
+def test_a_base_url_is_normalized_however_it_was_pasted():
+    # Covers: FR-CFG-08
+    # Copying `.../v1/chat/completions` out of a curl example is the obvious
+    # mistake; appending the path again would 404 at the first sync rather
+    # than at startup.
+    from kb.config import Settings
+
+    for raw in ("https://llm.internal/v1", "https://llm.internal/v1/",
+                "https://llm.internal/v1/chat/completions"):
+        settings = Settings(database_url="postgresql://x/y", summarizer_url=raw)
+        assert settings.summarizer_url == "https://llm.internal/v1"
+
+
+def test_something_that_is_not_a_url_is_rejected_at_startup():
+    # Covers: FR-CFG-08
+    from pydantic import ValidationError as _VE
+
+    from kb.config import Settings
+
+    with pytest.raises(_VE) as excinfo:
+        Settings(database_url="postgresql://x/y", summarizer_url="llm.internal/v1")
+    assert "OpenAI-compatible base" in str(excinfo.value)
+
+
+def test_compatibility_is_verified_against_the_endpoint_not_assumed():
+    # Covers: FR-CFG-08
+    # GET /models is the call every OpenAI-compatible server answers, so it
+    # doubles as "is this the right protocol?" and "does it serve our model?".
+    summarize, session = summarizer([StubResponse({"data": [{"id": "a-model"}, {"id": "other"}]})])
+
+    result = summarize.check()
+
+    assert result["ok"] is True
+    assert result["model_served"] is True and result["models"] == ["a-model", "other"]
+    assert session.requests[0][0] == "https://llm.internal/v1/models"
+
+
+def test_an_endpoint_that_answers_with_something_else_is_not_compatible():
+    # Covers: FR-CFG-08
+    # A login page or a proxy returns 200 and HTML-shaped JSON; that is not
+    # this protocol, and calling it compatible would be a lie.
+    summarize, _ = summarizer([StubResponse({"error": "who are you"})])
+    result = summarize.check()
+    assert result["ok"] is False and "OpenAI" in result["error"]
+
+
+def test_an_unreachable_endpoint_reports_why():
+    # Covers: FR-CFG-08
+    summarize, _ = summarizer([StubResponse(None, status_code=401)])
+    result = summarize.check()
+    assert result["ok"] is False and "401" in result["error"]
+
+
+def test_a_model_the_endpoint_does_not_list_is_reported_not_rejected():
+    # A vLLM deployment can advertise an id that differs from what it serves,
+    # so this is information, not a veto.
+    summarize, _ = summarizer([StubResponse({"data": [{"id": "something-else"}]})])
+    result = summarize.check()
+    assert result["ok"] is True and result["model_served"] is False
+
+
+def test_the_api_key_is_sent_when_there_is_one():
+    # Covers: FR-CFG-08
+    summarize, session = summarizer([StubResponse({"data": []})])
+    summarize.check()
+    # The stub records params/json, not headers, so assert via the draft path
+    # which builds them explicitly.
+    summarize2, session2 = summarizer([completion(SAMPLE)])
+    summarize2.draft(source_document())
+    assert session2.requests[0][1]["model"] == "a-model"

@@ -86,6 +86,12 @@ def build_parser() -> argparse.ArgumentParser:
                           help="Append the candidates to kb-sources.yaml (disabled, for review). "
                                "Without it, they are only printed.")
 
+    sub.add_parser(
+        "check",
+        help="Is every dependency actually usable: the database, the summarizer endpoint, "
+             "the source configuration.",
+    )
+
     sub.add_parser("migrate", help="Apply any pending schema migration. Idempotent.")
     sub.add_parser("status", help="What the catalog contains, and whether it looks healthy.")
     return parser
@@ -199,6 +205,9 @@ def _dispatch(args: argparse.Namespace, container: Any) -> dict[str, Any]:
     if args.command == "gaps":
         return {"gaps": container.store.top_misses(limit=args.limit)}
 
+    if args.command == "check":
+        return _check(container)
+
     if args.command == "migrate":
         applied = container.store.migrate()
         return {"applied": applied, "pending": []}
@@ -207,6 +216,76 @@ def _dispatch(args: argparse.Namespace, container: Any) -> dict[str, Any]:
         return container.store.status()
 
     raise _Reportable("unknown_command", f"no such command: {args.command!r}")
+
+
+def _check(container: Any) -> dict[str, Any]:
+    """Every dependency, and whether it is actually usable.
+
+    Run before a first sync, and when the catalog is behaving oddly: each of
+    these fails quietly otherwise. A missing summarizer produces entries with
+    no summaries; an unreadable source config stops the scheduler with nothing
+    but a log line.
+    """
+    from pathlib import Path
+
+    from kb.container import build_summarizer
+    from kb.sources_config import ConfigError, load
+
+    settings = container.settings
+    report: dict[str, Any] = {"ready": True, "checks": {}}
+
+    def record(name: str, ok: bool, **detail: Any) -> None:
+        report["checks"][name] = {"ok": ok, **detail}
+        if not ok:
+            report["ready"] = False
+
+    try:
+        status = container.store.status()
+        # `.get`, not `[...]`: a check that itself raises on a missing key
+        # reports "the database is down" when the database is fine.
+        record(
+            "database",
+            True,
+            entries=status.get("entries", {}),
+            migrations=status.get("migrations", []),
+        )
+    except Exception as exc:
+        record("database", False, error=str(exc).strip())
+
+    if not settings.summarizer_configured:
+        record(
+            "summarizer",
+            False,
+            error="KB_SUMMARIZER_URL and KB_SUMMARIZER_MODEL are not both set",
+            consequence="documents are catalogued under their real titles but undescribed, "
+                        "and cross-language search will not work",
+        )
+    else:
+        summarizer = build_summarizer(settings)
+        result = summarizer.check()
+        record(
+            "summarizer",
+            bool(result.get("ok")),
+            **{k: v for k, v in result.items() if k != "ok"},
+            authenticated=bool(settings.summarizer_api_key),
+        )
+
+    try:
+        config = load(Path(settings.sources_file))
+        enabled = [source.id for source in config.enabled_sources()]
+        record(
+            "sources",
+            bool(enabled) and config.approved,
+            approved=config.approved,
+            approved_from=config.approved_from,
+            enabled=enabled,
+            configured=[source.id for source in config.sources],
+            error=None if enabled else "no source is enabled -- nothing will be catalogued",
+        )
+    except ConfigError as exc:
+        record("sources", False, error=str(exc))
+
+    return report
 
 
 def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]:

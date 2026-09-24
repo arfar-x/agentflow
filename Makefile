@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config kb-init kb-setup kb-test kb-sync kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config kb-init kb-setup kb-check kb-test kb-sync kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -62,6 +62,9 @@ kb-sources: ## List the configured sources and whether each is enabled
 
 kb-sources-discover: ## Propose sources from what Confluence/Jira actually contain; WRITE=1 appends them (disabled) for review
 	docker compose run --rm kb-cli discover $(if $(WRITE),--write,)
+
+kb-check: ## Is everything the catalog depends on actually usable (database, summarizer, sources)
+	docker compose run --rm kb-cli check
 
 kb-status: ## What the catalog contains right now
 	docker compose run --rm kb-cli status

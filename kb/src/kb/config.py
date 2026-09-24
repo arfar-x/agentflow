@@ -52,6 +52,29 @@ class Settings(BaseModel):
     #: Everything else compares instants and is unaffected.
     timezone: str = "UTC"
 
+    @field_validator("summarizer_url")
+    @classmethod
+    def _openai_compatible_base(cls, value: str | None) -> str | None:
+        """A *base* URL, the way every OpenAI-compatible client means it.
+
+        `https://host/v1` -- not the endpoint itself. Pasting
+        `.../v1/chat/completions` out of a curl example is the obvious mistake,
+        and appending the path again would produce a 404 at the first sync
+        rather than at startup, so it is normalized here instead of rejected.
+        """
+        if value is None or not value.strip():
+            return None
+        url = value.strip().rstrip("/")
+        for suffix in ("/chat/completions", "/completions"):
+            if url.endswith(suffix):
+                url = url[: -len(suffix)]
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"{value!r} is not a URL -- point it at an OpenAI-compatible base, "
+                "e.g. https://your-endpoint/v1"
+            )
+        return url
+
     @field_validator("timezone")
     @classmethod
     def _known_zone(cls, value: str) -> str:

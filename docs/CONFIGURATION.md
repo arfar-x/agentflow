@@ -89,7 +89,9 @@ run the CLI (`python -m kb status`) against the catalog from elsewhere:
 | `KB_SOURCES_APPROVED` | no | `true` | The kill switch: `false` stops every source syncing without editing `config/kb-sources.yaml`. Overrides the file's own `approved:`, and every command reports which one it used. |
 | `KB_SOURCES_FILE` | no | `/opt/kb/config/kb-sources.yaml` | Which sources sync reads. Only sync and discovery load it; the MCP server never does, so a malformed source config cannot break search. |
 | `KB_CONFLUENCE_*` / `KB_JIRA_*` | for sync | falls back to `CONFLUENCE_*`/`JIRA_*` | A **read-only service account**: sync must see a space to catalog it. Not the per-user credential an agent reads a page with. |
-| `KB_SUMMARIZER_URL` / `KB_SUMMARIZER_MODEL` / `KB_SUMMARIZER_API_KEY` | no | none | Any OpenAI-compatible endpoint. Unset means sync catalogs documents under their real titles, undescribed. |
+| `KB_SUMMARIZER_URL` | no | none | An OpenAI-compatible **base** URL, ending in `/v1`. A pasted `/v1/chat/completions` is trimmed; a non-URL fails at startup. Unset means sync catalogs documents under their real titles, undescribed. |
+| `KB_SUMMARIZER_MODEL` | no | none | The id the endpoint serves. `make kb-check` reports whether it is among them. |
+| `KB_SUMMARIZER_API_KEY` | no | none | Sent as `Authorization: Bearer …`. Separate from `VLLM_API_KEY` so the catalog can use a different credential, or none. |
 | `KB_SUMMARY_LANGUAGES` | no | `en` | Comma-separated, e.g. `en,fa`. Every entry is catalogued in each, which is what lets a question in one language find a document written in another. |
 
 Sources themselves live in `config/kb-sources.yaml` (gitignored; the template is
