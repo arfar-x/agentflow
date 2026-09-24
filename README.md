@@ -140,6 +140,7 @@ agentflow/
 ├── scripts/                 # bootstrap, secret generation, backup, restore, agent sync
 └── docs/
     ├── AGENT_SYNC.md        # agent export/import: file format and semantics
+    ├── KNOWLEDGE_BASE.md    # the kb catalog: sources, freshness, overrides, troubleshooting
     ├── CONFIGURATION.md     # every .env variable, what breaks if it's wrong
     ├── KEYCLOAK.md          # SSO setup and how to switch to/from it
     ├── OPERATIONS.md        # backups, upgrades, submodule bumps, restart order

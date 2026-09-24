@@ -101,6 +101,19 @@ Run this pair once, deliberately, against a disposable copy before you
 actually need it in an emergency -- confirming a backup script works is the
 only way to know it works.
 
+## Knowledge base migrations
+
+Schema changes live in `kb/migrations/` and are applied by `make kb-init`, which
+`make up` runs for you. They are append-only -- a shipped file is never edited --
+so an upgrade applies what is new and skips what is already recorded in
+`schema_migration`. Rerunning is a no-op.
+
+Restart order after an upgrade: `kb-db` first, then `mcp-kb` and
+`kb-scheduler` (both reconnect on their own, so `docker compose up -d` in any
+order works; the ordering only matters if you stop the database deliberately).
+The scheduler survives a database blip -- the tick fails, is logged, and the
+next one runs.
+
 ## Upgrades
 
 1. Pick the new `LIBRECHAT_IMAGE_TAG` / `RAG_API_IMAGE_TAG`.

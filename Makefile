@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config kb-init kb-test kb-sync kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config kb-init kb-setup kb-test kb-sync kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -46,6 +46,12 @@ restore: ## Restore from a backup dir, e.g. `make restore DIR=backups/20260101-0
 
 kb-init: ## Create/upgrade the knowledge base schema + its read-only role (idempotent)
 	scripts/kb-init.sh
+
+kb-setup: ## Bring the knowledge base up and report what is still needed (runs inside `make up` too)
+	# --build, because a kb/ change that isn't in the image is a service quietly
+	# running last week's code -- which looks like "it stopped syncing".
+	docker compose up -d --build kb-db mcp-kb kb-scheduler
+	scripts/kb-bootstrap.sh
 
 kb-sync: ## Sync one source into the catalog, e.g. `make kb-sync SOURCE=confluence-eng [MODE=incremental] [DRY_RUN=1]`
 	@test -n "$(SOURCE)" || { echo "Usage: make kb-sync SOURCE=<id from config/kb-sources.yaml>" >&2; exit 1; }

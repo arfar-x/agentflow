@@ -22,7 +22,7 @@ true. Change the spec first, then the code.
 | 6 | Sources: Confluence, Jira, GitLab, plus discovery | done |
 | 7 | Freshness mechanisms, scheduler, webhook receiver | done |
 | 8 | Agent tools and instructions | done |
-| 9 | Operator documentation | next |
+| 9 | Operator documentation and setup automation | done |
 
 **The catalog fills and refreshes itself.** Configure the sources, review the
 file, and `kb-scheduler` does the rest: incremental runs on the cadence you set,
@@ -35,6 +35,10 @@ Two more source kinds — an internal HTTP API and local files — are specified
 deliberately unbuilt. The config shape is settled, so adding one later is an
 adapter and a config entry; building either now would mean guessing at a mapping
 and then maintaining the guess.
+
+Operators want [`docs/KNOWLEDGE_BASE.md`](../docs/KNOWLEDGE_BASE.md): credentials,
+choosing sources, the freshness switches, overrides, the gap log, and what to
+check when it looks wrong. What follows is for working *on* the module.
 
 ## Getting it running
 

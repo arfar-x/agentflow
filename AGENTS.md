@@ -66,6 +66,14 @@ users" for the full list and what each wraps. Role/permission management
 the Admin Panel UI, not the CLI -- see README.md and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Admin panel".
 
+The knowledge base comes up with the stack: `make up` runs
+`scripts/kb-bootstrap.sh`, which creates its schema and read-only role, drops a
+`config/kb-sources.yaml` in place if there isn't one, and prints whatever is
+still missing before the catalog can fill itself. `make kb-setup` does the same
+on its own. Day to day it is `make kb-status`, `make kb-sources`,
+`make kb-sync SOURCE=…` -- see
+[`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md).
+
 Agents are managed declaratively: `make agent-export` writes every agent
 (definition, handoff/subagent links, sharing) from the database to
 `agents/*.yaml`, and `make agent-import` (preview with `DRY_RUN=1`) applies
@@ -186,6 +194,10 @@ substitute.
   decision made in a chat window; the code follows the spec, and when they
   disagree one of them is wrong and gets fixed. Requirements carry ids and a
   status, and the owning module's tests enforce that pairing.
+- [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md) -- the operator guide for
+  the catalog: credentials, choosing sources, the four freshness mechanisms and
+  their switches, overrides, the gap log, backup, and what to check when it
+  looks wrong.
 - `kb/` -- the knowledge catalog: what knowledge exists in the organization
   and where it lives, searchable by agents. Hexagonal (`domain/` ->
   `application/` -> `adapters/`), specified by

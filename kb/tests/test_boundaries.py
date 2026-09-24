@@ -72,3 +72,36 @@ def test_domain_does_not_depend_on_the_application_layer():
         if module.startswith("kb.application")
     ]
     assert inward == []
+
+
+def test_a_new_source_needs_no_change_to_the_inner_layers():
+    # Covers: FR-SRC-06
+    # Four sources in, the proof is that the inner layers still do not know any
+    # of their names -- with one deliberate exception below.
+    names = {"confluence", "jira", "gitlab", "http_api", "local_files"}
+    offenders: list[str] = []
+    for layer in ("domain", "application"):
+        for path in sorted((SRC / layer).rglob("*.py")):
+            text = path.read_text(encoding="utf-8").lower()
+            for name in names:
+                if name in text:
+                    offenders.append(f"{path.relative_to(SRC.parent)}: {name}")
+
+    # The exception: entry.py maps a source kind to the tool that reads it, so
+    # a search hit can carry the next call to make. It is one dict of two
+    # entries, and a source without such a tool (GitLab) adds nothing to it.
+    allowed_prefix = "kb/domain/entry.py"
+    unexpected = [o for o in offenders if not o.startswith(allowed_prefix)]
+    assert not unexpected, (
+        "a source's name leaked into the inner layers: " + "; ".join(unexpected)
+    )
+
+
+def test_the_fetch_hint_map_is_the_only_place_a_source_kind_is_named_inwardly():
+    # Covers: FR-SRC-06
+    from kb.domain.entry import FETCH_TOOLS
+
+    assert set(FETCH_TOOLS) == {"confluence", "jira"}, (
+        "adding a kind here is adding a tool an agent can call, which is a "
+        "deliberate decision -- not a side effect of adding a source"
+    )

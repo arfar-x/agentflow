@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
-| **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.10.0 |
+| **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
+| **Version** | 2.0.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -219,7 +219,7 @@ something concrete has to be catalogued through them.
 | FR-SRC-03 | GitLab: each project lists scopes; a scope is a directory walked recursively with file patterns and exclusions; `dir: "."` means the whole repository; a scope's `type` and `tags` are inherited by every entry beneath it. | done |
 | FR-SRC-04 | An internal HTTP API, with field mapping in config. | deferred |
 | FR-SRC-05 | Local files under configured paths. | deferred |
-| FR-SRC-06 | Adding a source MUST require only one adapter and one config entry, with no change to `domain/` or `application/`. | planned |
+| FR-SRC-06 | Adding a source MUST require only one adapter and one config entry. No source's name may appear in `domain/` or `application/`, with one deliberate exception: the fetch-hint map in `entry.py`, where adding a kind means adding a tool an agent can call — a decision, not a side effect. | done |
 
 ### 6.9 Agent integration — `FR-AGT`
 
@@ -395,7 +395,7 @@ which a flat catalog cannot answer.
 | 6 | Sources: Confluence, Jira and GitLab, plus discovery. The HTTP API and local files are deferred (§6.8) | done |
 | 7 | The four freshness mechanisms, the scheduler, the webhook receiver | done |
 | 8 | Agent tools and instructions | done |
-| 9 | Operator documentation | next |
+| 9 | Operator documentation (`docs/KNOWLEDGE_BASE.md`) and setup automation | done |
 
 ## 14. Open questions
 
@@ -409,6 +409,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.0.0 | 2026-09-24 | All nine phases delivered. `make up` now brings the catalog up with the stack and reports what is still needed; `docs/KNOWLEDGE_BASE.md` is the operator guide. Two source kinds remain deferred by choice. |
 | 1.10.0 | 2026-09-24 | Added FR-SCH-06: times of day are read in `KB_TIMEZONE`. A nightly job written as `at: "03:00"` by people in Tehran was firing at 06:30 their time, because the clock reported UTC. |
 | 1.9.0 | 2026-09-24 | `reviewed` became `approved`, defaulting to on and overridable by `KB_SOURCES_APPROVED`. The rename says what the flag is (a decision about syncing) rather than what somebody did (read the file), and the safety it was carrying was always really per source: discovery writes candidates `enabled: false`, and that is what keeps a newly found space out of the catalog. What is left is a coarse switch for an incident, which is more useful in the environment than in a file. |
 | 1.8.0 | 2026-09-24 | Phase 8: the catalog tools are attached to the front-door agent and to the four document-producing agents, with the instruction that matters most -- search before assuming, answer in the user's language, read the real document, name it. |

@@ -64,5 +64,9 @@ else
   echo "      password: ${ADMIN_PASSWORD}"
 fi
 
+# The knowledge base: schema, its read-only role, and a report of whatever is
+# still missing before it can fill itself. Idempotent, like everything above.
+scripts/kb-bootstrap.sh
+
 echo "==> Done. docker compose ps:"
 docker compose ps
