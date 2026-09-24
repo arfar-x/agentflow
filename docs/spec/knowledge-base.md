@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.9.0 |
+| **Version** | 1.10.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -164,6 +164,7 @@ case.
 | FR-SCH-03 | A source whose run fails MUST NOT stop the other sources or the scheduler; the failure MUST be recorded and the next cadence attempted. | done |
 | FR-SCH-04 | Every run MUST be recorded with its counts, duration and error, so "is this thing still working" is answerable after the fact. | done |
 | FR-SCH-05 | A run MUST NOT start while another run for the same source is still going, however slow that one is. | done |
+| FR-SCH-06 | A scheduled time of day MUST be interpreted in the deployment's own timezone (`KB_TIMEZONE`, an IANA name, default UTC), and an unknown zone MUST fail at startup naming the value. Every timestamp MUST be timezone-aware, so everything that compares instants stays correct regardless. | done |
 
 ### 6.5 Overrides — `FR-OVR`
 
@@ -408,6 +409,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 1.10.0 | 2026-09-24 | Added FR-SCH-06: times of day are read in `KB_TIMEZONE`. A nightly job written as `at: "03:00"` by people in Tehran was firing at 06:30 their time, because the clock reported UTC. |
 | 1.9.0 | 2026-09-24 | `reviewed` became `approved`, defaulting to on and overridable by `KB_SOURCES_APPROVED`. The rename says what the flag is (a decision about syncing) rather than what somebody did (read the file), and the safety it was carrying was always really per source: discovery writes candidates `enabled: false`, and that is what keeps a newly found space out of the catalog. What is left is a coarse switch for an incident, which is more useful in the environment than in a file. |
 | 1.8.0 | 2026-09-24 | Phase 8: the catalog tools are attached to the front-door agent and to the four document-producing agents, with the instruction that matters most -- search before assuming, answer in the user's language, read the real document, name it. |
 | 1.7.0 | 2026-09-24 | Phase 7: all four freshness mechanisms are live. Lazy refresh is a queue (FR-REC-10) written by the read path and drained by the scheduler, so the MCP server keeps its read-only role and no source credentials; the GitLab webhook (FR-REC-11) enqueues and returns for the same reason. Added `entry.external_id`, without which one entry could not be re-read on its own. |

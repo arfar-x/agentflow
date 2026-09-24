@@ -183,3 +183,37 @@ def test_an_unparseable_cadence_is_an_error_not_silence(bad):
     broken = config(defaults={"mechanisms": {"incremental": {"enabled": True, "every": bad}}})
     with pytest.raises(ConfigError):
         due(broken, ScheduleState(), NOON)
+
+
+def test_a_daily_time_means_that_hour_where_the_deployment_lives():
+    # Covers: FR-SCH-06
+    # `at: "03:00"` written by people in Tehran must not fire at 06:30 their
+    # time because the container thinks in UTC.
+    from zoneinfo import ZoneInfo
+
+    tehran = ZoneInfo("Asia/Tehran")
+    yesterday = {"full_scrape:confluence-eng": datetime(2026, 9, 23, 3, 0, tzinfo=tehran)}
+    state = ScheduleState(last_run=yesterday)
+
+    local_three_am = datetime(2026, 9, 24, 3, 0, tzinfo=tehran)
+    assert JobKind.FULL_SCRAPE not in kinds(
+        due(config(), state, local_three_am - timedelta(minutes=1))
+    )
+    assert JobKind.FULL_SCRAPE in kinds(due(config(), state, local_three_am))
+
+    # Which is only true because the clock hands `due()` local time. A UTC
+    # clock would fire this at 03:00 UTC -- 06:30 in Tehran, the middle of the
+    # morning -- and that is the whole reason KB_TIMEZONE exists.
+    assert local_three_am.utcoffset() == timedelta(hours=3, minutes=30)
+
+
+def test_timestamps_from_different_zones_still_compare(config_=None):
+    # Covers: FR-SCH-06
+    # Everything except a time of day compares instants, so a clock in one zone
+    # and a stored timestamp in another must not produce a spurious "due".
+    from zoneinfo import ZoneInfo
+
+    last = NOON.astimezone(ZoneInfo("Asia/Tehran"))
+    state = ScheduleState(last_run={"incremental:confluence-eng": last})
+    assert JobKind.INCREMENTAL not in kinds(due(config(), state, NOON + timedelta(minutes=14)))
+    assert JobKind.INCREMENTAL in kinds(due(config(), state, NOON + timedelta(minutes=16)))

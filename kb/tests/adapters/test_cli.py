@@ -159,3 +159,29 @@ def test_persian_output_is_not_escaped(wired, capsys):
     # A catalog people read in a terminal has to be readable there.
     cli.main(["search", "--query", "refund"])
     assert "تطبیق" in capsys.readouterr().out
+
+
+def test_the_clock_runs_in_the_configured_timezone():
+    # Covers: FR-SCH-06
+    from zoneinfo import ZoneInfo
+
+    from kb.application.ports.clock import SystemClock
+    from kb.config import Settings
+
+    settings = Settings(database_url="postgresql://x/y", timezone="Asia/Tehran")
+    assert settings.tzinfo == ZoneInfo("Asia/Tehran")
+    assert SystemClock(settings.tzinfo).now().tzinfo == ZoneInfo("Asia/Tehran")
+    # Default stays UTC: a deployment that says nothing gets something
+    # unambiguous rather than the container's accidental local time.
+    assert Settings(database_url="postgresql://x/y").tzinfo is timezone.utc
+
+
+def test_an_unknown_timezone_fails_at_startup_with_the_name_that_was_wrong():
+    # Covers: FR-SCH-06
+    from pydantic import ValidationError as _VE
+
+    from kb.config import Settings
+
+    with pytest.raises(_VE) as excinfo:
+        Settings(database_url="postgresql://x/y", timezone="Mars/Olympus")
+    assert "Mars/Olympus" in str(excinfo.value) and "IANA" in str(excinfo.value)

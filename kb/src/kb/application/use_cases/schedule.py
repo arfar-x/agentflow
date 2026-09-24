@@ -171,6 +171,9 @@ def _daily_is_due(
     if key in state.running:
         return False
 
+    # `now` arrives in the deployment's own zone (see ports/clock.py), so
+    # replacing the hour gives the local 03:00 an operator meant -- not 03:00
+    # UTC, which in much of the world is the middle of the working day.
     scheduled_today = now.replace(hour=at[0], minute=at[1], second=0, microsecond=0)
     if now < scheduled_today:
         return False

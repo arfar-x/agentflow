@@ -62,7 +62,7 @@ def build(settings: Settings | None = None) -> Container:
 
     settings = settings or Settings.from_env()
     store = PostgresEntryStore.connect(settings.database_url)
-    clock = SystemClock()
+    clock = SystemClock(settings.tzinfo)
     reconcile = ReconcileDocument(store, build_summarizer(settings), clock)
     return Container(
         settings=settings,

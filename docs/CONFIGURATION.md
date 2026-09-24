@@ -85,6 +85,7 @@ run the CLI (`python -m kb status`) against the catalog from elsewhere:
 | `KB_STALE_AFTER_HOURS` | no | `24` | How long an entry may go unverified before results mark it `stale`. |
 | `KB_MCP_HOST` / `KB_MCP_PORT` | no | `127.0.0.1` / `8322` | The container sets `0.0.0.0` so `api` can reach it; it publishes no port. |
 | `KB_MIGRATIONS_DIR` | no | found relative to the code | Set in the image, where the package is installed away from the `.sql` files. |
+| `KB_TIMEZONE` | no | `UTC` | IANA name (e.g. `Asia/Tehran`). The nightly full scrape's `at: "03:00"` means 03:00 *here*; everything else compares instants and is unaffected. An unknown name fails at startup. |
 | `KB_SOURCES_APPROVED` | no | `true` | The kill switch: `false` stops every source syncing without editing `config/kb-sources.yaml`. Overrides the file's own `approved:`, and every command reports which one it used. |
 | `KB_SOURCES_FILE` | no | `/opt/kb/config/kb-sources.yaml` | Which sources sync reads. Only sync and discovery load it; the MCP server never does, so a malformed source config cannot break search. |
 | `KB_CONFLUENCE_*` / `KB_JIRA_*` | for sync | falls back to `CONFLUENCE_*`/`JIRA_*` | A **read-only service account**: sync must see a space to catalog it. Not the per-user credential an agent reads a page with. |

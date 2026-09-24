@@ -11,7 +11,8 @@ interpolation) arrives in phase 6 and will be loaded here too.
 from __future__ import annotations
 
 import os
-from datetime import timedelta
+from datetime import timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -46,6 +47,24 @@ class Settings(BaseModel):
     #: Which languages every entry is catalogued in. Two languages is what lets
     #: a question in one find a document written in the other.
     summary_languages: tuple[str, ...] = ("en",)
+    #: IANA name, e.g. `Asia/Tehran`. The only thing that depends on it is a
+    #: scheduled time of day: `at: "03:00"` means 03:00 here, not 03:00 UTC.
+    #: Everything else compares instants and is unaffected.
+    timezone: str = "UTC"
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        """Fail at startup with the name that was wrong, rather than scheduling
+        a nightly job at an hour nobody chose."""
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(
+                f"{value!r} is not a known timezone -- use an IANA name like "
+                "UTC or Asia/Tehran"
+            ) from exc
+        return value
 
     @field_validator("database_url")
     @classmethod
@@ -78,6 +97,7 @@ class Settings(BaseModel):
             ("summarizer_model", "KB_SUMMARIZER_MODEL"),
             ("summarizer_api_key", "KB_SUMMARIZER_API_KEY"),
             ("summary_languages", "KB_SUMMARY_LANGUAGES"),
+            ("timezone", "KB_TIMEZONE"),
         ):
             raw = source.get(variable)
             if raw not in (None, ""):
@@ -91,6 +111,10 @@ class Settings(BaseModel):
                 part.strip() for part in values["summary_languages"].split(",") if part.strip()
             )
         return cls.model_validate(values)
+
+    @property
+    def tzinfo(self) -> tzinfo:
+        return timezone.utc if self.timezone.upper() == "UTC" else ZoneInfo(self.timezone)
 
     @property
     def summarizer_configured(self) -> bool:
