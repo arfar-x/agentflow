@@ -273,3 +273,36 @@ def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> Sour
             for detail in exc.errors()
         )
         raise ConfigError(problems, path=location) from exc
+
+
+#: `15m`, `2h`, `90s`, `1d` -- the spellings a human writes in a config file.
+_DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(s|m|h|d)\s*$", re.IGNORECASE)
+_SECONDS_PER = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def parse_duration(value: str | None, *, default: float | None = None) -> float | None:
+    """`"15m"` -> 900 seconds.
+
+    Returns `default` for an empty value so a config that omits a field falls
+    back rather than failing; an unparseable one is an error, because silently
+    treating `15mn` as "never" would be a scheduler that quietly does nothing.
+    """
+    if value is None or str(value).strip() == "":
+        return default
+    match = _DURATION.match(str(value))
+    if not match:
+        raise ConfigError(f"{value!r} is not a duration -- write 30s, 15m, 6h or 1d")
+    return float(match.group(1)) * _SECONDS_PER[match.group(2).lower()]
+
+
+_TIME_OF_DAY = re.compile(r"^\s*([01]?\d|2[0-3]):([0-5]\d)\s*$")
+
+
+def parse_time_of_day(value: str | None) -> tuple[int, int] | None:
+    """`"03:00"` -> (3, 0), in the deployment's own timezone."""
+    if value is None or str(value).strip() == "":
+        return None
+    match = _TIME_OF_DAY.match(str(value))
+    if not match:
+        raise ConfigError(f"{value!r} is not a time of day -- write HH:MM, e.g. 03:00")
+    return int(match.group(1)), int(match.group(2))

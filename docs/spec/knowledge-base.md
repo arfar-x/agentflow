@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.5.0 |
+| **Version** | 1.8.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -75,7 +75,7 @@ sources and reviews overrides.
 |---|---|---|
 | AS-01 | **Given** a wiki page titled "Payment reconciliation" describing refund retries, **when** a user asks "how do we handle refund retries?", **then** the agent finds that page and answers from its live content, naming it. | done |
 | AS-02 | **Given** a document summarized in English and Persian, **when** a user asks in Persian, **then** the catalog returns it and the agent answers in Persian. | done |
-| AS-03 | **Given** nothing in the catalog matches, **when** a user asks, **then** the agent says so and asks, rather than guessing, and the query is recorded as a gap. | partial |
+| AS-03 | **Given** nothing in the catalog matches, **when** a user asks, **then** the agent says so and asks, rather than guessing, and the query is recorded as a gap. | done |
 | AS-04 | **Given** a page edited at the source, **when** the next sync runs, **then** the entry reflects the edit without a human touching the catalog. | done |
 | AS-05 | **Given** a page deleted at the source, **when** reconciliation runs, **then** the entry stops appearing in search and is reported, not erased. | done |
 | AS-06 | **Given** a generated summary an operator disagrees with, **when** they record an override, **then** search returns their text, and it survives every later sync. | done |
@@ -113,6 +113,7 @@ case.
 | FR-ENT-08 | Catalog timestamps MUST be kept separately from the source's own timestamps. | done |
 | FR-ENT-09 | An entry MUST expose a fetch hint, or none when no tool in this stack can read that source. | done |
 | FR-ENT-10 | Every entry MUST carry an `audience` (default `all`); this version MUST NOT enforce it. | done |
+| FR-ENT-11 | An entry MUST record the id its source knows the document by, so one entry can be re-read on its own. Entry ids are slugs, and slugs do not invert. | done |
 
 ### 6.2 Text matching — `FR-TXT`
 
@@ -151,8 +152,18 @@ case.
 | FR-REC-07 | Renaming a document MUST NOT fork it into a second entry. | done |
 | FR-REC-08 | Incremental sync MUST ask each source only what changed since a stored per-source checkpoint, and MUST advance that checkpoint only after a successful run. | done |
 | FR-REC-09 | Nightly full reconciliation MUST list every document in a source and soft-delete entries it no longer yields. | done |
-| FR-REC-10 | Reading a stale entry MUST queue a refresh of that entry. | planned |
-| FR-REC-11 | A webhook MUST refresh only the paths in its payload, and MUST be rejected without a valid secret token. | planned |
+| FR-REC-10 | Reading a stale entry MUST queue a refresh of that entry. | done |
+| FR-REC-11 | A webhook MUST refresh only the paths in its payload, and MUST be rejected without a valid secret token. | done |
+
+### 6.4a Scheduling — `FR-SCH`
+
+| id | Requirement | Status |
+|---|---|---|
+| FR-SCH-01 | The scheduler MUST run each mechanism at the cadence its configuration gives (`every: 15m`, `at: "03:00"`), per source, and MUST NOT run a disabled one at all. | done |
+| FR-SCH-02 | Deciding what is due MUST be a pure function of the configuration, the last run times and the current time — testable without sleeping, and without a database. | done |
+| FR-SCH-03 | A source whose run fails MUST NOT stop the other sources or the scheduler; the failure MUST be recorded and the next cadence attempted. | done |
+| FR-SCH-04 | Every run MUST be recorded with its counts, duration and error, so "is this thing still working" is answerable after the fact. | done |
+| FR-SCH-05 | A run MUST NOT start while another run for the same source is still going, however slow that one is. | done |
 
 ### 6.5 Overrides — `FR-OVR`
 
@@ -214,8 +225,8 @@ something concrete has to be catalogued through them.
 | id | Requirement | Status |
 |---|---|---|
 | FR-AGT-01 | `kb_search` and `kb_get` MUST be read-only, and therefore MUST NOT require a `toolApproval` entry. | done |
-| FR-AGT-02 | The front-door agent MUST search the catalog before answering or delegating, MUST NOT answer from assumption, MUST answer in the user's language, and MUST name the source document it used. | planned |
-| FR-AGT-03 | Document-producing agents MUST ground their drafts in catalog results. | planned |
+| FR-AGT-02 | The front-door agent MUST search the catalog before answering or delegating, MUST NOT answer from assumption, MUST answer in the user's language, and MUST name the source document it used. | done |
+| FR-AGT-03 | Document-producing agents MUST ground their drafts in catalog results. | done |
 
 ## 7. Non-functional requirements
 
@@ -234,8 +245,8 @@ something concrete has to be catalogued through them.
 |---|---|---|
 | NFR-DEP-01 | The catalog MUST have its own database instance, separate from LibreChat's `vectordb`. | done |
 | NFR-DEP-02 | `mcp-kb` MUST have no published port and MUST be reachable only on the internal network. | done |
-| NFR-DEP-03 | Scheduled work MUST run in its own service, not inside the MCP server. | planned |
-| NFR-DEP-04 | The webhook receiver MUST be a separate component on a private interface. | planned |
+| NFR-DEP-03 | Scheduled work MUST run in its own service, not inside the MCP server. | done |
+| NFR-DEP-04 | The webhook receiver MUST be a separate component on a private interface. | done |
 | NFR-DEP-05 | The query path MUST use a least-privilege database role. | done |
 | NFR-DEP-06 | The index MUST be rebuildable from sources; only the gap log and checkpoints require backup. | done |
 | NFR-DEP-07 | A completed write MUST be committed: visible to other connections, and surviving the writing connection closing. | done |
@@ -381,9 +392,9 @@ which a flat catalog cannot answer.
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
 | 5 | Front doors: CLI, then the MCP server — usable end to end | done |
 | 6 | Sources: Confluence, Jira and GitLab, plus discovery. The HTTP API and local files are deferred (§6.8) | done |
-| 7 | The four freshness mechanisms, the scheduler, the webhook receiver | next |
-| 8 | Agent tools and instructions | |
-| 9 | Operator documentation | |
+| 7 | The four freshness mechanisms, the scheduler, the webhook receiver | done |
+| 8 | Agent tools and instructions | done |
+| 9 | Operator documentation | next |
 
 ## 14. Open questions
 
@@ -397,6 +408,9 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 1.8.0 | 2026-09-24 | Phase 8: the catalog tools are attached to the front-door agent and to the four document-producing agents, with the instruction that matters most -- search before assuming, answer in the user's language, read the real document, name it. |
+| 1.7.0 | 2026-09-24 | Phase 7: all four freshness mechanisms are live. Lazy refresh is a queue (FR-REC-10) written by the read path and drained by the scheduler, so the MCP server keeps its read-only role and no source credentials; the GitLab webhook (FR-REC-11) enqueues and returns for the same reason. Added `entry.external_id`, without which one entry could not be re-read on its own. |
+| 1.6.0 | 2026-09-24 | Phase 7: added FR-SCH-01..05 (scheduling). |
 | 1.5.0 | 2026-09-24 | Phase 6 closed with three sources (Confluence, Jira, GitLab). FR-SRC-04 (HTTP API) and FR-SRC-05 (local files) moved to *deferred*: specified, built when a real use case appears rather than on speculation. |
 | 1.4.0 | 2026-09-24 | Phase 6, part two: the GitLab source (FR-SRC-03) -- scopes, glob matching, blob SHAs as versions, per-project commit checkpoints -- and GitLab discovery. The HTTP API and local files remain planned. |
 | 1.3.0 | 2026-09-24 | Phase 6, part one: source configuration with `${VAR}` interpolation and the review gate (FR-CFG-*), the Confluence and Jira sources (FR-SRC-01/02), sync in full and incremental modes (FR-REC-08/09), and discovery. GitLab, the HTTP API and local files remain planned. |

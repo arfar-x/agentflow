@@ -77,6 +77,7 @@ class ReconcileDocument:
             title=draft.title or {"und": document.title},
             location=document.location,
             source_id=document.source_id,
+            external_id=document.external_id,
             summary=draft.summary,
             keywords=draft.keywords,
             tags=document.tags,

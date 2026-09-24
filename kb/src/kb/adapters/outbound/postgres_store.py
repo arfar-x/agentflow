@@ -402,6 +402,108 @@ class PostgresEntryStore:
             "checkpoints": checkpoints,
         }
 
+    # -- lazy refresh ------------------------------------------------------
+    def queue_refresh(self, entry_id: str, *, at: datetime) -> None:
+        """Record that somebody read this entry and it looked stale.
+
+        Idempotent: many readers asking about one entry is still one refresh.
+        The earliest request wins, so a document people keep opening does not
+        keep getting pushed to the back of the queue.
+        """
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO refresh_queue (entry_id, requested_at)
+                VALUES (%s, %s)
+                ON CONFLICT (entry_id) DO NOTHING
+                """,
+                (entry_id, at),
+            )
+
+    def take_refresh_batch(self, *, limit: int = 20, max_attempts: int = 5) -> list[str]:
+        """Claim the oldest queued entries, oldest first.
+
+        `attempts` is incremented as they are handed out, so a document that
+        fails every time drops out of the queue instead of being retried
+        forever -- and the row stays, with its error, for somebody to look at.
+        """
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE refresh_queue
+                   SET attempts = attempts + 1
+                 WHERE entry_id IN (
+                        SELECT entry_id FROM refresh_queue
+                         WHERE attempts < %(max_attempts)s
+                         ORDER BY requested_at
+                         LIMIT %(limit)s
+                         FOR UPDATE SKIP LOCKED)
+             RETURNING entry_id
+                """,
+                {"limit": limit, "max_attempts": max_attempts},
+            )
+            return [row["entry_id"] for row in cursor.fetchall()]
+
+    def finish_refresh(self, entry_id: str, *, error: str | None = None) -> None:
+        """Done with it: drop it from the queue, or leave it with its error."""
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            if error is None:
+                cursor.execute("DELETE FROM refresh_queue WHERE entry_id = %s", (entry_id,))
+            else:
+                cursor.execute(
+                    "UPDATE refresh_queue SET last_error = %s WHERE entry_id = %s",
+                    (error[:500], entry_id),
+                )
+
+    # -- run history -------------------------------------------------------
+    def record_run(
+        self,
+        *,
+        source_id: str,
+        mechanism: str,
+        started_at: datetime,
+        finished_at: datetime,
+        counts: dict[str, int] | None = None,
+        error: str | None = None,
+    ) -> None:
+        """One row per run, so "is this still working?" is answerable without
+        reading logs that have already rotated away (FR-SCH-04)."""
+        counts = counts or {}
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO sync_run (source_id, mechanism, started_at, finished_at,
+                                      created, updated, unchanged, revived, missing,
+                                      summarized, error)
+                VALUES (%(source_id)s, %(mechanism)s, %(started_at)s, %(finished_at)s,
+                        %(created)s, %(updated)s, %(unchanged)s, %(revived)s, %(missing)s,
+                        %(summarized)s, %(error)s)
+                """,
+                {
+                    "source_id": source_id,
+                    "mechanism": mechanism,
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "created": counts.get("created", 0),
+                    "updated": counts.get("updated", 0),
+                    "unchanged": counts.get("unchanged", 0),
+                    "revived": counts.get("revived", 0),
+                    "missing": counts.get("missing", 0),
+                    "summarized": counts.get("summarized", 0),
+                    "error": error[:2000] if error else None,
+                },
+            )
+
+    def recent_runs(self, *, limit: int = 20) -> list[dict[str, object]]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT source_id, mechanism, started_at, finished_at, created, updated,"
+                " unchanged, revived, missing, summarized, error"
+                " FROM sync_run ORDER BY started_at DESC LIMIT %s",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     # -- checkpoints (used by the incremental mechanism, phase 7) -----------
     def get_checkpoint(self, source_id: str) -> str | None:
         with self._connection.cursor() as cursor:

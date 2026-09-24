@@ -98,6 +98,10 @@ class Entry(BaseModel):
     #: for every entry of one source to find the ones that vanished, so an
     #: entry without it could never be detected as deleted.
     source_id: str = Field(min_length=1)
+    #: The id that source knows the document by (a page id, an issue key,
+    #: `project:path`). The entry id is a slug, and slugs do not invert, so
+    #: refreshing one entry on its own needs the original kept here.
+    external_id: str | None = None
     summary: Mapping[str, str] = Field(default_factory=dict)
     keywords: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()

@@ -110,3 +110,73 @@ def test_librechat_is_told_about_the_catalog_and_asks_it_for_no_credentials():
     assert "customUserVars" not in kb_block and "headers" not in kb_block
     # Both tools are read-only, so neither belongs in the approval list.
     assert "kb_search" not in template and "kb_get" not in template
+
+
+def test_the_scheduler_is_its_own_service(compose):
+    # Covers: NFR-DEP-03
+    # A full scrape runs for minutes; a search must never wait behind one.
+    assert "\n  kb-scheduler:" in compose
+    block = _service_block(compose, "kb-scheduler")
+    assert "ports:" not in block, "it accepts nothing inbound"
+    assert "kb.adapters.inbound.scheduler" in block
+    # It writes, so it gets the owner credential -- unlike the query path.
+    assert "KB_POSTGRES_PASSWORD" in block
+
+
+def test_the_webhook_receiver_is_separate_and_off_by_default(compose):
+    # Covers: NFR-DEP-04
+    assert "\n  kb-webhook:" in compose
+    block = _service_block(compose, "kb-webhook")
+    assert 'profiles: ["webhook"]' in block, "opt-in: it is the only inbound port"
+    assert '127.0.0.1:' in block, "bound to loopback, not published to the world"
+    assert "KB_WEBHOOK_SECRET" not in block, "the secret comes from .env, never the compose file"
+
+    mcp = _service_block(compose, "mcp-kb")
+    assert "webhook" not in mcp, "mcp-kb keeps its no-published-port rule"
+
+
+AGENT_DIR = REPO_ROOT / "agents"
+
+
+def _agent(name: str) -> str:
+    path = AGENT_DIR / f"{name}.yaml"
+    if not path.exists():
+        pytest.skip(f"{path} not present")
+    return path.read_text(encoding="utf-8")
+
+
+def test_the_front_door_agent_must_search_before_it_assumes():
+    # Covers: FR-AGT-02
+    # The whole module exists because an agent that guesses sounds exactly
+    # like one that knows.
+    text = _agent("product-assistant")
+    assert "kb_search_mcp_kb" in text and "kb_get_mcp_kb" in text
+
+    instructions = text.split("  tools:")[0]
+    assert "before delegating" in instructions
+    assert "language the user wrote in" in instructions
+    assert "never answer from your own assumptions" in instructions.lower()
+    assert "pointer, not a source" in instructions
+    assert "Name the document you used" in instructions
+
+
+@pytest.mark.parametrize("agent", ["plan", "doc-gen", "prepare-for-dev", "docs-manager"])
+def test_document_producing_agents_ground_their_drafts(agent):
+    # Covers: FR-AGT-03
+    text = _agent(agent)
+    assert "kb_search_mcp_kb" in text
+    instructions = text.split("  tools:")[0]
+    assert "kb_search" in instructions
+    assert "instead of inventing" in instructions
+
+
+def test_the_catalog_tools_need_no_approval_gate():
+    # Covers: FR-AGT-01
+    # Both are read-only, so an approval prompt would be noise that teaches
+    # people to click through prompts.
+    template = (REPO_ROOT / "config" / "librechat.yaml.example")
+    if not template.exists():
+        pytest.skip("LibreChat template not present")
+    text = template.read_text(encoding="utf-8")
+    ask_list = text.split("ask:")[1].split("reason:")[0] if "ask:" in text else ""
+    assert "kb_search" not in ask_list and "kb_get" not in ask_list

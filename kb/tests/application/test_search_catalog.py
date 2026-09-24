@@ -131,7 +131,10 @@ def test_a_stale_entry_is_flagged_not_hidden(search):
 
 
 def test_a_search_that_finds_nothing_is_logged_as_a_gap(search):
-    # Covers: FR-SRCH-07
+    # Covers: FR-SRCH-07, AS-03
+    # Half of the scenario: the query is recorded, so what nobody wrote down
+    # becomes a ranked list. The other half -- the agent saying so instead of
+    # guessing -- is the instruction asserted in tests/test_deployment.py.
     store, catalog = search
     result = catalog.execute(["quarterly hiring plan"])
     assert result.hits == ()

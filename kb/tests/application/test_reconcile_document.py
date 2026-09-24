@@ -47,6 +47,16 @@ def test_a_new_document_is_summarized_and_stored(wired):
     assert summarizer.calls == ["123456"]
 
 
+def test_an_entry_remembers_the_id_its_source_knows_it_by(wired):
+    # Covers: FR-ENT-11
+    # The entry id is a slug and slugs do not invert, so without this a single
+    # entry could never be re-read on its own -- which is exactly what the
+    # lazy refresh does.
+    store, _, _, reconcile = wired
+    entry_id = reconcile.execute(make_document(external_id="123456")).entry_id
+    assert store.get(entry_id).external_id == "123456"
+
+
 def test_an_unchanged_document_costs_no_model_call_and_no_write(wired):
     # Covers: FR-REC-02, NFR-PRF-01
     store, summarizer, clock, reconcile = wired

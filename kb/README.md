@@ -20,13 +20,16 @@ true. Change the spec first, then the code.
 | 4 | Storage: `kb-db`, migration, Postgres adapter | done |
 | 5 | CLI and MCP server — usable from LibreChat | done |
 | 6 | Sources: Confluence, Jira, GitLab, plus discovery | done |
-| 7 | Freshness mechanisms, scheduler, webhook receiver | next |
-| 8 | Agent tools and instructions | |
-| 9 | Operator documentation | |
+| 7 | Freshness mechanisms, scheduler, webhook receiver | done |
+| 8 | Agent tools and instructions | done |
+| 9 | Operator documentation | next |
 
-**The catalog can now fill itself from Confluence, Jira and GitLab.** Configure
-the sources, review the file, and sync. Scheduling all of this is phase 7, so
-today sync is something you run.
+**The catalog fills and refreshes itself.** Configure the sources, review the
+file, and `kb-scheduler` does the rest: incremental runs on the cadence you set,
+a nightly full pass that catches deletions, a refresh queue drained for the
+entries people actually open, and — if you enable it — GitLab push events for
+seconds-fresh updates. The agents have the tools and the instruction to use
+them before assuming anything.
 
 Two more source kinds — an internal HTTP API and local files — are specified and
 deliberately unbuilt. The config shape is settled, so adding one later is an
@@ -141,6 +144,34 @@ Two properties hold regardless of source:
 - **A full pass soft-deletes what the source no longer lists; an incremental one
   never does.** An incremental feed only yields what changed, so treating
   silence as deletion would empty the catalog.
+
+### Keeping it fresh
+
+`kb-scheduler` runs with the stack and needs no cron entry: the cadences come
+from `config/kb-sources.yaml`, per source.
+
+| Mechanism | Default | What it is for |
+|---|---|---|
+| incremental | on, every 15m | The backbone. Asks each source only what changed since its checkpoint |
+| lazy refresh | on, `stale_after: 24h` | `kb_get` on a stale entry queues it; the scheduler re-reads that one document |
+| full scrape | on, nightly 03:00 | The only pass that can detect deletions, moves and missed events |
+| webhook | off | GitLab push events, for seconds instead of minutes |
+
+Every run lands in `sync_run` with its counts and any error — `make kb-status`
+and `python -m kb status` read it, so "was this working last week?" survives log
+rotation.
+
+The webhook is the one inbound port, so it is opt-in and separate:
+
+```bash
+# .env: KB_WEBHOOK_SECRET=<a long random string>
+docker compose --profile webhook up -d kb-webhook
+# GitLab: Settings > Webhooks > URL http://<host>:8323/gitlab, same secret token
+```
+
+It never does the work itself — it validates the secret, queues the changed
+paths, and returns. The scheduler, which holds the credentials and the writable
+role, refreshes them.
 
 ### The MCP server
 

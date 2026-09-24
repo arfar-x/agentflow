@@ -35,6 +35,9 @@ class FakeEntryStore:
         self.entries: dict[str, Entry] = {}
         self.overrides: dict[str, Override] = {}
         self.misses: list[tuple[str, datetime]] = []
+        self.refresh_queue: dict[str, dict] = {}
+        self.checkpoints: dict[str, str | None] = {}
+        self.runs: list[dict] = []
         self.upserts = 0
         self.touches = 0
 
@@ -123,6 +126,45 @@ class FakeEntryStore:
 
     def set_override(self, override: Override) -> None:
         self.overrides[override.entry_id] = override
+
+    def clear_override(self, entry_id: str) -> None:
+        self.overrides.pop(entry_id, None)
+
+    # -- lazy refresh ------------------------------------------------------
+    def queue_refresh(self, entry_id: str, *, at: datetime) -> None:
+        self.refresh_queue.setdefault(entry_id, {"requested_at": at, "attempts": 0})
+
+    def take_refresh_batch(self, *, limit: int = 20, max_attempts: int = 5) -> list[str]:
+        ready = [
+            (entry_id, state)
+            for entry_id, state in self.refresh_queue.items()
+            if state["attempts"] < max_attempts
+        ]
+        ready.sort(key=lambda pair: pair[1]["requested_at"])
+        taken = []
+        for entry_id, state in ready[:limit]:
+            state["attempts"] += 1
+            taken.append(entry_id)
+        return taken
+
+    def finish_refresh(self, entry_id: str, *, error: str | None = None) -> None:
+        if error is None:
+            self.refresh_queue.pop(entry_id, None)
+        elif entry_id in self.refresh_queue:
+            self.refresh_queue[entry_id]["last_error"] = error
+
+    # -- checkpoints and run history ---------------------------------------
+    def get_checkpoint(self, source_id: str) -> str | None:
+        return self.checkpoints.get(source_id)
+
+    def set_checkpoint(self, source_id: str, cursor_value: str | None) -> None:
+        self.checkpoints[source_id] = cursor_value
+
+    def record_run(self, **kwargs) -> None:
+        self.runs.append(kwargs)
+
+    def recent_runs(self, *, limit: int = 20) -> list[dict]:
+        return list(reversed(self.runs))[:limit]
 
 
 class FakeSummarizer:

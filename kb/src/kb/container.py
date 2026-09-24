@@ -42,6 +42,10 @@ class Container:
     search: SearchCatalog
     get_entry: GetEntry
     sync: SyncSource
+    #: Shared by every mechanism, so the scheduler reconciles through the same
+    #: funnel sync does rather than building a second one.
+    reconcile: ReconcileDocument
+    clock: SystemClock
 
     def close(self) -> None:
         self.store.close()
@@ -59,6 +63,7 @@ def build(settings: Settings | None = None) -> Container:
     settings = settings or Settings.from_env()
     store = PostgresEntryStore.connect(settings.database_url)
     clock = SystemClock()
+    reconcile = ReconcileDocument(store, build_summarizer(settings), clock)
     return Container(
         settings=settings,
         store=store,
@@ -66,7 +71,9 @@ def build(settings: Settings | None = None) -> Container:
             store, clock, default_limit=settings.default_limit, stale_after=settings.stale_after
         ),
         get_entry=GetEntry(store, clock, stale_after=settings.stale_after),
-        sync=SyncSource(store, ReconcileDocument(store, build_summarizer(settings), clock), clock),
+        sync=SyncSource(store, reconcile, clock),
+        reconcile=reconcile,
+        clock=clock,
     )
 
 

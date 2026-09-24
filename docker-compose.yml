@@ -316,6 +316,58 @@ services:
     networks: [backend]
     entrypoint: ["python3", "-m", "kb"]
 
+  # Runs sync on the cadences config/kb-sources.yaml gives, drains the lazy
+  # refresh queue, and records every run. Its own service, not a thread inside
+  # mcp-kb: a full scrape of a large space runs for minutes and a search must
+  # never wait behind one. It is also the only component holding both source
+  # credentials and a writable database role.
+  kb-scheduler:
+    build:
+      context: ./kb
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      KB_DATABASE_URL: postgresql://${KB_POSTGRES_USER:-kb}:${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
+    volumes:
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml:ro
+    networks: [backend]
+    command: ["python3", "-m", "kb.adapters.inbound.scheduler"]
+    mem_limit: 512m
+
+  # GitLab push events, for seconds-fresh updates instead of the 15-minute
+  # tick. The one component that accepts an inbound connection, so: its own
+  # service, bound to 127.0.0.1 (put a reverse proxy in front if GitLab lives
+  # elsewhere), every request checked against KB_WEBHOOK_SECRET, and no work of
+  # its own -- it queues paths the scheduler then refreshes. Disabled unless
+  # you give it a secret; start it with `--profile webhook`.
+  kb-webhook:
+    build:
+      context: ./kb
+    profiles: ["webhook"]
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      KB_DATABASE_URL: postgresql://${KB_POSTGRES_USER:-kb}:${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+      KB_WEBHOOK_HOST: 0.0.0.0
+      KB_WEBHOOK_PORT: "8323"
+    volumes:
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml:ro
+    ports:
+      - "127.0.0.1:${KB_WEBHOOK_PORT:-8323}:8323"
+    networks: [backend]
+    command: ["python3", "-m", "kb.adapters.inbound.webhook"]
+    mem_limit: 512m
+
   searxng:
     image: searxng/searxng:2026.9.8-3fdc6d753
     restart: unless-stopped
