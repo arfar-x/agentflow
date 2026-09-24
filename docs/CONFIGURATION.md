@@ -91,7 +91,7 @@ run the CLI (`python -m kb status`) against the catalog from elsewhere:
 | `KB_CONFLUENCE_*` / `KB_JIRA_*` | for sync | falls back to `CONFLUENCE_*`/`JIRA_*` | A **read-only service account**: sync must see a space to catalog it. Not the per-user credential an agent reads a page with. |
 | `KB_SUMMARIZER_URL` | no | none | An OpenAI-compatible **base** URL, ending in `/v1`. A pasted `/v1/chat/completions` is trimmed; a non-URL fails at startup. Unset means sync catalogs documents under their real titles, undescribed. |
 | `KB_SUMMARIZER_MODEL` | no | none | The id the endpoint serves. `make kb-check` reports whether it is among them. |
-| `KB_SUMMARIZER_API_KEY` | no | none | Sent as `Authorization: Bearer …`. Separate from `VLLM_API_KEY` so the catalog can use a different credential, or none. |
+| `KB_SUMMARIZER_API_KEY` | no | none | Optional: sent as `Authorization: Bearer …` when set, omitted when empty — many self-hosted endpoints need no key. Its own variable so the catalog can use a different credential from the chat endpoint, or none. |
 | `KB_SUMMARY_LANGUAGES` | no | `en` | Comma-separated, e.g. `en,fa`. Every entry is catalogued in each, which is what lets a question in one language find a document written in another. |
 
 Sources themselves live in `config/kb-sources.yaml` (gitignored; the template is

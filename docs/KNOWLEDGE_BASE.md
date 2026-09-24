@@ -43,7 +43,7 @@ GITLAB_TOKEN=...                               # read_api scope is enough
 
 KB_SUMMARIZER_URL=${VLLM_BASE_URL}             # the BASE url, ending in /v1
 KB_SUMMARIZER_MODEL=<the model it serves>      # see its GET /v1/models
-KB_SUMMARIZER_API_KEY=${VLLM_API_KEY}          # empty if the endpoint needs none
+KB_SUMMARIZER_API_KEY=${VLLM_API_KEY}          # optional -- omit it if there is no key
 KB_SUMMARY_LANGUAGES=en,fa                     # what makes cross-language search work
 KB_TIMEZONE=Asia/Tehran                        # `at: "03:00"` means 03:00 here
 ```
@@ -203,7 +203,7 @@ an upgrade is always "apply what is new, skip what is recorded".
 | The catalog is not updating | `make logs SERVICE=kb-scheduler`. A failing source is recorded and retried at its next cadence, not every tick |
 | `{"error": {"type": "not_approved"}}` | Syncing is switched off; the message says whether it was the file or `KB_SOURCES_APPROVED` |
 | `{"error": {"type": "missing_credential"}}` | The named variables are unset — sync needs a service account, not a user's credential |
-| `make kb-check` says the summarizer is not ok | The error is in the report: a 401 means `KB_SUMMARIZER_API_KEY`, "not an OpenAI /models list" means the URL points at something else (a proxy, a login page) |
+| `make kb-check` says the summarizer is not ok | The error is in the report, and a 401 with no key sent adds the hint to set `KB_SUMMARIZER_API_KEY` (optional otherwise). "Not an OpenAI /models list" means the URL points at something else — a proxy, a login page |
 | Entries exist but have no summaries | `KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL` are unset, or the endpoint was down when they were catalogued. Re-syncing after fixing it fills them in |
 | The nightly pass runs at the wrong hour | `KB_TIMEZONE`. `at: "03:00"` is read in that zone; the default is UTC |
 | An agent answers without searching | `make agent-import` — the instruction and the two tools live in `agents/*.yaml` |

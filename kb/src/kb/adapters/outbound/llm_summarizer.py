@@ -91,7 +91,17 @@ class LlmSummarizer:
             response.raise_for_status()
             payload = response.json()
         except Exception as exc:
-            return {"ok": False, "url": url, "error": str(exc)}
+            result = {"ok": False, "url": url, "error": str(exc)}
+            if not self._api_key and any(code in str(exc) for code in ("401", "403")):
+                # The key is optional, so not having one is not an error by
+                # itself -- but when the endpoint refuses us and we sent
+                # nothing, that is worth saying rather than leaving as an HTTP
+                # code to look up.
+                result["hint"] = (
+                    "the endpoint refused the request and no key was sent -- "
+                    "set KB_SUMMARIZER_API_KEY"
+                )
+            return result
 
         data = payload.get("data") if isinstance(payload, dict) else None
         if data is None:

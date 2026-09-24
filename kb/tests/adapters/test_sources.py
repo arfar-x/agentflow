@@ -40,15 +40,18 @@ class StubSession:
     def __init__(self, responses: list[StubResponse]) -> None:
         self.responses = list(responses)
         self.requests: list[tuple[str, dict[str, Any]]] = []
+        self.sent_headers: list[dict[str, Any]] = []
         self.headers: dict[str, str] = {}
         self.auth: tuple[str, str] | None = None
 
     def get(self, url: str, **kwargs: Any) -> StubResponse:
         self.requests.append((url, kwargs.get("params") or {}))
+        self.sent_headers.append(kwargs.get("headers") or {})
         return self.responses.pop(0)
 
     def post(self, url: str, **kwargs: Any) -> StubResponse:
         self.requests.append((url, kwargs.get("json") or {}))
+        self.sent_headers.append(kwargs.get("headers") or {})
         return self.responses.pop(0)
 
 
@@ -420,3 +423,39 @@ def test_the_api_key_is_sent_when_there_is_one():
     summarize2, session2 = summarizer([completion(SAMPLE)])
     summarize2.draft(source_document())
     assert session2.requests[0][1]["model"] == "a-model"
+
+
+def test_no_api_key_is_a_valid_configuration():
+    # Covers: FR-CFG-08
+    # Plenty of self-hosted endpoints need no key, and sending an empty bearer
+    # token is worse than sending no header at all -- some servers reject it.
+    summarize, session = summarizer([StubResponse({"data": [{"id": "a-model"}]})])
+    summarize._api_key = None
+
+    assert summarize.check()["ok"] is True
+    assert "Authorization" not in session.sent_headers[0]
+
+
+def test_a_key_that_is_set_is_actually_sent():
+    # Covers: FR-CFG-08
+    summarize, session = summarizer([StubResponse({"data": []})])
+    summarize.check()
+    assert session.sent_headers[0]["Authorization"] == "Bearer k"
+
+
+def test_a_refusal_with_no_key_sent_says_which_variable_to_set():
+    # Covers: FR-CFG-08
+    summarize, _ = summarizer([StubResponse(None, status_code=401)])
+    summarize._api_key = None
+
+    result = summarize.check()
+
+    assert result["ok"] is False
+    assert "KB_SUMMARIZER_API_KEY" in result["hint"]
+
+
+def test_a_refusal_with_a_key_sent_does_not_blame_the_missing_key():
+    # It was sent and rejected, so "set the key" would be wrong advice.
+    summarize, _ = summarizer([StubResponse(None, status_code=401)])
+    result = summarize.check()
+    assert result["ok"] is False and "hint" not in result
