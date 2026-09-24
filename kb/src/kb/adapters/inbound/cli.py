@@ -215,7 +215,7 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
 
     from kb.adapters.outbound import discovery
     from kb.adapters.outbound.source_factory import MissingCredential, build_source
-    from kb.sources_config import ConfigError, NotReviewed, load
+    from kb.sources_config import ConfigError, NotApproved, load
 
     if args.command == "discover":
         candidates = discovery.discover_all(os.environ)
@@ -230,9 +230,7 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
             payload |= {"file": str(path), "added": added, "already_configured": skipped}
             # Said plainly, because the next question is always "why is nothing
             # being synced?".
-            payload["next"] = (
-                f"edit {path}: enable the sources you want, then set reviewed: true"
-            )
+            payload["next"] = f"edit {path}: set `enabled: true` on the sources you want"
         return payload
 
     from pathlib import Path
@@ -245,7 +243,10 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
     if args.command == "sources":
         return {
             "file": container.settings.sources_file,
-            "reviewed": config.reviewed,
+            "approved": config.approved,
+            # Where the value came from, so an environment override is never
+            # invisible to somebody reading their file and wondering.
+            "approved_from": config.approved_from,
             "sources": [
                 {
                     "id": source.id,
@@ -259,9 +260,9 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
 
     # sync
     try:
-        config.require_reviewed()
-    except NotReviewed as exc:
-        raise _Reportable("not_reviewed", str(exc)) from exc
+        config.require_approved()
+    except NotApproved as exc:
+        raise _Reportable("not_approved", str(exc)) from exc
     try:
         source_config = config.source(args.source)
     except ConfigError as exc:

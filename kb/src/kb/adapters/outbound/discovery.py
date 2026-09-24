@@ -8,9 +8,10 @@ exists?".
 
 Two rules make this safe to re-run:
 
-- **Everything it proposes is `enabled: false`, and the file keeps
-  `reviewed: false` until a human sets it.** Nothing discovery writes can take
-  effect unseen.
+- **Everything it proposes is `enabled: false`.** A candidate is a suggestion
+  until somebody enables it by hand, so nothing discovery writes can take effect
+  unseen -- which is what makes it safe to run against a wiki nobody has
+  audited.
 - **It appends; it never rewrites.** Existing text is left byte for byte, so a
   re-run adds only sources that are not already in the file -- which makes
   discovery double as "what is new that the catalog isn't watching?".
@@ -30,13 +31,15 @@ HEADER = """\
 # Which spaces, repositories, projects and endpoints the catalog reads.
 #
 # Drafted by `make kb-sources-discover`. Everything it proposes is disabled:
-# read it, delete what does not belong, enable what does, then set
-# reviewed: true -- sync refuses to run until you do.
+# read it, delete what does not belong, and set `enabled: true` on what does.
+#
+# `approved: false` (or KB_SOURCES_APPROVED=false) stops all syncing at once --
+# the switch for an incident, not for adding a space.
 #
 # ${VAR} and ${VAR:-default} work anywhere. Credentials are named, never
 # written here: token_env: GITLAB_TOKEN, with the value in .env.
 
-reviewed: false
+approved: true
 
 defaults:
   mechanisms:

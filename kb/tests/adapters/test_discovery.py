@@ -67,7 +67,7 @@ def test_a_new_file_is_written_with_everything_disabled_and_unreviewed(tmp_path)
 
     assert added == ["confluence-eng"] and skipped == []
     config = load(path)
-    assert config.reviewed is False, "nothing discovery proposes may take effect unseen"
+    assert config.enabled_sources() == (), "nothing discovery proposes takes effect unseen"
     assert config.enabled_sources() == ()
     assert config.source("confluence-eng").kind == "confluence"
 
@@ -78,7 +78,7 @@ def test_re_running_adds_only_what_is_new_and_never_rewrites_a_line(tmp_path):
     # becomes something you run once and never dare run again.
     path = tmp_path / "kb-sources.yaml"
     edited = (
-        "reviewed: true\n"
+        "approved: true\n"
         "sources:\n"
         "  # we only want the architecture space here\n"
         "  - id: confluence-eng\n"

@@ -13,9 +13,12 @@ turns into a source pointed at nowhere. Values are then coerced by the model, so
 GITLAB_TOKEN`). The file is meant to be readable and reviewable; the secret
 stays in `.env`.
 
-Sync refuses to run while `reviewed: false`, which is what makes discovery safe:
-it can propose candidates into this file without any of them taking effect until
-a human has looked.
+Sync runs only against **approved** configuration. `approved` defaults to true,
+because the real gate is per source: discovery writes every candidate
+`enabled: false`, so nothing it proposes can take effect until somebody enables
+it by hand. `approved` is the coarser switch on top of that -- a way to stop all
+syncing at once, from the file or from `KB_SOURCES_APPROVED` in the environment,
+without editing every source.
 """
 
 from __future__ import annotations
@@ -45,9 +48,13 @@ class ConfigError(RuntimeError):
         super().__init__(f"{location}: {message}")
 
 
-class NotReviewed(ConfigError):
-    """The file says `reviewed: false`. Discovery writes candidates in that
-    state on purpose, so nothing it proposes can take effect unseen."""
+class NotApproved(ConfigError):
+    """Syncing is switched off, in the file or in the environment."""
+
+
+#: Kept so the rename is a readable error rather than "extra fields not
+#: permitted" on a file that was correct last week.
+RENAMED_FIELDS = {"reviewed": "approved"}
 
 
 def _comment_starts_at(line: str) -> int | None:
@@ -211,8 +218,15 @@ AnySource = Annotated[
 class SourcesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    #: Sync refuses to run until an operator sets this. See `require_reviewed`.
-    reviewed: bool = False
+    #: The coarse switch: turn all syncing off without touching each source.
+    #: Defaults to on, because per-source `enabled: false` is the gate that
+    #: actually protects a freshly discovered space. Overridable by
+    #: `KB_SOURCES_APPROVED`, which is the kill switch during an incident.
+    approved: bool = True
+    #: Where the effective value came from, for the CLI and the scheduler log
+    #: -- an override nobody can see is how "why is my file being ignored?"
+    #: starts.
+    approved_from: str = "default"
     defaults: "Defaults" = Field(default_factory=lambda: Defaults())
     sources: tuple[AnySource, ...] = ()
 
@@ -229,12 +243,14 @@ class SourcesConfig(BaseModel):
     def mechanisms_for(self, source: AnySource) -> Mechanisms:
         return self.defaults.mechanisms.merged_with(source.mechanisms)
 
-    def require_reviewed(self) -> None:
-        if not self.reviewed:
-            raise NotReviewed(
-                "reviewed is false -- read the file, enable the sources you want, "
-                "then set reviewed: true"
+    def require_approved(self) -> None:
+        if not self.approved:
+            where = (
+                "KB_SOURCES_APPROVED=false in the environment"
+                if self.approved_from == "environment"
+                else "approved: false in the source configuration"
             )
+            raise NotApproved(f"syncing is switched off ({where})")
 
 
 class Defaults(BaseModel):
@@ -247,6 +263,30 @@ SourcesConfig.model_rebuild()
 
 DEFAULT_PATH = Path("/opt/kb/config/kb-sources.yaml")
 
+#: Stops every source syncing without editing the file -- the switch you reach
+#: for at 2am, not the one you reach for when adding a space.
+_APPROVED_ENV = "KB_SOURCES_APPROVED"
+_TRUTHY = {"1", "true", "yes", "on"}
+_FALSY = {"0", "false", "no", "off"}
+
+
+def _with_environment_approval(document: dict, env) -> dict:
+    """Apply `KB_SOURCES_APPROVED`, and record that it was applied.
+
+    The environment wins over the file on purpose: it is the kill switch, and a
+    kill switch that a stale file can overrule is not one. Every reader reports
+    where the value came from, so the override is never invisible.
+    """
+    raw = (env.get(_APPROVED_ENV) or "").strip().lower()
+    if not raw:
+        document.setdefault("approved_from", "file" if "approved" in document else "default")
+        return document
+    if raw not in _TRUTHY | _FALSY:
+        raise ConfigError(f"{_APPROVED_ENV}={raw!r} is not a boolean -- use true or false")
+    document["approved"] = raw in _TRUTHY
+    document["approved_from"] = "environment"
+    return document
+
 
 def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> SourcesConfig:
     """Read, interpolate, parse and validate the source configuration."""
@@ -254,6 +294,7 @@ def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> Sour
     if not location.exists():
         raise ConfigError("file not found -- copy config/kb-sources.yaml.example to it", path=location)
 
+    environment = os.environ if env is None else env
     raw = interpolate(location.read_text(encoding="utf-8"), env, path=location)
     try:
         document: Any = yaml.safe_load(raw) or {}
@@ -264,6 +305,16 @@ def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> Sour
             path=location,
             line=(mark.line + 1) if mark else None,
         ) from exc
+
+    if isinstance(document, dict):
+        for old, new in RENAMED_FIELDS.items():
+            if old in document:
+                raise ConfigError(
+                    f"{old!r} was renamed to {new!r} -- rename the key (the meaning is the same, "
+                    f"but it now defaults to true and {_APPROVED_ENV} can override it)",
+                    path=location,
+                )
+        document = _with_environment_approval(document, environment)
 
     try:
         return SourcesConfig.model_validate(document)

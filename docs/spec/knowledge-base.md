@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — partially implemented (see §12) |
-| **Version** | 1.8.0 |
+| **Version** | 1.9.0 |
 | **Last updated** | 2026-09-24 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -184,8 +184,8 @@ case.
 | FR-CFG-02 | An unset `${VAR}` MUST fail naming the file, line and variable. | done |
 | FR-CFG-03 | Interpolated values MUST be coerced to the type the field expects. | done |
 | FR-CFG-04 | Credentials MUST be referenced by variable name only; no secret may appear in the config, and resolved secrets MUST be redacted from logs and errors. | done |
-| FR-CFG-05 | Sync MUST refuse to run while the config says `reviewed: false`. | done |
-| FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate disabled, and MUST NOT rewrite a line an operator has edited. | done |
+| FR-CFG-05 | Syncing MUST be switchable off for every source at once, from the configuration (`approved: false`) or from the environment (`KB_SOURCES_APPROVED`), with the environment winning and every command reporting which one it used. It defaults to on: the gate that protects a newly discovered source is that source's own `enabled: false`. | done |
+| FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate `enabled: false`, and MUST NOT rewrite a line an operator has edited. | done |
 | FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | done |
 
 ### 6.7 Front doors — `FR-CLI`, `FR-MCP`
@@ -281,7 +281,7 @@ and `export` with their phases.
 same pattern as `config/librechat.yaml` and `searxng/settings.yml`:
 
 ```yaml
-reviewed: false                  # FR-CFG-05
+approved: true                   # FR-CFG-05; KB_SOURCES_APPROVED overrides it
 defaults:
   mechanisms:                    # FR-CFG-07
     incremental:   { enabled: true,  every: 15m }
@@ -408,6 +408,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 1.9.0 | 2026-09-24 | `reviewed` became `approved`, defaulting to on and overridable by `KB_SOURCES_APPROVED`. The rename says what the flag is (a decision about syncing) rather than what somebody did (read the file), and the safety it was carrying was always really per source: discovery writes candidates `enabled: false`, and that is what keeps a newly found space out of the catalog. What is left is a coarse switch for an incident, which is more useful in the environment than in a file. |
 | 1.8.0 | 2026-09-24 | Phase 8: the catalog tools are attached to the front-door agent and to the four document-producing agents, with the instruction that matters most -- search before assuming, answer in the user's language, read the real document, name it. |
 | 1.7.0 | 2026-09-24 | Phase 7: all four freshness mechanisms are live. Lazy refresh is a queue (FR-REC-10) written by the read path and drained by the scheduler, so the MCP server keeps its read-only role and no source credentials; the GitLab webhook (FR-REC-11) enqueues and returns for the same reason. Added `entry.external_id`, without which one entry could not be re-read on its own. |
 | 1.6.0 | 2026-09-24 | Phase 7: added FR-SCH-01..05 (scheduling). |

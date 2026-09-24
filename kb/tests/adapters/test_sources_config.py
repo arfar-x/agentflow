@@ -11,14 +11,14 @@ import pytest
 from kb.sources_config import (
     ConfigError,
     GitLabSource,
-    NotReviewed,
+    NotApproved,
     SourcesConfig,
     interpolate,
     load,
 )
 
 MINIMAL = """
-reviewed: true
+approved: true
 sources:
   - id: confluence-eng
     kind: confluence
@@ -36,7 +36,7 @@ def write(tmp_path, text: str):
 def test_any_value_can_come_from_the_environment(tmp_path):
     # Covers: FR-CFG-01
     path = write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: gitlab
     kind: gitlab
@@ -57,7 +57,7 @@ def test_an_unset_variable_names_the_file_line_and_variable(tmp_path):
     # An empty string here would produce a source pointed at nowhere that fails
     # much later, somewhere less obvious.
     path = write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: gitlab
     kind: gitlab
@@ -72,16 +72,16 @@ sources:
 
 def test_an_empty_variable_is_treated_as_unset(tmp_path):
     # Covers: FR-CFG-02
-    path = write(tmp_path, "reviewed: ${KB_REVIEWED}\n")
+    path = write(tmp_path, "approved: ${KB_REVIEWED}\n")
     with pytest.raises(ConfigError):
         load(path, env={"KB_REVIEWED": ""})
-    assert load(path, env={"KB_REVIEWED": "true"}).reviewed is True
+    assert load(path, env={"KB_REVIEWED": "true"}).approved is True
 
 
 def test_interpolated_values_become_the_type_the_field_expects(tmp_path):
     # Covers: FR-CFG-03
     path = write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: gitlab
     kind: gitlab
@@ -98,7 +98,7 @@ sources:
 def test_credentials_are_named_not_written(tmp_path):
     # Covers: FR-CFG-04
     source = load(write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: gitlab
     kind: gitlab
@@ -109,20 +109,65 @@ sources:
     assert not hasattr(source, "token"), "the config must have nowhere to put a secret"
 
 
-def test_sync_refuses_to_run_until_the_file_is_reviewed(tmp_path):
+def test_syncing_is_on_unless_something_switches_it_off(tmp_path):
     # Covers: FR-CFG-05
-    config = load(write(tmp_path, "reviewed: false\nsources: []\n"))
-    with pytest.raises(NotReviewed) as excinfo:
-        config.require_reviewed()
-    assert "reviewed: true" in str(excinfo.value)
-    load(write(tmp_path, MINIMAL)).require_reviewed()  # no raise
+    # The gate that protects a freshly discovered space is per source
+    # (`enabled: false`); this is the coarse switch on top of it.
+    assert load(write(tmp_path, "sources: []\n")).approved is True
+    load(write(tmp_path, MINIMAL)).require_approved()  # no raise
+
+    off = load(write(tmp_path, "approved: false\nsources: []\n"))
+    with pytest.raises(NotApproved) as excinfo:
+        off.require_approved()
+    assert "source configuration" in str(excinfo.value)
+
+
+def test_the_environment_can_switch_syncing_off_without_editing_the_file(tmp_path):
+    # Covers: FR-CFG-05
+    # The switch you reach for during an incident. It wins over the file,
+    # because a kill switch a stale file can overrule is not one.
+    path = write(tmp_path, MINIMAL)
+    config = load(path, env={"KB_SOURCES_APPROVED": "false"})
+
+    assert config.approved is False
+    assert config.approved_from == "environment"
+    with pytest.raises(NotApproved) as excinfo:
+        config.require_approved()
+    assert "KB_SOURCES_APPROVED" in str(excinfo.value), "say where the value came from"
+
+
+def test_the_environment_can_also_switch_it_back_on(tmp_path):
+    path = write(tmp_path, "approved: false\nsources: []\n")
+    assert load(path, env={"KB_SOURCES_APPROVED": "true"}).approved is True
+
+
+def test_where_the_value_came_from_is_always_reported(tmp_path):
+    # An override nobody can see is how "why is my file being ignored?" starts.
+    assert load(write(tmp_path, "sources: []\n"), env={}).approved_from == "default"
+    assert load(write(tmp_path, "approved: true\nsources: []\n"), env={}).approved_from == "file"
+
+
+def test_a_nonsense_environment_value_is_an_error_not_a_guess(tmp_path):
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, MINIMAL), env={"KB_SOURCES_APPROVED": "maybe"})
+    assert "KB_SOURCES_APPROVED" in str(excinfo.value)
+
+
+def test_the_old_name_is_a_readable_error_not_a_schema_complaint(tmp_path):
+    # A file that was correct last week deserves better than "extra fields not
+    # permitted".
+    with pytest.raises(ConfigError) as excinfo:
+        load(write(tmp_path, "reviewed: true\nsources: []\n"))
+    message = str(excinfo.value)
+    assert "'reviewed' was renamed to 'approved'" in message
+    assert "KB_SOURCES_APPROVED" in message
 
 
 def test_a_source_is_disabled_unless_it_says_otherwise(tmp_path):
     # Covers: FR-CFG-06
     # Discovery appends candidates; none of them may take effect unseen.
     config = load(write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: proposed
     kind: confluence
@@ -137,7 +182,7 @@ def test_source_mechanisms_override_the_defaults_field_by_field(tmp_path):
     # Covers: FR-CFG-07
     # Overriding one switch must not silently reset the others.
     config = load(write(tmp_path, """
-reviewed: true
+approved: true
 defaults:
   mechanisms:
     incremental: { enabled: true, every: 15m }
@@ -162,7 +207,7 @@ def test_gitlab_scopes_default_to_markdown_across_the_whole_repo(tmp_path):
     # No Covers: this is the config shape only. FR-SRC-03 is claimed by the
     # GitLab adapter's own tests, once that adapter exists.
     config = load(write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: gitlab
     kind: gitlab
@@ -186,20 +231,20 @@ sources:
 
 def test_an_unknown_source_kind_is_rejected_with_the_known_ones_listed(tmp_path):
     with pytest.raises(ConfigError) as excinfo:
-        load(write(tmp_path, "reviewed: true\nsources:\n  - id: x\n    kind: sharepoint\n"))
+        load(write(tmp_path, "approved: true\nsources:\n  - id: x\n    kind: sharepoint\n"))
     assert "kind" in str(excinfo.value)
 
 
 def test_a_typo_in_a_field_name_is_rejected_rather_than_ignored(tmp_path):
     # Silently ignoring `space:` would mean a source that quietly reads nothing.
     with pytest.raises(ConfigError) as excinfo:
-        load(write(tmp_path, "reviewed: true\nsources:\n  - id: x\n    kind: confluence\n    space: ENG\n"))
+        load(write(tmp_path, "approved: true\nsources:\n  - id: x\n    kind: confluence\n    space: ENG\n"))
     assert "space" in str(excinfo.value)
 
 
 def test_malformed_yaml_reports_where(tmp_path):
     with pytest.raises(ConfigError) as excinfo:
-        load(write(tmp_path, "reviewed: true\nsources: [\n"))
+        load(write(tmp_path, "approved: true\nsources: [\n"))
     assert "kb-sources.yaml" in str(excinfo.value)
 
 
@@ -223,8 +268,10 @@ def test_interpolation_is_a_pure_function_of_text_and_env():
 
 
 def test_an_empty_config_is_valid_and_does_nothing():
+    # Approved, but with no sources enabled there is nothing to do -- which is
+    # the shape a fresh install is in.
     config = SourcesConfig()
-    assert config.reviewed is False
+    assert config.approved is True
     assert config.enabled_sources() == ()
 
 
@@ -234,7 +281,7 @@ def test_a_variable_written_in_a_comment_is_left_alone(tmp_path):
     # documentation break the file it documents.
     path = write(tmp_path, """
 # ${VAR} and ${VAR:-default} work anywhere.
-reviewed: true
+approved: true
 sources:
   - id: confluence-eng   # ${ALSO_NOT_A_VARIABLE}
     kind: confluence
@@ -245,7 +292,7 @@ sources:
 
 def test_a_hash_inside_a_quoted_value_does_not_hide_a_variable(tmp_path):
     path = write(tmp_path, """
-reviewed: true
+approved: true
 sources:
   - id: jira
     kind: jira

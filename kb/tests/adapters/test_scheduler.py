@@ -28,7 +28,7 @@ from tests.application.fakes import (
 NOON = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
 CONFIG = """
-reviewed: true
+approved: true
 defaults:
   mechanisms:
     incremental:  { enabled: true, every: 15m }
@@ -146,7 +146,7 @@ def test_a_failing_source_is_not_retried_every_tick(wired):
 def test_an_unreadable_config_skips_the_tick_instead_of_crashing(wired):
     # The normal case for this is a file being edited right now.
     _, store, scheduler, path = wired
-    path.write_text("reviewed: true\nsources: [\n", encoding="utf-8")
+    path.write_text("approved: true\nsources: [\n", encoding="utf-8")
 
     assert scheduler.tick(NOON) == []
     assert store.runs == []
@@ -158,10 +158,10 @@ def test_a_missing_config_file_is_survivable(tmp_path):
     assert scheduler.tick(NOON) == []
 
 
-def test_an_unreviewed_config_schedules_nothing(wired):
+def test_a_config_with_syncing_switched_off_schedules_nothing(wired):
     # Covers: FR-CFG-05
     _, store, scheduler, path = wired
-    path.write_text(CONFIG.replace("reviewed: true", "reviewed: false"), encoding="utf-8")
+    path.write_text(CONFIG.replace("approved: true", "approved: false"), encoding="utf-8")
 
     assert scheduler.tick(NOON) == []
     assert store.entries == {}

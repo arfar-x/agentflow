@@ -110,7 +110,7 @@ Every command prints one JSON document and exits 0, errors included:
 make kb-sources-discover            # what Confluence and Jira actually contain
 make kb-sources-discover WRITE=1    # append them to config/kb-sources.yaml, disabled
 
-# then edit config/kb-sources.yaml: enable what belongs, set reviewed: true
+# then edit config/kb-sources.yaml: set `enabled: true` on what belongs
 
 make kb-sources                     # what is configured, and what each mechanism is set to
 make kb-sync SOURCE=confluence-eng DRY_RUN=1   # what would change; writes nothing
@@ -144,6 +144,16 @@ Two properties hold regardless of source:
 - **A full pass soft-deletes what the source no longer lists; an incremental one
   never does.** An incremental feed only yields what changed, so treating
   silence as deletion would empty the catalog.
+
+Two switches, at different grains:
+
+- **`enabled:` per source** is the one that matters. Discovery writes every
+  candidate disabled, so a newly found space stays out of the catalog until
+  somebody says otherwise.
+- **`approved:`** turns *all* syncing off at once, and `KB_SOURCES_APPROVED` in
+  the environment overrides the file — the switch to reach for during an
+  incident, without editing anything. It defaults to on, and every command
+  reports which of the two it used.
 
 ### Keeping it fresh
 

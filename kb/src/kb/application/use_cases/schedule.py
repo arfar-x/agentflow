@@ -82,10 +82,10 @@ def due(
     """Every job that should start at `now`, in the order to start them."""
     jobs: list[Job] = []
 
-    if not config.reviewed:
-        # The same gate sync itself enforces: an unreviewed file means nobody
-        # has agreed to any of this yet, and a scheduler that ran anyway would
-        # make the review meaningless.
+    if not config.approved:
+        # The same switch sync itself honors. A scheduler that kept running
+        # after somebody turned syncing off would make the switch useless --
+        # and it is the one people reach for during an incident.
         return jobs
 
     for source in config.enabled_sources():

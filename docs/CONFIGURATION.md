@@ -85,6 +85,7 @@ run the CLI (`python -m kb status`) against the catalog from elsewhere:
 | `KB_STALE_AFTER_HOURS` | no | `24` | How long an entry may go unverified before results mark it `stale`. |
 | `KB_MCP_HOST` / `KB_MCP_PORT` | no | `127.0.0.1` / `8322` | The container sets `0.0.0.0` so `api` can reach it; it publishes no port. |
 | `KB_MIGRATIONS_DIR` | no | found relative to the code | Set in the image, where the package is installed away from the `.sql` files. |
+| `KB_SOURCES_APPROVED` | no | `true` | The kill switch: `false` stops every source syncing without editing `config/kb-sources.yaml`. Overrides the file's own `approved:`, and every command reports which one it used. |
 | `KB_SOURCES_FILE` | no | `/opt/kb/config/kb-sources.yaml` | Which sources sync reads. Only sync and discovery load it; the MCP server never does, so a malformed source config cannot break search. |
 | `KB_CONFLUENCE_*` / `KB_JIRA_*` | for sync | falls back to `CONFLUENCE_*`/`JIRA_*` | A **read-only service account**: sync must see a space to catalog it. Not the per-user credential an agent reads a page with. |
 | `KB_SUMMARIZER_URL` / `KB_SUMMARIZER_MODEL` / `KB_SUMMARIZER_API_KEY` | no | none | Any OpenAI-compatible endpoint. Unset means sync catalogs documents under their real titles, undescribed. |
@@ -93,7 +94,8 @@ run the CLI (`python -m kb status`) against the catalog from elsewhere:
 Sources themselves live in `config/kb-sources.yaml` (gitignored; the template is
 `config/kb-sources.yaml.example`). `make kb-sources-discover` drafts it from
 what Confluence and Jira actually contain, writing every candidate disabled, and
-**sync refuses to run until the file says `reviewed: true`**.
+every candidate disabled. A source syncs once you set `enabled: true` on it;
+`approved: false` (or `KB_SOURCES_APPROVED=false`) stops all of them at once.
 
 Losing `kb_data` costs the gap log and the sync checkpoints; the catalog itself
 is rebuilt from its sources. See [`OPERATIONS.md`](OPERATIONS.md) "Volumes".

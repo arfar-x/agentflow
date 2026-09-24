@@ -5,13 +5,14 @@
 #   make kb-sources-discover          # print what it finds
 #   make kb-sources-discover WRITE=1  # append it here, disabled, for review
 #
-# Everything discovery proposes is `enabled: false`, and sync refuses to run
-# while `reviewed: false` -- so nothing it finds can take effect unseen.
+# Everything discovery proposes is `enabled: false`, so nothing it finds takes
+# effect until you enable it here. `approved` is the coarse switch on top:
+# set it false (or KB_SOURCES_APPROVED=false) to stop all syncing at once.
 #
 # ${VAR} and ${VAR:-default} work anywhere except in comments. Credentials are
 # named, never written here: the value stays in .env.
 
-reviewed: false
+approved: true
 
 defaults:
   mechanisms:

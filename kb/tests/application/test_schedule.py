@@ -18,7 +18,7 @@ NOON = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
 def config(**overrides) -> SourcesConfig:
     document = {
-        "reviewed": True,
+        "approved": True,
         "defaults": {
             "mechanisms": {
                 "incremental": {"enabled": True, "every": "15m"},
@@ -106,10 +106,10 @@ def test_a_disabled_source_is_never_scheduled():
     assert due(disabled, ScheduleState(), NOON) == []
 
 
-def test_nothing_is_scheduled_while_the_config_is_unreviewed():
+def test_nothing_is_scheduled_once_syncing_is_switched_off():
     # Covers: FR-CFG-05
     # Otherwise the review gate would only stop a human running sync by hand.
-    assert due(config(reviewed=False), ScheduleState(), NOON) == []
+    assert due(config(approved=False), ScheduleState(), NOON) == []
 
 
 def test_the_nightly_scrape_runs_after_its_hour_and_only_once_a_day():
