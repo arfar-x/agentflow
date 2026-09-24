@@ -11,6 +11,29 @@
 version: 1.3.15
 cache: true
 
+# Auto-compact: once a conversation's history approaches the model's
+# context window, LibreChat summarizes the older turns into one checkpoint
+# instead of erroring or silently dropping messages -- the checkpoint plus
+# retainRecent's verbatim tail is what actually gets sent on the next turn.
+# provider/model are deliberately omitted so it reuses whichever agent/model
+# is active (the "OpenAI Compatible" Qwen endpoint here) rather than
+# hardcoding a second one -- there's only one endpoint in this deployment
+# anyway. Needs `make render-config` + `make restart SERVICE=api` to pick up
+# a change, like every other static part of this file.
+#
+# retainRecent.tokens has no ratio field of its own in LibreChat's schema
+# (unlike trigger.type: token_ratio, which already scales with whatever
+# context the active model has) -- REPLACE_ME_SUMMARIZATION_RETAIN_TOKENS
+# is this repo's own stand-in for that: render-librechat-config.sh derives
+# it as a fixed percentage of MODEL_CONTEXT_TOKENS (.env), so it tracks the
+# real context window below instead of needing to be hand-tuned every time
+# that number changes.
+summarization:
+  enabled: true
+  retainRecent:
+    turns: 2      # newest complete user/assistant turns kept verbatim
+    tokens: REPLACE_ME_SUMMARIZATION_RETAIN_TOKENS  # ...and up to this many recent tokens on top of that
+
 # LibreChat's SSRF protection blocks MCP servers on private/internal
 # addresses by default -- mcp-agent-skills is exactly that (a Docker
 # service name on the backend compose network), so it needs an explicit
@@ -45,7 +68,7 @@ endpoints:
       modelDisplayLabel: 'Qwen3.6-35B-A3B'
       tokenConfig:
         claude-sonnet-4-6:
-          context: 262144
+          context: REPLACE_ME_MODEL_CONTEXT_TOKENS
           prompt: 0
           completion: 0
 

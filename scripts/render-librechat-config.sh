@@ -24,11 +24,26 @@ source .env
 
 : "${AGENTS_RECURSION_LIMIT:=50}"
 : "${AGENTS_MAX_RECURSION_LIMIT:=100}"
+: "${MODEL_CONTEXT_TOKENS:=262144}"
+
+# summarization.retainRecent.tokens has no ratio field of its own in
+# LibreChat's schema (see config/librechat.yaml.example's comment there) --
+# derive it here instead, as a fixed 5% of MODEL_CONTEXT_TOKENS, so it
+# tracks the real context window automatically rather than needing a
+# second number hand-tuned every time MODEL_CONTEXT_TOKENS changes. Floored
+# at 200 tokens so a small context (e.g. 4096) doesn't round down to
+# something too small to hold anything.
+SUMMARIZATION_RETAIN_TOKENS=$(( MODEL_CONTEXT_TOKENS * 5 / 100 ))
+if [ "${SUMMARIZATION_RETAIN_TOKENS}" -lt 200 ]; then
+  SUMMARIZATION_RETAIN_TOKENS=200
+fi
 
 echo "==> Rendering config/librechat.yaml from config/librechat.yaml.example..."
 sed \
   -e "s/REPLACE_ME_AGENTS_RECURSION_LIMIT/${AGENTS_RECURSION_LIMIT}/" \
   -e "s/REPLACE_ME_AGENTS_MAX_RECURSION_LIMIT/${AGENTS_MAX_RECURSION_LIMIT}/" \
+  -e "s/REPLACE_ME_MODEL_CONTEXT_TOKENS/${MODEL_CONTEXT_TOKENS}/" \
+  -e "s/REPLACE_ME_SUMMARIZATION_RETAIN_TOKENS/${SUMMARIZATION_RETAIN_TOKENS}/" \
   config/librechat.yaml.example > config/librechat.yaml.tmp
 mv config/librechat.yaml.tmp config/librechat.yaml
-echo "    Done (recursionLimit=${AGENTS_RECURSION_LIMIT}, maxRecursionLimit=${AGENTS_MAX_RECURSION_LIMIT})."
+echo "    Done (recursionLimit=${AGENTS_RECURSION_LIMIT}, maxRecursionLimit=${AGENTS_MAX_RECURSION_LIMIT}, modelContextTokens=${MODEL_CONTEXT_TOKENS}, summarizationRetainTokens=${SUMMARIZATION_RETAIN_TOKENS})."

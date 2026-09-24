@@ -104,6 +104,7 @@ is rebuilt from its sources. See [`OPERATIONS.md`](OPERATIONS.md) "Volumes".
 |---|---|---|
 | `VLLM_BASE_URL` | yes | OpenAI-compatible base URL, e.g. `https://vllm.internal/v1`. |
 | `VLLM_API_KEY` | yes (or blank if your endpoint has none) | Passed as a Bearer token. |
+| `MODEL_CONTEXT_TOKENS` | no | Default `262144`. The real context window of the model actually being served -- rendered into `tokenConfig.context` (below) *and* used to derive `summarization.retainRecent.tokens` (5% of this, floored at 200 -- see "Summarization" below), so both stay in sync with one number instead of two hand-tuned separately. Change it, `make render-config`, `make restart SERVICE=api`. |
 
 **The advertised-model-id trap:** some vLLM setups advertise a model `id`
 that doesn't match the model actually being served (this deployment's
@@ -113,8 +114,9 @@ an opaque label: `models.fetch: true` pulls the id list straight from
 `GET {VLLM_BASE_URL}/models` (it doesn't infer or rename anything, just
 reports whatever id the endpoint advertises), and an explicit
 `tokenConfig` entry keyed to that exact id declares the real context
-window instead of whatever LibreChat would otherwise assume from the name
-(e.g. one starting with `claude-`). That `tokenConfig` entry is what does
+window (from `MODEL_CONTEXT_TOKENS` above) instead of whatever LibreChat
+would otherwise assume from the name (e.g. one starting with `claude-`).
+That `tokenConfig` entry is what does
 the actual work here, independent of `fetch` -- if you rename the served
 model on the vLLM side, or the endpoint starts advertising an id that
 doesn't have a matching `tokenConfig` entry yet, add one in
@@ -134,6 +136,22 @@ model shows up as safe to use.
 | `CONFLUENCE_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. |
 | `CONFLUENCE_DEFAULT_SPACE` | no | Used by `my_pages`/`get_page_by_title` when no `--space_key` is given; supplied per-user via `customUserVars` in this deployment. |
 | `CONFLUENCE_DEPLOYMENT_TYPE` | yes, if `confluence` is in `MCP_TOOLSETS` | `cloud` or `server` -- unlike Jira, this one is required: Confluence's REST API is mounted at a different path per deployment (Cloud: `/wiki/rest/api`, Server/DC: `/rest/api`). Server-level, not per-user -- the whole org's Confluence instance is one deployment type. |
+
+## Summarization (auto-compact)
+
+Mostly static config -- see `config/librechat.yaml.example`'s top-level
+`summarization` block. `enabled: true` means a conversation approaching the
+model's context window gets its older turns compressed into one summary
+checkpoint automatically, instead of erroring or silently dropping history.
+`provider`/`model` are left unset so it reuses whichever model answered (the
+"OpenAI Compatible" Qwen endpoint), rather than naming a second one.
+`retainRecent.turns: 2` keeps the newest exchange verbatim outside the
+summary; `retainRecent.tokens` is **not** a literal value in the template --
+it's `REPLACE_ME_SUMMARIZATION_RETAIN_TOKENS`, derived by
+`render-librechat-config.sh` as 5% of `MODEL_CONTEXT_TOKENS` (above),
+floored at 200. Raising `MODEL_CONTEXT_TOKENS` (a bigger real context)
+automatically raises this too, on the next `make render-config` +
+`make restart SERVICE=api` -- there's no separate token budget to hand-tune.
 
 ## Agents
 
