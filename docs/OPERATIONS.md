@@ -58,6 +58,7 @@ for what that means for rotating the underlying passwords.
 |---|---|---|
 | `mongodb_data` | users, conversations, **agent definitions**, MCP tool state | Total loss. This is the volume that matters most. |
 | `pgvector_data` | RAG embeddings for user-uploaded files | Re-upload and re-embed affected files. |
+| `kb_data` | The knowledge catalog: entries, overrides, sync checkpoints, gap log | The catalog and its search index rebuild from the sources (`make kb-sync`, once phase 6 lands); the **overrides, checkpoints and gap log do not** -- those are the reason this volume is backed up. |
 | `meili_data` | search index | Rebuildable from Mongo; not backup-critical but included for convenience. |
 | `librechat_uploads` | user-uploaded files | Those files are gone. |
 | `librechat_images` | generated/attached images | Those images are gone. |
@@ -99,6 +100,19 @@ docker compose up -d
 Run this pair once, deliberately, against a disposable copy before you
 actually need it in an emergency -- confirming a backup script works is the
 only way to know it works.
+
+## Knowledge base migrations
+
+Schema changes live in `kb/migrations/` and are applied by `make kb-init`, which
+`make up` runs for you. They are append-only -- a shipped file is never edited --
+so an upgrade applies what is new and skips what is already recorded in
+`schema_migration`. Rerunning is a no-op.
+
+Restart order after an upgrade: `kb-db` first, then `mcp-kb` and
+`kb-scheduler` (both reconnect on their own, so `docker compose up -d` in any
+order works; the ordering only matters if you stop the database deliberately).
+The scheduler survives a database blip -- the tick fails, is logged, and the
+next one runs.
 
 ## Upgrades
 

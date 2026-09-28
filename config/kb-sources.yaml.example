@@ -1,0 +1,61 @@
+# Which spaces, repositories, projects and endpoints the knowledge catalog reads.
+#
+# Copy to config/kb-sources.yaml (gitignored), or let discovery draft it for you:
+#
+#   make kb-sources-discover          # print what it finds
+#   make kb-sources-discover WRITE=1  # append it here, disabled, for review
+#
+# Everything discovery proposes is `enabled: false`, so nothing it finds takes
+# effect until you enable it here. `approved` is the coarse switch on top:
+# set it false (or KB_SOURCES_APPROVED=false) to stop all syncing at once.
+#
+# ${VAR} and ${VAR:-default} work anywhere except in comments. Credentials are
+# named, never written here: the value stays in .env.
+
+approved: true
+
+defaults:
+  mechanisms:
+    incremental:  { enabled: true,  every: 15m }
+    full_scrape:  { enabled: true,  at: "03:00" }
+    webhook:      { enabled: false }
+    lazy_refresh: { enabled: true,  stale_after: 24h }
+
+sources:
+  # A wiki space. A page's labels decide its entry type, so curation happens
+  # where the authors already work.
+  - id: confluence-eng
+    kind: confluence
+    enabled: false
+    spaces: [ENG]
+    type_from_labels: { kb-glossary: term, kb-product: product, kb-team: team }
+    exclude_labels: [archive, draft]
+
+  # Epics as product context. Most issues are work items, not knowledge, so the
+  # query is deliberately narrow.
+  - id: jira-product
+    kind: jira
+    enabled: false
+    jql: 'project = PAY AND issuetype = Epic'
+
+  # Repositories. A scope is a directory walked recursively; dir: "." is the
+  # whole repo, and a scope's type/tags are inherited by everything beneath it.
+  - id: gitlab-platform
+    kind: gitlab
+    enabled: false
+    base_url: ${GITLAB_BASE_URL}
+    token_env: GITLAB_TOKEN          # the name; the value stays in .env
+    projects:
+      - path: platform/specs                 # a whole repo
+        scopes: [{ dir: ".", type: spec }]
+      - path: media-service                  # one directory inside a repo
+        ref: main                            # defaults to the default branch
+        scopes:
+          - { dir: docs/ADRs, type: spec, tags: [adr] }
+          - dir: docs
+            patterns: ["**/*.md", "**/*.mdx"]
+            exclude: ["**/CHANGELOG.md"]
+
+  # An internal HTTP API (http_api) and local files (local_files) are
+  # specified but deliberately unbuilt -- see docs/spec/knowledge-base.md
+  # §6.8. Ask for one when you have something real to catalog through it.

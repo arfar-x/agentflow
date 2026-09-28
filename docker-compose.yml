@@ -16,6 +16,7 @@ networks:
 volumes:
   mongodb_data:
   pgvector_data:
+  kb_data:
   meili_data:
   librechat_uploads:
   librechat_images:
@@ -54,6 +55,10 @@ services:
       RAG_API_URL: http://rag_api:8000
       ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
     volumes:
+      # Generated (gitignored) from config/librechat.yaml.example by
+      # scripts/render-librechat-config.sh -- `make up` runs this before
+      # every `docker compose up`, so it always exists by the time this
+      # mount is needed. See AGENTS.md "Configuration is generated".
       - type: bind
         source: ./config/librechat.yaml
         target: /app/librechat.yaml
@@ -225,6 +230,142 @@ services:
       timeout: 10s
       retries: 5
       start_period: 15s
+    mem_limit: 512m
+
+  # The knowledge catalog's own database -- deliberately NOT another database
+  # inside `vectordb`. An upgrade or restore of LibreChat's RAG store can't
+  # touch the catalog, backups and retention are independent, and `kb` never
+  # holds a credential to the database LibreChat's own data lives in
+  # (docs/spec/knowledge-base.md, NFR-DEP-01). Schema and the least-privilege
+  # query role come from `make kb-init`.
+  kb-db:
+    image: pgvector/pgvector:0.8.0-pg15-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KB_POSTGRES_DB:-agentflow_kb}
+      POSTGRES_USER: ${KB_POSTGRES_USER:-kb}
+      POSTGRES_PASSWORD: ${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}
+    volumes:
+      - kb_data:/var/lib/postgresql/data
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KB_POSTGRES_USER:-kb} -d ${KB_POSTGRES_DB:-agentflow_kb}"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+
+  # The knowledge catalog's MCP server: two read-only tools (kb_search, kb_get)
+  # for the agents. Same isolation rule as mcp-agent-skills -- no published
+  # port, backend network only, reachability from `api` is the access control.
+  # Unlike that server it takes no credentials at all: the catalog is shared, so
+  # there is nothing per-user for a caller to supply. It connects as kb_reader
+  # (read-only, plus the gap log), never as the database owner.
+  mcp-kb:
+    build:
+      context: ./kb
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    environment:
+      KB_DATABASE_URL: postgresql://kb_reader:${KB_READER_PASSWORD:?set KB_READER_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_MCP_HOST: 0.0.0.0
+      KB_MCP_PORT: "8322"
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8322), timeout=3)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m
+
+  # Operator commands for the catalog: sync, discovery, overrides, status.
+  # Never started by `make up` -- it runs one command and exits (`make kb-sync`,
+  # `make kb-sources-discover`). Separate from mcp-kb on purpose: writing needs
+  # the database owner, while the query path holds the read-only role and must
+  # keep holding only that.
+  kb-cli:
+    build:
+      context: ./kb
+    profiles: ["cli"]
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    # Source credentials (a read-only service account for sync) and the
+    # summarizer endpoint come from .env, same as every other service.
+    env_file: .env
+    environment:
+      KB_DATABASE_URL: postgresql://${KB_POSTGRES_USER:-kb}:${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+    # The summarizer calls the model endpoint, so this needs the same host pin
+    # `api` and `rag_api` carry.
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
+    volumes:
+      # Writable: `make kb-sources-discover WRITE=1` appends candidates to it.
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml
+    networks: [backend]
+    entrypoint: ["python3", "-m", "kb"]
+
+  # Runs sync on the cadences config/kb-sources.yaml gives, drains the lazy
+  # refresh queue, and records every run. Its own service, not a thread inside
+  # mcp-kb: a full scrape of a large space runs for minutes and a search must
+  # never wait behind one. It is also the only component holding both source
+  # credentials and a writable database role.
+  kb-scheduler:
+    build:
+      context: ./kb
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      KB_DATABASE_URL: postgresql://${KB_POSTGRES_USER:-kb}:${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
+    volumes:
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml:ro
+    networks: [backend]
+    command: ["python3", "-m", "kb.adapters.inbound.scheduler"]
+    mem_limit: 512m
+
+  # GitLab push events, for seconds-fresh updates instead of the 15-minute
+  # tick. The one component that accepts an inbound connection, so: its own
+  # service, bound to 127.0.0.1 (put a reverse proxy in front if GitLab lives
+  # elsewhere), every request checked against KB_WEBHOOK_SECRET, and no work of
+  # its own -- it queues paths the scheduler then refreshes. Disabled unless
+  # you give it a secret; start it with `--profile webhook`.
+  kb-webhook:
+    build:
+      context: ./kb
+    profiles: ["webhook"]
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      KB_DATABASE_URL: postgresql://${KB_POSTGRES_USER:-kb}:${KB_POSTGRES_PASSWORD:?set KB_POSTGRES_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+      KB_WEBHOOK_HOST: 0.0.0.0
+      KB_WEBHOOK_PORT: "8323"
+    volumes:
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml:ro
+    ports:
+      - "127.0.0.1:${KB_WEBHOOK_PORT:-8323}:8323"
+    networks: [backend]
+    command: ["python3", "-m", "kb.adapters.inbound.webhook"]
     mem_limit: 512m
 
   searxng:

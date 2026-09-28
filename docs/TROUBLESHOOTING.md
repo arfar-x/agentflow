@@ -113,3 +113,41 @@ RTL verification step. LibreChat is MIT-licensed, so a real rendering bug
 (bidi isolation on inline identifiers, code blocks inheriting the
 paragraph's direction) is a patchable frontend fix, not a blocker to route
 around.
+
+## The knowledge base
+
+Full guide: [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md). The failure modes that
+actually come up:
+
+**`kb_search` returns nothing, and the agent says the catalog is empty.** It
+probably is. `make kb-status` shows the counts; `make kb-sources` shows whether
+any source is `enabled: true` and whether `approved` is on. A fresh install has
+every source disabled on purpose.
+
+**`{"error": {"type": "not_approved"}}`.** Syncing is switched off. The message
+says which switch did it -- `approved: false` in `config/kb-sources.yaml`, or
+`KB_SOURCES_APPROVED=false` in the environment, which wins over the file.
+
+**`{"error": {"type": "missing_credential"}}` naming `KB_CONFLUENCE_*` or
+`GITLAB_TOKEN`.** Sync needs a read-only *service account*: it has to be able to
+see a space in order to catalog it. The per-user credentials LibreChat injects
+into `mcp-agent-skills` are a different thing and are not used here.
+
+**Entries exist but have no summaries.** The summarizer was unset or unreachable
+when they were catalogued; they are findable by title and location in the
+meantime. Set `KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL` and re-sync.
+
+**The nightly full pass runs at the wrong hour.** `at: "03:00"` is read in
+`KB_TIMEZONE`, which defaults to UTC -- set it to the zone the people who wrote
+that config live in.
+
+**The catalog stopped updating.** `make logs SERVICE=kb-scheduler`. A source
+that fails is recorded against its run and retried at its next cadence, not
+every tick, so one broken source looks like silence for that source only.
+`make kb-status` lists the recent runs with their errors.
+
+**`mcp-kb` is healthy but LibreChat doesn't list `kb_search`.** The server is
+registered in `config/librechat.yaml.example`; the generated config needs
+re-rendering and `api` restarting: `make render-config && make restart
+SERVICE=api`. The tools also have to be attached to the agents
+(`make agent-import`).

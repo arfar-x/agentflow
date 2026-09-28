@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config kb-init kb-setup kb-check kb-test kb-sync kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -35,11 +35,42 @@ build: ## Rebuild one service's image, e.g. `make build SERVICE=mcp-agent-skills
 secrets: ## Generate the secrets .env needs (refuses to run on a live deployment)
 	scripts/generate-secrets.sh
 
+render-config: ## Re-render config/librechat.yaml from its template + .env (e.g. after changing AGENTS_RECURSION_LIMIT) -- run `make restart SERVICE=api` after
+	scripts/render-librechat-config.sh
+
 backup: ## Snapshot every named volume + .env into backups/<timestamp>/
 	scripts/backup.sh
 
 restore: ## Restore from a backup dir, e.g. `make restore DIR=backups/20260101-000000`
 	scripts/restore.sh $(DIR)
+
+kb-init: ## Create/upgrade the knowledge base schema + its read-only role (idempotent)
+	scripts/kb-init.sh
+
+kb-setup: ## Bring the knowledge base up and report what is still needed (runs inside `make up` too)
+	# --build, because a kb/ change that isn't in the image is a service quietly
+	# running last week's code -- which looks like "it stopped syncing".
+	docker compose up -d --build kb-db mcp-kb kb-scheduler
+	scripts/kb-bootstrap.sh
+
+kb-sync: ## Sync one source into the catalog, e.g. `make kb-sync SOURCE=confluence-eng [MODE=incremental] [DRY_RUN=1]`
+	@test -n "$(SOURCE)" || { echo "Usage: make kb-sync SOURCE=<id from config/kb-sources.yaml>" >&2; exit 1; }
+	docker compose run --rm kb-cli sync --source $(SOURCE) --mode $(or $(MODE),full) $(if $(DRY_RUN),--dry-run,)
+
+kb-sources: ## List the configured sources and whether each is enabled
+	docker compose run --rm kb-cli sources
+
+kb-sources-discover: ## Propose sources from what Confluence/Jira actually contain; WRITE=1 appends them (disabled) for review
+	docker compose run --rm kb-cli discover $(if $(WRITE),--write,)
+
+kb-check: ## Is everything the catalog depends on actually usable (database, summarizer, sources)
+	docker compose run --rm kb-cli check
+
+kb-status: ## What the catalog contains right now
+	docker compose run --rm kb-cli status
+
+kb-test: ## Run kb's own suite, including the Postgres-backed tests, against a throwaway database
+	scripts/kb-test.sh
 
 test: ## Run mcp-server's pytest suite inside the built mcp-agent-skills image
 	docker compose run --rm --user root --entrypoint sh mcp-agent-skills -c \

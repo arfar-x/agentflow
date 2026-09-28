@@ -6,8 +6,11 @@
 [LibreChat](https://www.librechat.ai/) as the one UI end users see, talking
 to a self-hosted, OpenAI-compatible LLM endpoint (vLLM), with Jira (and
 soon Confluence) exposed as tools via the `agent-skills` MCP server. It's
-an infrastructure repo -- a pinned `docker-compose.yml` plus
-config/scripts -- not an application with its own source code to build.
+mostly an infrastructure repo -- a pinned `docker-compose.yml` plus
+config/scripts -- with **one application module of its own, `kb/`**: the
+knowledge catalog, built to a written spec
+([`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) and served to
+LibreChat as its own MCP server. Everything else here is configuration.
 Nothing here names a specific model or organization; every such detail
 lives in your own `.env`/`config/librechat.yaml`, not in this doc.
 
@@ -23,9 +26,24 @@ make up
 `make up` (alias `make bootstrap`, same target) is the one idempotent
 command for both first run and every re-run: generates
 `searxng/settings.yml` from its template with a fresh secret if missing,
+renders `config/librechat.yaml` from `config/librechat.yaml.example` +
+`.env` (re-rendered every run -- see "Configuration is generated" below),
 builds and starts every service, waits for `api` to report healthy, and
 creates the admin account if none exists yet. Safe to rerun. Full variable
 reference: [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
+### Configuration is generated
+
+`config/librechat.yaml` is gitignored and generated, the same way
+`searxng/settings.yml` is: `make up` / `make render-config`
+(`scripts/render-librechat-config.sh`) render it from
+`config/librechat.yaml.example` + `.env`, filling in the `REPLACE_ME_*`
+placeholders (currently `AGENTS_RECURSION_LIMIT`/
+`AGENTS_MAX_RECURSION_LIMIT`). **Edit `config/librechat.yaml.example`, not
+`config/librechat.yaml`** -- the latter is overwritten on the next render.
+`docs/CONFIGURATION.md` "Agents" covers the two env variables; anything
+else in the file (models, MCP, toolApproval) is edited directly in the
+`.example` template, same as before this split existed.
 
 ## Day to day
 
@@ -48,6 +66,14 @@ users" for the full list and what each wraps. Role/permission management
 the Admin Panel UI, not the CLI -- see README.md and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Admin panel".
 
+The knowledge base comes up with the stack: `make up` runs
+`scripts/kb-bootstrap.sh`, which creates its schema and read-only role, drops a
+`config/kb-sources.yaml` in place if there isn't one, and prints whatever is
+still missing before the catalog can fill itself. `make kb-setup` does the same
+on its own. Day to day it is `make kb-status`, `make kb-sources`,
+`make kb-sync SOURCE=…` -- see
+[`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md).
+
 Agents are managed declaratively: `make agent-export` writes every agent
 (definition, handoff/subagent links, sharing) from the database to
 `agents/*.yaml`, and `make agent-import` (preview with `DRY_RUN=1`) applies
@@ -56,10 +82,25 @@ see [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md).
 
 ## Testing
 
-There's no application code here to unit-test. The one test command that
-exists runs `agent-skills`' own `mcp-server` test suite inside the built
-image, as a way to verify that submodule pin is sound in this stack's
-actual runtime:
+Two suites. `kb/` is this repo's own code and has real unit tests, which
+need no services and run in well under a second:
+
+```bash
+cd kb && python -m pytest   # see kb/README.md for the venv setup
+make kb-test                # the same suite plus the Postgres-backed tests,
+                            # against a throwaway database container
+```
+
+They include two gates worth knowing about before you edit anything there:
+`tests/test_boundaries.py` fails if `domain/` or `application/` imports
+anything that does I/O, and `tests/test_spec_coverage.py` fails if a
+requirement the spec marks `done` has no test claiming it (or a test claims
+an id the spec doesn't define). Add the requirement to the spec first, then
+the test's `# Covers: FR-...` line.
+
+The other command runs `agent-skills`' own `mcp-server` test suite inside
+the built image, as a way to verify that submodule pin is sound in this
+stack's actual runtime:
 
 ```bash
 make test
@@ -76,10 +117,17 @@ substitute.
   agent defs), `meilisearch` (search), `rag_api` + `vectordb` (per-
   conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
   tools, over MCP), and `searxng` (native web search).
-- `mcp-agent-skills` and `searxng` are **internal-only, no published
-  port, `backend` network only** -- reachability from `api` is their only
-  access control (MCP's HTTP transport has no auth of its own). Never add
-  a `ports:` entry to either.
+- `mcp-agent-skills`, `mcp-kb` and `searxng` are **internal-only, no
+  published port, `backend` network only** -- reachability from `api` is
+  their only access control (MCP's HTTP transport has no auth of its own).
+  Never add a `ports:` entry to any of them. `mcp-kb` goes further and takes
+  no credentials at all: the catalog is shared, so there is nothing per-user
+  for a caller to supply.
+- `kb-db` is the knowledge catalog's **own Postgres instance**, not another
+  database inside `vectordb` -- so restoring LibreChat's RAG store can't touch
+  the catalog, and `kb` never holds a credential to LibreChat's data. Schema and
+  the least-privilege query role come from `make kb-init` (idempotent; also how
+  a later migration is applied). Backed up like every other volume.
 - `admin-panel` is a separate service (ClickHouse's LibreChat Admin
   Panel) that talks to `api`'s `/api/admin/*` endpoints -- it has no
   database access of its own and cannot grant itself privileges.
@@ -141,6 +189,20 @@ substitute.
   switch to/from local email/password auth.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) -- specific known
   failure modes (e.g. MCP tools missing from the tool picker).
+- `docs/spec/` -- the spec of record for anything in this repo big enough to
+  design before building. A change to one of these is a reviewed diff, not a
+  decision made in a chat window; the code follows the spec, and when they
+  disagree one of them is wrong and gets fixed. Requirements carry ids and a
+  status, and the owning module's tests enforce that pairing.
+- [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md) -- the operator guide for
+  the catalog: credentials, choosing sources, the four freshness mechanisms and
+  their switches, overrides, the gap log, backup, and what to check when it
+  looks wrong.
+- `kb/` -- the knowledge catalog: what knowledge exists in the organization
+  and where it lives, searchable by agents. Hexagonal (`domain/` ->
+  `application/` -> `adapters/`), specified by
+  [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md); see
+  [`kb/README.md`](kb/README.md) to run it.
 - `agent-skills/` -- git submodule, pinned to a tag (see Architecture
   above); has its own `AGENTS.md` and `AUTHENTICATION.md` governing that
   subtree.

@@ -40,7 +40,17 @@ agent:
     Never generate the document yourself, never create tickets yourself,
     never publish yourself -- that's what the subagents are for. Your job is
     the sequencing and the review checkpoint between them.
-  tools: []
+
+    **Ground the draft in the catalog, not in assumption.** Call `kb_search`
+    before writing about a product, team, system or term you have not been
+    told about in this conversation, in the user's language and the other one.
+    Follow a hit's `fetch` field and read the real document rather than
+    working from its summary, and name what you used. If the catalog has
+    nothing, say so in the draft instead of inventing the context.
+
+  tools:
+    - kb_search_mcp_kb
+    - kb_get_mcp_kb
   edges: []
   subagents:
     enabled: true
