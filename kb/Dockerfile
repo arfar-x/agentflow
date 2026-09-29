@@ -12,7 +12,7 @@ WORKDIR /opt/kb
 # Dependencies first, so editing source doesn't invalidate the pip layer.
 COPY pyproject.toml README.md ./
 COPY src/ src/
-RUN pip install --no-cache-dir '.[store,mcp]'
+RUN pip install --no-cache-dir '.[store,mcp,sources]'
 
 # Migrations ship beside the code but outside the package, because psql applies
 # them too (scripts/kb-init.sh). The path is explicit rather than derived: once

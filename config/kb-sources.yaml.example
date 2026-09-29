@@ -43,7 +43,7 @@ sources:
   - id: gitlab-platform
     kind: gitlab
     enabled: false
-    base_url: ${GITLAB_BASE_URL}
+    base_url: ${GITLAB_BASE_URL:-https://your-gitlab-host}
     token_env: GITLAB_TOKEN          # the name; the value stays in .env
     projects:
       - path: platform/specs                 # a whole repo
