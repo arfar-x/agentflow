@@ -297,6 +297,15 @@ services:
     build:
       context: ./kb
     profiles: ["cli"]
+    # The shared kb/Dockerfile runs as USER nobody -- fine for mcp-kb and
+    # kb-scheduler (always-on, no reason to hold more privilege than reading
+    # the database), but kb-cli is the one place that needs to write
+    # config/kb-sources.yaml (`discover --write`), a host-owned bind mount
+    # nobody has no permission on. It's an operator-invoked, one-shot tool
+    # (`docker compose run`, never started by `make up`), so running it as
+    # root here is the same trust boundary the operator's own shell already
+    # has, not a new one.
+    user: root
     depends_on:
       kb-db:
         condition: service_healthy
