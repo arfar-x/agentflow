@@ -181,3 +181,12 @@ agentflow/
 - **n8n**, for event-driven flows with no user in the loop (e.g. a
   Sentry-triage workflow) -- deliberately out of scope for this launch, and
   architecturally independent of everything here.
+- **An OpenTelemetry monitoring stack** (traces/metrics, e.g. an
+  OTel Collector + Prometheus/Grafana or similar) -- no service here emits
+  or collects telemetry today. Highest-value target is the knowledge base's
+  own sync and catalog-generation behavior: per-source sync duration,
+  per-document fetch/summarize timing, summarizer retry and rejection
+  counts (`SyncReport.rejected`), and `kb-scheduler`'s tick outcomes --
+  right now the only visibility into any of that is `make kb-status`
+  after the fact and `make logs SERVICE=kb-scheduler`, neither of which
+  shows a source or the summarizer degrading before it actually fails.
