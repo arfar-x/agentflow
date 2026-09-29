@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config kb-init kb-setup kb-check kb-test kb-sync kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -61,6 +61,9 @@ kb-setup: ## Bring the knowledge base up and report what is still needed (runs i
 kb-sync: ## Sync one source into the catalog, e.g. `make kb-sync SOURCE=confluence-eng [MODE=incremental] [DRY_RUN=1]`
 	@test -n "$(SOURCE)" || { echo "Usage: make kb-sync SOURCE=<id from config/kb-sources.yaml>" >&2; exit 1; }
 	docker compose run --rm kb-cli sync --source $(SOURCE) --mode $(or $(MODE),full) $(if $(DRY_RUN),--dry-run,)
+
+kb-sync-all: ## Full-sync every source enabled in config/kb-sources.yaml, one at a time; FORCE=1 bypasses the content-hash gate
+	scripts/kb-sync-all.sh $(if $(FORCE),--force,)
 
 kb-sources: ## List the configured sources and whether each is enabled
 	docker compose run --rm kb-cli sources

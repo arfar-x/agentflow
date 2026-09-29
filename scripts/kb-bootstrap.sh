@@ -73,7 +73,16 @@ fi
 
 if [ ${#missing[@]} -eq 0 ]; then
   say "ready: $(docker compose ps --status running --format '{{.Service}}' 2>/dev/null | grep -c '^kb\|^mcp-kb' || echo 0) service(s) running, ${enabled} source(s) enabled"
-  say "the scheduler syncs on its own; 'make kb-status' shows what the catalog holds"
+  # First time everything lines up, the catalog itself is still empty --
+  # don't make the operator wait for the scheduler's first tick (up to 15m)
+  # just to see it work. A later `make up` with the catalog already
+  # populated skips this: the scheduler owns ongoing freshness from here.
+  live="$(docker compose run --rm -T kb-cli status 2>/dev/null | grep -oE '"live": [0-9]+' | grep -oE '[0-9]+' || echo 0)"
+  if [ "${live:-0}" = "0" ]; then
+    say "catalog is empty -- running the initial sync now (can take a while for large spaces)"
+    scripts/kb-sync-all.sh || say "initial sync hit an error above -- fix it and rerun 'make kb-sync-all'"
+  fi
+  say "the scheduler keeps it fresh from here; 'make kb-status' shows what the catalog holds"
 else
   say "usable, but the catalog will stay empty until:"
   for item in "${missing[@]}"; do

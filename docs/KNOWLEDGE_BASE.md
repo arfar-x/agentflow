@@ -102,6 +102,19 @@ make kb-sync SOURCE=confluence-eng             # for real
 make kb-status
 ```
 
+Once several sources are enabled, sync all of them in one pass instead of
+one `SOURCE=` at a time:
+
+```bash
+make kb-sync-all           # FORCE=1 to bypass the content-hash gate
+```
+
+It reads every `enabled: true` id straight from `config/kb-sources.yaml`
+and syncs each in turn, same live per-document progress. `scripts/kb-bootstrap.sh`
+(run by `make up`/`make kb-setup`) already calls this once on its own, the
+first time everything is configured and the catalog is still empty — this
+is for every time after that.
+
 Then leave it alone: `kb-scheduler` takes over.
 
 ### 4. Let the agents use it
@@ -158,6 +171,7 @@ worst a forged request can achieve is a re-read of documents you already have.
 make kb-status                     # counts by source and type, overrides, gaps, migrations
 make kb-sources                    # what is configured, and which switch each mechanism is on
 make kb-sync SOURCE=<id> [MODE=incremental] [DRY_RUN=1]
+make kb-sync-all [FORCE=1]         # every enabled source, one at a time
 docker compose run --rm kb-cli gaps          # searches that found nothing
 docker compose run --rm kb-cli override set --id <entry> --summary 'en=Better text' --note 'why'
 docker compose run --rm kb-cli override clear --id <entry>
