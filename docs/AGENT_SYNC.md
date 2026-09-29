@@ -26,7 +26,7 @@ agent:
   id: agent_axF0g2A5cWh8jP70LeTI0     # kept as-is: references below depend on it
   name: Plan
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |-
     ...
   tools: [ ... ]
@@ -69,13 +69,17 @@ agent:
   id: agent_product-planner
   name: Product Planner
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |
     You are a product planning partner.
 ```
 
-- **`id`, `name`, `provider` and `model` are required.** Pick a readable
-  `id` (`agent_` plus letters, digits, `-` or `_`) and keep it: it is the
+- **`id`, `name`, `provider` and `model` are required** in the file, but
+  `model` rarely matters in practice: `make agent-import` defaults
+  `MODEL_NAME` to `.env`'s `VLLM_DEFAULT_MODEL` (see `CONFIGURATION.md`
+  "Agent import"), which overrides every file's `model` field unless you
+  pass a different `MODEL_NAME` for that one run. Pick a readable `id`
+  (`agent_` plus letters, digits, `-` or `_`) and keep it: it is the
   agent's identity, and handoffs, `subagents` and `modelSpecs` refer to it.
   Changing `name` renames the agent; changing `id` creates a new one.
 - **Everything else is optional.** What you leave out is what LibreChat would

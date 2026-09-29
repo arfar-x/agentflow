@@ -18,6 +18,10 @@
 #                               OWNER_EMAIL, MODEL_PROVIDER and MODEL_NAME may also be
 #                               set in .env (gitignored), so they apply without editing
 #                               a tracked file; a value given on the command line wins.
+#                               MODEL_NAME left unset falls back to .env's own
+#                               VLLM_DEFAULT_MODEL -- the same single source of truth
+#                               config/librechat.yaml is rendered from -- so agents/*.yaml
+#                               never needs a hardcoded model id kept in sync by hand.
 #
 # AGENTS_DIR (default: agents) is the host-side directory. See
 # docs/AGENT_SYNC.md for the file format and semantics.
@@ -44,7 +48,11 @@ from_env_file() {
     export "${name}=${value}"
   fi
 }
-for v in OWNER_EMAIL MODEL_PROVIDER MODEL_NAME; do from_env_file "${v}"; done
+for v in OWNER_EMAIL MODEL_PROVIDER MODEL_NAME VLLM_DEFAULT_MODEL; do from_env_file "${v}"; done
+# No explicit MODEL_NAME (command line or .env): use the model the rest of
+# this stack already treats as the default (VLLM_DEFAULT_MODEL), instead of
+# whatever an agent's file happens to have hardcoded.
+: "${MODEL_NAME:=${VLLM_DEFAULT_MODEL:-}}"
 remote_dir=/tmp/agentflow-agents
 
 if [ -z "$(docker compose ps --status running --quiet api 2>/dev/null)" ]; then

@@ -37,13 +37,15 @@ agent:
   provider: OpenAI Compatible   # A custom endpoint's `name` in config/librechat.yaml
                           # (or a built-in provider). Must be listed in
                           # endpoints.agents.allowedProviders when that is set.
-  model: claude-sonnet-4-6   # A model that provider serves.
+  model: your-model-id    # A model that provider serves. In practice this value
+                          # rarely matters: `make agent-import` defaults MODEL_NAME
+                          # to .env's own VLLM_DEFAULT_MODEL and that overrides
+                          # every file's `model` on import -- pass a different
+                          # MODEL_NAME for one run to use something else instead.
                           # provider/model that don't exist on the instance you
-                          # import into don't stop the import: a new agent gets
-                          # that instance's default, and the import lists it to
-                          # review in the LibreChat UI. To point every agent at
-                          # another model without editing files, import with
-                          # MODEL_PROVIDER= / MODEL_NAME= (or set them in .env).
+                          # import into don't stop the import either way: a new
+                          # agent gets that instance's default, and the import
+                          # lists it to review in the LibreChat UI.
 
   # ---- Common --------------------------------------------------------------
 

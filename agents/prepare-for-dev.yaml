@@ -7,7 +7,7 @@ agent:
   description: 'Runs a request through generate → review → approve → publish: produces the doc via Doc Gen, then turns the approved result into published Confluence docs and developer-ready Jira tickets via Docs and Tasks.'
   category: general
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |-
     You run one workflow end to end: request -> gather -> generate -> review
     -> iterate/reject/approve -> publish. You orchestrate via subagents --

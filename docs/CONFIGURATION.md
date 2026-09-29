@@ -112,10 +112,10 @@ is rebuilt from its sources. See [`OPERATIONS.md`](OPERATIONS.md) "Volumes".
 | `MODEL_CONTEXT_TOKENS` | no | Default `262144`. The real context window of the model actually being served -- rendered into `tokenConfig.context` (below) *and* used to derive `summarization.retainRecent.tokens` (5% of this, floored at 200 -- see "Summarization" below), so both stay in sync with one number instead of two hand-tuned separately. Change it, `make render-config`, `make restart SERVICE=api`. |
 
 **The advertised-model-id trap:** some vLLM setups advertise a model `id`
-that doesn't match the model actually being served (this deployment's
-endpoint, for example, advertises `id: "claude-sonnet-4-6"` for a
-different underlying model). `config/librechat.yaml` treats that string as
-an opaque label: `models.fetch: true` pulls the id list straight from
+that doesn't match the model actually being served (e.g. a proxy relabeling
+a self-hosted model to match a well-known name). `config/librechat.yaml`
+treats that string as an opaque label: `models.fetch: true` pulls the id
+list straight from
 `GET {VLLM_BASE_URL}/models` (it doesn't infer or rename anything, just
 reports whatever id the endpoint advertises), and an explicit
 `tokenConfig` entry keyed to that exact id declares the real context
@@ -197,8 +197,8 @@ set of committed agent files fit a differently-configured deployment. Reference:
 |---|---|---|
 | `OWNER_EMAIL` | no | Own every imported agent as this account, which must already exist. Otherwise an agent keeps its current owner, or gets `ADMIN_EMAIL`, or the oldest admin. |
 | `MODEL_PROVIDER` | no | Provider for every imported agent, instead of the one in each file. |
-| `MODEL_NAME` | no | Model for every imported agent, instead of the one in each file. |
+| `MODEL_NAME` | no | Model for every imported agent, instead of the one in each file. **Defaults to `VLLM_DEFAULT_MODEL`** (above) when left unset, so `agents/*.yaml` never needs a hardcoded model id kept in sync by hand -- pass `MODEL_NAME=<something else>` on the command line to use a different model for one import. |
 
-Without the two model variables, a file's provider/model that don't exist on
-this instance fall back to the instance default, and the import lists them to
+Without `MODEL_PROVIDER`, a file's provider that doesn't exist on this
+instance falls back to the instance default, and the import lists it to
 review in the UI.

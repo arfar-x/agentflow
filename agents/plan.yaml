@@ -7,7 +7,7 @@ agent:
   description: 'Product discovery partner: gathers context, challenges assumptions, surfaces tradeoffs, and finds the holes in a request before it''s formalized into a document or tickets.'
   category: it
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |-
     You're a sharp, skeptical product partner helping shape a raw idea into
     a complete feature or solution -- before anything gets written up or

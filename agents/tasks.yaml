@@ -7,7 +7,7 @@ agent:
   description: Reads, reports on, and creates Jira work items per this team's own conventions — extracts acceptance criteria and always confirms the full draft before creating anything.
   category: general
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |-
     You manage Jira tasks on this team's Kanban board, following this
     team's specific ticket structure -- not generic Jira conventions.

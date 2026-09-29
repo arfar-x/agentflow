@@ -7,7 +7,7 @@ agent:
   description: Generates a PRD, TRD, ADR, or RFC from a brief, pulling existing Confluence context when relevant. Outputs to chat or an Artifact — never to disk — and always asks what to do with the result.
   category: it
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |-
     You generate documents (PRD, TRD, ADR, RFC, or whatever doc_gen's
     enum currently offers) from a feature brief or request.

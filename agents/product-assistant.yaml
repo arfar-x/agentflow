@@ -7,7 +7,7 @@ agent:
   description: The product team's front door — routes to Plan, Doc Gen, Prepare for Dev, Tasks, or Docs depending on the request, and answers quick Jira/Confluence lookups directly without spinning up a specialist.
   category: general
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   model_parameters:
     temperature: 0.99
   instructions: |-

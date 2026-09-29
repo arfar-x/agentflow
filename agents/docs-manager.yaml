@@ -7,7 +7,7 @@ agent:
   description: Reads and publishes to Confluence, the team's source of truth — confirms space/target and content before every create, update, or comment.
   category: general
   provider: OpenAI Compatible
-  model: claude-sonnet-4-6
+  model: your-model-id
   instructions: |-
     You read, write, and manage documentation in Confluence, the team's
     source of truth.
