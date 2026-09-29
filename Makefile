@@ -48,6 +48,11 @@ kb-init: ## Create/upgrade the knowledge base schema + its read-only role (idemp
 	scripts/kb-init.sh
 
 kb-setup: ## Bring the knowledge base up and report what is still needed (runs inside `make up` too)
+	# kb-scheduler bind-mounts config/kb-sources.yaml -- create it before any
+	# `docker compose up`, or Docker creates the mountpoint as an empty
+	# directory when the file doesn't exist yet, and everything downstream
+	# (including this file's own template copy) breaks on a fresh checkout.
+	@[ -f config/kb-sources.yaml ] || cp config/kb-sources.yaml.example config/kb-sources.yaml
 	# --build, because a kb/ change that isn't in the image is a service quietly
 	# running last week's code -- which looks like "it stopped syncing".
 	docker compose up -d --build kb-db mcp-kb kb-scheduler

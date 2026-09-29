@@ -27,6 +27,15 @@ if [ ! -f searxng/settings.yml ]; then
   sed -i "s/REPLACE_ME_SEARXNG_SECRET_KEY/$(openssl rand -hex 32)/" searxng/settings.yml
 fi
 
+# kb-scheduler bind-mounts this path -- create it before the `docker compose
+# up` below, or Docker creates the mountpoint as an empty directory when the
+# file doesn't exist yet (a fresh checkout), and scripts/kb-bootstrap.sh's own
+# template copy fails trying to write into that directory further down.
+if [ ! -f config/kb-sources.yaml ]; then
+  echo "==> Generating config/kb-sources.yaml (gitignored) from its template..."
+  cp config/kb-sources.yaml.example config/kb-sources.yaml
+fi
+
 scripts/render-librechat-config.sh
 
 echo "==> docker compose up -d --build"

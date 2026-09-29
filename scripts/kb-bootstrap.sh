@@ -27,6 +27,18 @@ say() { printf '    %s\n' "$*"; }
 echo "==> Knowledge base..."
 
 # 1. The source configuration, from its template if this is a first run.
+# Callers (scripts/bootstrap.sh, `make kb-setup`) create this before their own
+# `docker compose up`, so kb-scheduler's bind mount never sees a missing file
+# -- but if this script is ever run standalone before that guard exists (or
+# before either was fixed), Docker will have created the mountpoint as an
+# empty directory instead. Recover rather than fail opaquely inside `cp`.
+if [ -d config/kb-sources.yaml ]; then
+  rmdir config/kb-sources.yaml 2>/dev/null || {
+    echo "config/kb-sources.yaml is a directory (not empty) instead of the" >&2
+    echo "expected file -- remove it manually and rerun." >&2
+    exit 1
+  }
+fi
 if [ ! -f config/kb-sources.yaml ]; then
   cp config/kb-sources.yaml.example config/kb-sources.yaml
   say "created config/kb-sources.yaml from the template (every source disabled)"
