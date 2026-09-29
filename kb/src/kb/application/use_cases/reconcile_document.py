@@ -47,13 +47,17 @@ class ReconcileDocument:
         self._summarizer = summarizer
         self._clock = clock
 
-    def execute(self, document: SourceDocument) -> ReconcileResult:
+    def execute(self, document: SourceDocument, *, force: bool = False) -> ReconcileResult:
+        """`force` bypasses the content-hash gate below: FR-REC-12's escape
+        hatch for recovering entries a fixed summarizer defect left
+        undescribed, whose content never actually changed and so would
+        otherwise never be re-summarized on its own."""
         entry_id = entry_id_for(document.source_id, document.external_id)
         existing = self._store.get(entry_id)
         digest = content_hash(document.title, document.body, document.version)
         now = self._clock.now()
 
-        if not needs_resummarize(existing, digest):
+        if not force and not needs_resummarize(existing, digest):
             # The document is byte-identical to what we already catalogued.
             # No model call, no rewrite -- only "we checked, it's still here",
             # which is what keeps a 15-minute cadence affordable.

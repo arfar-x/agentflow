@@ -239,3 +239,59 @@ def test_check_probes_the_summarizer_when_one_is_configured(wired, capsys, monke
     assert payload["checks"]["summarizer"]["ok"] is True
     assert payload["checks"]["summarizer"]["authenticated"] is True
     assert payload["checks"]["sources"]["ok"] is False, "the file does not exist"
+
+
+def test_sync_refuses_to_run_when_the_summarizer_fails_its_check(wired, capsys, monkeypatch, tmp_path):
+    # Covers: FR-CFG-09
+    # An endpoint that answers /models but doesn't actually honor
+    # response_format/system would otherwise only be caught after a run
+    # catalogued every document undescribed. This proves the gate fires
+    # before the source is even looked up (approved.yaml here has none) --
+    # a source-lookup error would mean the gate never ran at all.
+    from kb.config import Settings
+
+    sources_file = tmp_path / "kb-sources.yaml"
+    sources_file.write_text("approved: true\nsources: []\n")
+    wired.settings = Settings(
+        database_url="postgresql://fake/kb",
+        summarizer_url="https://llm.internal/v1",
+        summarizer_model="a-model",
+        sources_file=str(sources_file),
+    )
+    monkeypatch.setattr(
+        "kb.container.build_summarizer",
+        lambda settings: type(
+            "S", (), {"check": lambda self: {"ok": False, "error": "ignored the system role"}}
+        )(),
+    )
+
+    payload = run(capsys, "sync", "--source", "whatever")
+
+    assert payload["error"]["type"] == "summarizer_incapable"
+    assert payload["error"]["detail"]["error"] == "ignored the system role"
+
+
+def test_a_dry_run_sync_does_not_gate_on_the_summarizer(wired, capsys, monkeypatch, tmp_path):
+    # Covers: FR-CFG-09
+    # --dry-run promises no model calls; the gate is itself a model call, so
+    # it must not run either. Reaches unknown_source instead, proving the
+    # summarizer was never even asked.
+    from kb.config import Settings
+
+    sources_file = tmp_path / "kb-sources.yaml"
+    sources_file.write_text("approved: true\nsources: []\n")
+    wired.settings = Settings(
+        database_url="postgresql://fake/kb",
+        summarizer_url="https://llm.internal/v1",
+        summarizer_model="a-model",
+        sources_file=str(sources_file),
+    )
+
+    def explode(settings):
+        raise AssertionError("the summarizer must not be built for a dry run")
+
+    monkeypatch.setattr("kb.container.build_summarizer", explode)
+
+    payload = run(capsys, "sync", "--source", "whatever", "--dry-run")
+
+    assert payload["error"]["type"] == "unknown_source"

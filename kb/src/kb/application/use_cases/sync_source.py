@@ -16,18 +16,25 @@ Two modes, one code path:
 
 Neither mode re-summarizes unchanged content, because `reconcile_document`
 decides that by content hash. A full pass over a steady-state source costs API
-calls and nothing else.
+calls and nothing else -- unless `force=True` (FR-REC-12), which overrides
+that gate for every document the run sees. It exists for one situation: a
+summarizer defect (a bad prompt, an endpoint that ignored structured-output
+hints) has already been fixed, but the documents it degraded have unchanged
+content and so would never be picked up by an ordinary run. It costs a model
+call per document regardless of whether anything actually changed, same as a
+first run.
 """
 
 from __future__ import annotations
 
 from enum import Enum
+from typing import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from kb.application.ports.clock import Clock
 from kb.application.ports.entry_store import EntryStore
-from kb.application.ports.knowledge_source import KnowledgeSource
+from kb.application.ports.knowledge_source import KnowledgeSource, SourceDocument
 from kb.application.use_cases.reconcile_document import Action, ReconcileDocument
 from kb.domain.errors import describe_for
 
@@ -43,6 +50,7 @@ class SyncReport(BaseModel):
     source_id: str
     mode: Mode
     dry_run: bool = False
+    force: bool = False
     seen: int = 0
     created: int = 0
     updated: int = 0
@@ -75,7 +83,9 @@ class SyncSource:
         *,
         mode: Mode = Mode.FULL,
         dry_run: bool = False,
+        force: bool = False,
         checkpoint: str | None = None,
+        on_progress: Callable[[int, SourceDocument], None] | None = None,
     ) -> SyncReport:
         counts = {action: 0 for action in Action}
         seen: set[str] = set()
@@ -85,7 +95,14 @@ class SyncSource:
         documents = (
             source.list_all() if mode is Mode.FULL else source.changed_since(checkpoint)
         )
-        for document in documents:
+        for index, document in enumerate(documents, start=1):
+            if on_progress is not None:
+                # A plain callback, not an import of an I/O module -- the
+                # boundary rule (test_boundaries.py) is about what this layer
+                # imports, not about a caller handing it a function. The
+                # actual printing lives in the adapter that constructs this
+                # use case (cli.py), same as every other side effect here.
+                on_progress(index, document)
             if dry_run:
                 # Still walks the source, so the report says what *would*
                 # happen -- the point of a dry run is finding out that a space
@@ -93,7 +110,7 @@ class SyncSource:
                 seen.add(document.external_id)
                 continue
             try:
-                result = self._reconcile.execute(document)
+                result = self._reconcile.execute(document, force=force)
             except Exception as exc:  # a document that cannot become an entry
                 rejected.append(_describe(document, exc))
                 continue
@@ -112,6 +129,7 @@ class SyncSource:
             source_id=source.source_id,
             mode=mode,
             dry_run=dry_run,
+            force=force,
             seen=len(seen),
             created=counts[Action.CREATED],
             updated=counts[Action.UPDATED],

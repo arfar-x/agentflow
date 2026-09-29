@@ -76,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--dry-run", action="store_true",
                       help="Read the source and report what would change. Writes nothing, "
                            "summarizes nothing, and does not advance the checkpoint.")
+    sync.add_argument("--force", action="store_true",
+                      help="Re-summarize every document this run sees even if its content hash "
+                           "is unchanged. For recovering entries a since-fixed summarizer defect "
+                           "left undescribed -- costs a model call per document, same as a first "
+                           "run, not just the ones that actually changed.")
 
     sub.add_parser("sources", help="The configured sources, and whether each is enabled.")
 
@@ -342,6 +347,26 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
         config.require_approved()
     except NotApproved as exc:
         raise _Reportable("not_approved", str(exc)) from exc
+
+    # FR-CFG-09: a summarizer that answers /models but doesn't actually honor
+    # response_format/system on a real completion would otherwise only be
+    # discovered after this run catalogued every document undescribed. Skipped
+    # for --dry-run (which promises no model calls) and when no summarizer is
+    # configured at all (NullSummarizer's deliberate, already-reported degraded
+    # mode -- not a defect to refuse over).
+    if not args.dry_run and container.settings.summarizer_configured:
+        from kb.container import build_summarizer
+
+        summarizer_check = build_summarizer(container.settings).check()
+        if not summarizer_check.get("ok"):
+            raise _Reportable(
+                "summarizer_incapable",
+                "the configured summarizer failed its structured-output check "
+                "(see `kb check` for details) -- refusing to sync rather than "
+                "cataloguing every document undescribed",
+                detail=summarizer_check,
+            )
+
     try:
         source_config = config.source(args.source)
     except ConfigError as exc:
@@ -362,12 +387,29 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
 
     mode = Mode(args.mode)
     checkpoint = container.store.get_checkpoint(source.source_id)
+
+    def report_progress(index: int, document) -> None:
+        # One updating line on stderr -- stdout stays exactly the single JSON
+        # document the rest of this module promises. No total is available
+        # (sources yield documents lazily, some paginated), so this is a
+        # running count and the current item, not a percentage.
+        label = document.title or document.external_id
+        line = f"\r{args.source}: syncing #{index} -- {label[:60]}"
+        print(line.ljust(100), end="", file=sys.stderr, flush=True)
+
     try:
         report = container.sync.execute(
-            source, mode=mode, dry_run=args.dry_run, checkpoint=checkpoint
+            source,
+            mode=mode,
+            dry_run=args.dry_run,
+            force=args.force,
+            checkpoint=checkpoint,
+            on_progress=report_progress,
         )
     except Exception as exc:  # the source is unreachable, auth failed, ...
         raise _Reportable("source_unavailable", str(exc).strip()) from exc
+    finally:
+        print(file=sys.stderr)  # end the progress line before anything else prints
 
     if report.checkpoint and not args.dry_run:
         # Only after a successful run: a checkpoint advanced past a failure

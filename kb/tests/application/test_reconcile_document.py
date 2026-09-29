@@ -165,6 +165,36 @@ def test_a_summarizer_that_returns_no_title_still_produces_a_findable_entry(wire
     assert store.get(entry_id).title == {"und": "Refund retry policy"}
 
 
+def test_force_resummarizes_even_when_content_is_unchanged(wired):
+    # Covers: FR-REC-12
+    # The recovery path for a summarizer defect that's since been fixed: the
+    # affected documents never changed, so an ordinary run would never touch
+    # them again.
+    store, summarizer, clock, reconcile = wired
+    entry_id = reconcile.execute(make_document()).entry_id
+
+    clock.advance(timedelta(hours=1))
+    result = reconcile.execute(make_document(), force=True)
+
+    assert result.action is Action.UPDATED
+    assert result.summarized is True
+    assert len(summarizer.calls) == 2
+    assert store.get(entry_id).updated_at == NOW + timedelta(hours=1)
+
+
+def test_force_also_revives_a_soft_deleted_but_otherwise_unchanged_entry(wired):
+    # Covers: FR-REC-12
+    store, _, clock, reconcile = wired
+    entry_id = reconcile.execute(make_document()).entry_id
+    store.mark_missing([entry_id], at=NOW)
+
+    result = reconcile.execute(make_document(), force=True)
+
+    assert result.action is Action.REVIVED
+    assert result.summarized is True
+    assert store.get(entry_id).deleted_at is None
+
+
 def test_documents_from_different_sources_never_collide(wired):
     # Covers: FR-ENT-05
     _, _, _, reconcile = wired

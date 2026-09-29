@@ -4,8 +4,8 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.1.0 |
-| **Last updated** | 2026-09-24 |
+| **Version** | 2.3.0 |
+| **Last updated** | 2026-09-28 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
 
@@ -154,6 +154,7 @@ case.
 | FR-REC-09 | Nightly full reconciliation MUST list every document in a source and soft-delete entries it no longer yields. | done |
 | FR-REC-10 | Reading a stale entry MUST queue a refresh of that entry. | done |
 | FR-REC-11 | A webhook MUST refresh only the paths in its payload, and MUST be rejected without a valid secret token. | done |
+| FR-REC-12 | An operator MUST be able to force re-summarization of every document a sync sees, bypassing the content-hash gate, to recover entries a since-fixed summarizer defect left undescribed. | done |
 
 ### 6.4a Scheduling — `FR-SCH`
 
@@ -189,6 +190,7 @@ case.
 | FR-CFG-06 | Discovery MUST draft the config from what each system contains, writing every candidate `enabled: false`, and MUST NOT rewrite a line an operator has edited. | done |
 | FR-CFG-08 | The summarizer URL MUST be an OpenAI-compatible **base** URL, normalized on the way in (a trailing `/chat/completions` or slash is accepted and stripped), and rejected at startup if it is not a URL at all. Compatibility MUST be verifiable against the running endpoint, not assumed. | done |
 | FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | done |
+| FR-CFG-09 | Compatibility verification (FR-CFG-08) MUST include a real completions round-trip proving the endpoint honors `response_format` and the `system` role — reachability and a served model id are not sufficient, since an endpoint can answer both while silently ignoring the rest of the request. `sync` MUST refuse to run against a summarizer that fails this, rather than degrading every document to undescribed. | done |
 
 ### 6.7 Front doors — `FR-CLI`, `FR-MCP`
 
@@ -411,6 +413,8 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.3.0 | 2026-09-28 | Added FR-CFG-09: `check()` now proves structured output actually works with a real completions round-trip (a fixed probe: `system` + `response_format: json_object`, verified against the exact reply expected), not just that `/models` answers and lists the right id. `sync` refuses to run at all against a summarizer that fails it. Prompted by the same experimental backend as 2.2.0 below -- it turned out to not merely mis-format JSON sometimes, but to silently ignore the `system` role entirely, every time, while still answering 200 with a normal chat reply. An earlier fix folded the instruction into the `user` message to route around that one backend; reverted -- the request this module sends stays the plain OpenAI standard for every endpoint, and an endpoint that cannot honor it is something to report and refuse, not something to accommodate. |
+| 2.2.0 | 2026-09-28 | Added FR-REC-12: `kb sync --force` bypasses the content-hash gate to recover entries a since-fixed summarizer defect left undescribed -- an unchanged run stops being free only when explicitly asked to. Prompted by an experimental OpenAI-compatible backend that didn't enforce the `response_format` it was sent, degrading ~38% of one sync; the summarizer itself gained a same-request retry with a sharper instruction (no spec change -- an internal robustness detail of FR-REC-06, not new externally-visible behavior), but that only helps content summarized *after* the fix, hence this flag for what came before it. |
 | 2.1.0 | 2026-09-24 | Added FR-CFG-08 and FR-CLI-05: the summarizer URL is normalized and its compatibility is checkable against the live endpoint, and `kb check` reports which dependency is not ready. |
 | 2.0.0 | 2026-09-24 | All nine phases delivered. `make up` now brings the catalog up with the stack and reports what is still needed; `docs/KNOWLEDGE_BASE.md` is the operator guide. Two source kinds remain deferred by choice. |
 | 1.10.0 | 2026-09-24 | Added FR-SCH-06: times of day are read in `KB_TIMEZONE`. A nightly job written as `at: "03:00"` by people in Tehran was firing at 06:30 their time, because the clock reported UTC. |

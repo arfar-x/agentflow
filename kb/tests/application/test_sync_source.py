@@ -188,6 +188,21 @@ def test_the_checkpoint_is_reported_only_after_a_real_run(wired):
     assert sync.execute(source, mode=Mode.INCREMENTAL).checkpoint == "2026-09-24 12:00"
 
 
+def test_force_makes_an_otherwise_free_rerun_resummarize_everything(wired):
+    # Covers: FR-REC-12
+    store, summarizer, _, sync = wired
+    source = FakeKnowledgeSource("confluence-eng", [document("1"), document("2")])
+    sync.execute(source, mode=Mode.FULL)
+    calls_after_first_run = len(summarizer.calls)
+
+    report = sync.execute(source, mode=Mode.FULL, force=True)
+
+    assert report.force is True
+    assert (report.updated, report.unchanged) == (2, 0)
+    assert report.summarized == 2
+    assert len(summarizer.calls) == calls_after_first_run + 2
+
+
 def test_a_revived_document_is_counted_as_such(wired):
     # Covers: FR-REC-05
     store, _, clock, sync = wired

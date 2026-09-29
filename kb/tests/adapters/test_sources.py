@@ -307,6 +307,7 @@ def test_a_draft_carries_every_configured_language():
     assert set(draft.title) == {"en", "fa"} and set(draft.summary) == {"en", "fa"}
     assert "بازپرداخت" in draft.keywords
     _, body = session.requests[0]
+    assert body["messages"][0]["role"] == "system" and body["messages"][1]["role"] == "user"
     assert "en, fa" in body["messages"][1]["content"]
 
 
@@ -352,6 +353,27 @@ def test_a_model_endpoint_that_is_down_does_not_stop_a_sync():
     assert summarize.draft(source_document()).title == {}
 
 
+def test_a_bad_first_reply_gets_one_retry_with_a_sharper_instruction():
+    # Not every OpenAI-*compatible* endpoint actually enforces the
+    # response_format it was sent -- the retry is what recovers from that
+    # without assuming anything backend-specific.
+    summarize, session = summarizer([completion("sorry, here you go: not json"), completion(SAMPLE)])
+
+    draft = summarize.draft(source_document())
+
+    assert draft.title["en"] == "Payment reconciliation"
+    assert len(session.requests) == 2
+    retry_system = session.requests[1][1]["messages"][0]["content"]
+    assert "could not be parsed" in retry_system
+
+
+def test_two_bad_replies_in_a_row_still_degrade_to_an_empty_draft():
+    # Covers: FR-REC-06
+    summarize, session = summarizer([completion("nope"), completion("still nope")])
+    assert summarize.draft(source_document()).title == {}
+    assert len(session.requests) == 2
+
+
 # ------------------------------------------------- summarizer compatibility
 def test_a_base_url_is_normalized_however_it_was_pasted():
     # Covers: FR-CFG-08
@@ -377,17 +399,57 @@ def test_something_that_is_not_a_url_is_rejected_at_startup():
     assert "OpenAI-compatible base" in str(excinfo.value)
 
 
+#: A successful probe response, for tests where the code reaches it: `check()`
+#: only calls `GET /models` when the model list looks compatible, then makes a
+#: real completions round-trip (FR-CFG-09) -- so anything past that point needs
+#: a second queued response, or the stub session raises on an empty queue.
+PROBE_OK = completion('{"probe": "ok"}')
+
+
 def test_compatibility_is_verified_against_the_endpoint_not_assumed():
     # Covers: FR-CFG-08
     # GET /models is the call every OpenAI-compatible server answers, so it
     # doubles as "is this the right protocol?" and "does it serve our model?".
-    summarize, session = summarizer([StubResponse({"data": [{"id": "a-model"}, {"id": "other"}]})])
+    summarize, session = summarizer([StubResponse({"data": [{"id": "a-model"}, {"id": "other"}]}), PROBE_OK])
 
     result = summarize.check()
 
     assert result["ok"] is True
     assert result["model_served"] is True and result["models"] == ["a-model", "other"]
     assert session.requests[0][0] == "https://llm.internal/v1/models"
+
+
+def test_check_fails_when_the_endpoint_does_not_honor_structured_output():
+    # Covers: FR-CFG-09
+    # Reachable, serves the right model id, answers 200 -- and still not
+    # usable: it just ignored `system` and `response_format` and chatted
+    # normally instead. Exactly what a sync must refuse to run against rather
+    # than discover after cataloguing everything undescribed.
+    summarize, session = summarizer([
+        StubResponse({"data": [{"id": "a-model"}]}),
+        completion("Sure, how can I help you today?"),
+    ])
+
+    result = summarize.check()
+
+    assert result["ok"] is False
+    assert result["structured_output"] is False
+    assert "structured output" in result["error"]
+    probe_request = session.requests[1][1]
+    assert probe_request["messages"][0]["role"] == "system"
+    assert probe_request["response_format"] == {"type": "json_object"}
+
+
+def test_check_fails_when_the_probe_replies_with_the_wrong_shape():
+    # Covers: FR-CFG-09
+    # Valid JSON, but not what was asked for -- e.g. an endpoint that always
+    # answers {"response": "..."} regardless of what the schema says.
+    summarize, _ = summarizer([
+        StubResponse({"data": [{"id": "a-model"}]}),
+        completion('{"response": "ok"}'),
+    ])
+    result = summarize.check()
+    assert result["ok"] is False and result["structured_output"] is False
 
 
 def test_an_endpoint_that_answers_with_something_else_is_not_compatible():
@@ -409,14 +471,14 @@ def test_an_unreachable_endpoint_reports_why():
 def test_a_model_the_endpoint_does_not_list_is_reported_not_rejected():
     # A vLLM deployment can advertise an id that differs from what it serves,
     # so this is information, not a veto.
-    summarize, _ = summarizer([StubResponse({"data": [{"id": "something-else"}]})])
+    summarize, _ = summarizer([StubResponse({"data": [{"id": "something-else"}]}), PROBE_OK])
     result = summarize.check()
     assert result["ok"] is True and result["model_served"] is False
 
 
 def test_the_api_key_is_sent_when_there_is_one():
     # Covers: FR-CFG-08
-    summarize, session = summarizer([StubResponse({"data": []})])
+    summarize, session = summarizer([StubResponse({"data": []}), PROBE_OK])
     summarize.check()
     # The stub records params/json, not headers, so assert via the draft path
     # which builds them explicitly.
@@ -429,7 +491,7 @@ def test_no_api_key_is_a_valid_configuration():
     # Covers: FR-CFG-08
     # Plenty of self-hosted endpoints need no key, and sending an empty bearer
     # token is worse than sending no header at all -- some servers reject it.
-    summarize, session = summarizer([StubResponse({"data": [{"id": "a-model"}]})])
+    summarize, session = summarizer([StubResponse({"data": [{"id": "a-model"}]}), PROBE_OK])
     summarize._api_key = None
 
     assert summarize.check()["ok"] is True
@@ -438,7 +500,7 @@ def test_no_api_key_is_a_valid_configuration():
 
 def test_a_key_that_is_set_is_actually_sent():
     # Covers: FR-CFG-08
-    summarize, session = summarizer([StubResponse({"data": []})])
+    summarize, session = summarizer([StubResponse({"data": []}), PROBE_OK])
     summarize.check()
     assert session.sent_headers[0]["Authorization"] == "Bearer k"
 
