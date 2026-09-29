@@ -149,6 +149,13 @@ built once at container startup. A new document-generation skill in
 `agent-skills` always needs `docker compose up -d --build mcp-agent-skills`,
 never just a config reload.
 
+## Updating the Figma MCP server
+
+`mcp-figma`'s package version is the `FIGMA_DEVELOPER_MCP_VERSION` build arg in
+`figma-mcp/Dockerfile`. Bump it in a commit of its own, then
+`make build SERVICE=mcp-figma`. See [`FIGMA.md`](FIGMA.md) "Upgrading" for
+what to check first.
+
 ## Logs and health
 
 ```bash

@@ -5,7 +5,8 @@
 `agentflow` is a self-hosted, single-front-door agentic chatbot stack:
 [LibreChat](https://www.librechat.ai/) as the one UI end users see, talking
 to a self-hosted, OpenAI-compatible LLM endpoint (vLLM), with Jira (and
-soon Confluence) exposed as tools via the `agent-skills` MCP server. It's
+soon Confluence) exposed as tools via the `agent-skills` MCP server, and
+Figma designs via `mcp-figma`. It's
 mostly an infrastructure repo -- a pinned `docker-compose.yml` plus
 config/scripts -- with **one application module of its own, `kb/`**: the
 knowledge catalog, built to a written spec
@@ -117,17 +118,28 @@ substitute.
   agent defs), `meilisearch` (search), `rag_api` + `vectordb` (per-
   conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
   tools, over MCP), and `searxng` (native web search).
-- `mcp-agent-skills`, `mcp-kb` and `searxng` are **internal-only, no
-  published port, `backend` network only** -- reachability from `api` is
-  their only access control (MCP's HTTP transport has no auth of its own).
-  Never add a `ports:` entry to any of them. `mcp-kb` goes further and takes
-  no credentials at all: the catalog is shared, so there is nothing per-user
-  for a caller to supply.
+- `mcp-agent-skills`, `mcp-kb`, `mcp-figma` and `searxng` are
+  **internal-only, no published port, `backend` network only** --
+  reachability from `api` is their only access control (MCP's HTTP
+  transport has no auth of its own). Never add a `ports:` entry to any of
+  them. `mcp-kb` goes further and takes no credentials at all: the catalog
+  is shared, so there is nothing per-user for a caller to supply.
 - `kb-db` is the knowledge catalog's **own Postgres instance**, not another
   database inside `vectordb` -- so restoring LibreChat's RAG store can't touch
   the catalog, and `kb` never holds a credential to LibreChat's data. Schema and
   the least-privilege query role come from `make kb-init` (idempotent; also how
   a later migration is applied). Backed up like every other volume.
+- `mcp-figma` is **Framelink's community `figma-developer-mcp`** (Figma's
+  REST API), version-pinned in `figma-mcp/Dockerfile` -- not Figma's own
+  `mcp.figma.com`, which answers `403` at OAuth client registration to any
+  client outside Figma's MCP catalog allowlist, LibreChat included
+  (LibreChat always registers as `LibreChat MCP Client`). It holds no
+  credential and gets no `env_file`: each user's own Figma token arrives per
+  request as `X-Figma-Token` (`customUserVars`), so there's no shared
+  fallback identity. Its one tool is read-only, so it has no `toolApproval`
+  entry. [`docs/FIGMA.md`](docs/FIGMA.md) covers the evidence and the
+  alternatives considered (including why impersonating an allowlisted client
+  is deliberately not done).
 - `admin-panel` is a separate service (ClickHouse's LibreChat Admin
   Panel) that talks to `api`'s `/api/admin/*` endpoints -- it has no
   database access of its own and cannot grant itself privileges.
@@ -185,6 +197,8 @@ substitute.
   `agent-import`: agent file format, sharing, import semantics.
 - `agents/` -- one YAML per agent, from `make agent-export` or hand-written;
   start from `agents/base-agent-template.yaml.example`.
+- [`docs/FIGMA.md`](docs/FIGMA.md) -- the Figma tool: per-user tokens,
+  Figma's seat-based rate limits, why not Figma's own MCP server, upgrades.
 - [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md) -- optional SSO, and how to
   switch to/from local email/password auth.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) -- specific known

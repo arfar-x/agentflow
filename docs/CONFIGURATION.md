@@ -142,6 +142,15 @@ model shows up as safe to use.
 | `CONFLUENCE_DEFAULT_SPACE` | no | Used by `my_pages`/`get_page_by_title` when no `--space_key` is given; supplied per-user via `customUserVars` in this deployment. |
 | `CONFLUENCE_DEPLOYMENT_TYPE` | yes, if `confluence` is in `MCP_TOOLSETS` | `cloud` or `server` -- unlike Jira, this one is required: Confluence's REST API is mounted at a different path per deployment (Cloud: `/wiki/rest/api`, Server/DC: `/rest/api`). Server-level, not per-user -- the whole org's Confluence instance is one deployment type. |
 
+## MCP: Figma
+
+No `.env` variables. The `mcp-figma` service holds no credential: each user
+saves their own Figma personal access token in LibreChat's MCP settings form
+(`customUserVars` in `config/librechat.yaml.example`), and it is sent per
+request as an `X-Figma-Token` header. See [`FIGMA.md`](FIGMA.md) for setup,
+Figma's seat-based rate limits, and why this isn't Figma's own hosted MCP
+server.
+
 ## Summarization (auto-compact)
 
 Mostly static config -- see `config/librechat.yaml.example`'s top-level

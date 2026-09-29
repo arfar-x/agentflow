@@ -151,3 +151,40 @@ registered in `config/librechat.yaml.example`; the generated config needs
 re-rendering and `api` restarting: `make render-config && make restart
 SERVICE=api`. The tools also have to be attached to the agents
 (`make agent-import`).
+
+## Figma
+
+Full guide: [`FIGMA.md`](FIGMA.md). The agent relays whatever Figma said, so
+the tool result usually names the cause:
+
+**"Figma API authentication is required", or Figma rejects the token.** The
+user hasn't saved a token in LibreChat's MCP settings for **figma**, or it was
+mistyped or revoked. `mcp-figma` has no token of its own to fall back on, by
+design.
+
+**`403` naming a file the user can open in the browser.** The token is missing
+the "File content: Read" or "Dev resources: Read" scope, or the file's share
+settings forbid copying and exporting. Create a new token with both scopes.
+
+**`429`, or calls that stop working partway through a month.** Figma's rate
+limit. Users on a View or Collab seat, and anyone reading a file in a Starter
+(free) plan, get about 6 file reads a month. Only Dev and Full seats on paid
+plans get a per-minute limit instead.
+
+**"fetch failed".** `mcp-figma` can't reach `https://api.figma.com`: a firewall,
+or a proxy it hasn't been told about (see FIGMA.md "How it's wired").
+
+**`mcp-figma` is healthy but LibreChat doesn't list `get_figma_data`.**
+Re-render and restart: `make render-config && make restart SERVICE=api`. To
+see the server's own tool list from `api`, bypassing LibreChat itself (the
+LibreChat image has `node` but no `curl`):
+
+```bash
+docker compose exec api node -e "fetch('http://mcp-figma:3333/mcp', {method: 'POST',
+  headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream'},
+  body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/list', params: {}})
+}).then(r => r.text()).then(console.log)"
+```
+
+A reply listing `get_figma_data` means the server and the network path are
+fine, and the problem is in LibreChat's config.

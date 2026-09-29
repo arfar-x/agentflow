@@ -44,6 +44,7 @@ mcpSettings:
   allowedAddresses:
     - 'mcp-agent-skills:8321'
     - 'mcp-kb:8322'
+    - 'mcp-figma:3333'
 
 endpoints:
   custom:
@@ -193,6 +194,36 @@ mcpServers:
     initTimeout: 20000
     serverInstructions: true
     chatMenu: true
+
+  # Figma design data (the mcp-figma service -- Framelink's community server on
+  # Figma's REST API, not Figma's hosted mcp.figma.com, which rejects
+  # LibreChat at OAuth client registration; see docs/FIGMA.md). One read-only
+  # tool, get_figma_data (file key + optional node id, both taken from a
+  # pasted Figma link), so nothing here needs a toolApproval entry.
+  #
+  # Per-user, the same way agent-skills' Jira/Confluence credentials are: each
+  # user pastes their own Figma personal access token into this server's
+  # customUserVars form, and LibreChat sends it on every request as
+  # X-Figma-Token, which mcp-figma uses for that request only. mcp-figma holds
+  # no token of its own, so a user who hasn't set one reads nothing -- there is
+  # no shared fallback identity -- and each user only sees the files their own
+  # Figma account can open.
+  figma:
+    type: streamable-http
+    url: http://mcp-figma:3333/mcp
+    # One call can fetch and simplify a whole design file, which takes a while
+    # on a large one; asking for a single node (a link with ?node-id=) is much
+    # faster.
+    timeout: 120000
+    initTimeout: 20000
+    chatMenu: true
+    headers:
+      X-Figma-Token: '{{FIGMA_API_KEY}}'
+    customUserVars:
+      FIGMA_API_KEY:
+        title: 'Figma personal access token'
+        description: 'Create one in Figma under Settings > Security > Personal access tokens, with the "File content: Read" and "Dev resources: Read" scopes. Used only for your own Figma tool calls, never stored by mcp-figma.'
+        sensitive: true
 
 webSearch:
   searchProvider: 'searxng'

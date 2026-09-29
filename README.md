@@ -23,6 +23,7 @@ approval gate sitting in front of every write.
 | `mcp-agent-skills` | this repo's `agent-skills` submodule, built and served as an MCP server -- **internal only, no published port** |
 | `admin-panel` | [ClickHouse/librechat-admin-panel](https://github.com/ClickHouse/librechat-admin-panel) -- users/groups/roles/grants UI, see "Managing users" below |
 | `mcp-kb` | the knowledge catalog's MCP server (`kb_search`, `kb_get`) -- **internal only, no published port** |
+| `mcp-figma` | Figma design data for agents (`get_figma_data`), via a community MCP server on Figma's REST API, each user with their own token -- **internal only, no published port**; see [`docs/FIGMA.md`](docs/FIGMA.md) |
 | `kb-db` | the knowledge catalog's own Postgres (`kb/`, see [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) -- **internal only, no published port** |
 | `searxng` | self-hosted search backing LibreChat's native Web Search tool -- **internal only, no published port** |
 
@@ -37,6 +38,8 @@ volume holds and how backup/restore works.
 - Jira and/or Confluence credentials, if you want those tools live from
   the start (each user supplies their own via LibreChat's MCP Settings
   form -- see "Managing users" below)
+- (Optional) A Figma personal access token per user, for the Figma tool --
+  each user adds their own in the same form; see [`docs/FIGMA.md`](docs/FIGMA.md)
 - (Optional) An existing Keycloak instance, if you want SSO from day one --
   see [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md)
 
@@ -139,6 +142,7 @@ agentflow/
 ├── config/librechat.yaml.example  # model + MCP + tool-approval config template -- rendered to config/librechat.yaml (gitignored) by `make up`
 ├── kb/                      # the knowledge catalog module (its own tests: make kb-test)
 ├── agent-skills/            # git submodule -> arfar-x/agent-skills, pinned to a tag
+├── figma-mcp/               # mcp-figma's Dockerfile -- pins the Figma MCP server's package version
 ├── agents/                  # one YAML per agent (`make agent-export`, or write your own from base-agent-template.yaml.example)
 ├── mongo-init/              # declarative Mongo app-user creation (official mongo image convention)
 ├── scripts/                 # bootstrap, secret generation, backup, restore, agent sync
@@ -146,6 +150,7 @@ agentflow/
     ├── WALKTHROUGH.md       # first run, step by step, with the expected output of each command
     ├── AGENT_SYNC.md        # agent export/import: file format and semantics
     ├── KNOWLEDGE_BASE.md    # the kb catalog: sources, freshness, overrides, troubleshooting
+    ├── FIGMA.md             # the Figma tool: per-user setup, rate limits, why not Figma's own MCP server
     ├── CONFIGURATION.md     # every .env variable, what breaks if it's wrong
     ├── KEYCLOAK.md          # SSO setup and how to switch to/from it
     ├── OPERATIONS.md        # backups, upgrades, submodule bumps, restart order

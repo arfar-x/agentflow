@@ -172,6 +172,7 @@ agentflow-meilisearch-1       Up (healthy)
 agentflow-vectordb-1          Up (healthy)
 agentflow-rag_api-1           Up (healthy)
 agentflow-mcp-agent-skills-1  Up (healthy)
+agentflow-mcp-figma-1         Up (healthy)
 agentflow-admin-panel-1       Up
 agentflow-mcp-kb-1            Up (healthy)
 agentflow-kb-db-1             Up (healthy)

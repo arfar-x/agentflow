@@ -232,6 +232,46 @@ services:
       start_period: 15s
     mem_limit: 512m
 
+  # Figma design data for the agents, over MCP: Framelink's community server
+  # (figma-developer-mcp, pinned in figma-mcp/Dockerfile) on Figma's public
+  # REST API. Not Figma's own hosted server (mcp.figma.com) -- that one only
+  # completes OAuth for clients on Figma's MCP catalog allowlist, and
+  # LibreChat isn't on it; see docs/FIGMA.md.
+  #
+  # Same isolation rule as mcp-agent-skills: no published port, backend
+  # network only, reachability from `api` is the access control. Holds no
+  # credential of its own: each LibreChat user's Figma token arrives per
+  # request as an X-Figma-Token header (config/librechat.yaml's customUserVars)
+  # and is used for that request only. Deliberately no `env_file: .env` -- this
+  # is third-party code with no use for any of this stack's secrets.
+  mcp-figma:
+    build:
+      context: ./figma-mcp
+    restart: unless-stopped
+    environment:
+      # 0.0.0.0 so `api` can reach it by service name. The MCP SDK only
+      # enforces its localhost Host-header check when bound to localhost, so
+      # requests addressed to `mcp-figma:3333` are accepted as-is.
+      FRAMELINK_HOST: 0.0.0.0
+      FRAMELINK_PORT: "3333"
+      # Framelink sends usage telemetry to a third party by default.
+      FRAMELINK_TELEMETRY: "off"
+      DO_NOT_TRACK: "1"
+      # download_figma_images writes files into this container's filesystem,
+      # where no user or agent can ever read them -- so don't offer the tool.
+      SKIP_IMAGE_DOWNLOADS: "true"
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3333, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m
+
   # The knowledge catalog's own database -- deliberately NOT another database
   # inside `vectordb`. An upgrade or restore of LibreChat's RAG store can't
   # touch the catalog, backups and retention are independent, and `kb` never
