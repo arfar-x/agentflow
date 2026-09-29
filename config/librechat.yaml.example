@@ -51,23 +51,21 @@ endpoints:
       apiKey: '${VLLM_API_KEY}'
       baseURL: '${VLLM_BASE_URL}'
       models:
-        # The endpoint advertises this model id as "claude-sonnet-4-6" even
-        # though it's actually Qwen/Qwen3.6-35B-A3B-FP8. fetch pulls the id
-        # list from GET {baseURL}/models on its own -- it doesn't infer or
-        # rename anything, it just reports whatever id the endpoint
-        # advertises. The tokenConfig entry below is keyed to that exact id
-        # and is what stops LibreChat inferring Anthropic-specific behavior
-        # from the "claude-" name; it applies regardless of fetch, so this
-        # stays safe as long as every id this endpoint ever advertises has
-        # its own tokenConfig entry. `default` is kept only as the fallback
-        # LibreChat uses if a fetch call fails.
-        default: ['claude-sonnet-4-6']
+        # VLLM_DEFAULT_MODEL (.env) is the model id this endpoint's backend
+        # actually serves -- whether or not that id happens to start with
+        # "claude-" is irrelevant to LibreChat's routing; the tokenConfig
+        # entry below is keyed to the same id and is what stops LibreChat
+        # inferring Anthropic-specific behavior from a "claude-" name. fetch
+        # pulls the live id list from GET {baseURL}/models on its own; the
+        # `default` value here is only the fallback LibreChat uses if that
+        # fetch call fails.
+        default: ['REPLACE_ME_VLLM_DEFAULT_MODEL']
         fetch: true
       titleConvo: true
-      titleModel: 'claude-sonnet-4-6'
+      titleModel: 'REPLACE_ME_VLLM_DEFAULT_MODEL'
       modelDisplayLabel: 'Qwen3.6-35B-A3B'
       tokenConfig:
-        claude-sonnet-4-6:
+        REPLACE_ME_VLLM_DEFAULT_MODEL:
           context: REPLACE_ME_MODEL_CONTEXT_TOKENS
           prompt: 0
           completion: 0

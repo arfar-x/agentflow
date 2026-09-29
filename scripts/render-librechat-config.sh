@@ -25,6 +25,7 @@ source .env
 : "${AGENTS_RECURSION_LIMIT:=50}"
 : "${AGENTS_MAX_RECURSION_LIMIT:=100}"
 : "${MODEL_CONTEXT_TOKENS:=262144}"
+: "${VLLM_DEFAULT_MODEL:=your-model-id}"
 
 # summarization.retainRecent.tokens has no ratio field of its own in
 # LibreChat's schema (see config/librechat.yaml.example's comment there) --
@@ -44,6 +45,7 @@ sed \
   -e "s/REPLACE_ME_AGENTS_MAX_RECURSION_LIMIT/${AGENTS_MAX_RECURSION_LIMIT}/" \
   -e "s/REPLACE_ME_MODEL_CONTEXT_TOKENS/${MODEL_CONTEXT_TOKENS}/" \
   -e "s/REPLACE_ME_SUMMARIZATION_RETAIN_TOKENS/${SUMMARIZATION_RETAIN_TOKENS}/" \
+  -e "s/REPLACE_ME_VLLM_DEFAULT_MODEL/${VLLM_DEFAULT_MODEL}/" \
   config/librechat.yaml.example > config/librechat.yaml.tmp
 mv config/librechat.yaml.tmp config/librechat.yaml
-echo "    Done (recursionLimit=${AGENTS_RECURSION_LIMIT}, maxRecursionLimit=${AGENTS_MAX_RECURSION_LIMIT}, modelContextTokens=${MODEL_CONTEXT_TOKENS}, summarizationRetainTokens=${SUMMARIZATION_RETAIN_TOKENS})."
+echo "    Done (recursionLimit=${AGENTS_RECURSION_LIMIT}, maxRecursionLimit=${AGENTS_MAX_RECURSION_LIMIT}, modelContextTokens=${MODEL_CONTEXT_TOKENS}, summarizationRetainTokens=${SUMMARIZATION_RETAIN_TOKENS}, defaultModel=${VLLM_DEFAULT_MODEL})."
