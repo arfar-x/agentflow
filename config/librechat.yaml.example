@@ -52,13 +52,12 @@ endpoints:
       baseURL: '${VLLM_BASE_URL}'
       models:
         # VLLM_DEFAULT_MODEL (.env) is the model id this endpoint's backend
-        # actually serves -- whether or not that id happens to start with
-        # "claude-" is irrelevant to LibreChat's routing; the tokenConfig
-        # entry below is keyed to the same id and is what stops LibreChat
-        # inferring Anthropic-specific behavior from a "claude-" name. fetch
-        # pulls the live id list from GET {baseURL}/models on its own; the
-        # `default` value here is only the fallback LibreChat uses if that
-        # fetch call fails.
+        # actually serves -- whatever that id looks like, it's an opaque
+        # label to LibreChat's routing; the tokenConfig entry below is keyed
+        # to the same id and is what stops LibreChat inferring vendor-specific
+        # behavior from the name alone. fetch pulls the live id list from
+        # GET {baseURL}/models on its own; the `default` value here is only
+        # the fallback LibreChat uses if that fetch call fails.
         default: ['REPLACE_ME_VLLM_DEFAULT_MODEL']
         fetch: true
       titleConvo: true

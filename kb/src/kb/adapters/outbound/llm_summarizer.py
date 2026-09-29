@@ -7,10 +7,9 @@ keywords in *each* configured language, so a question asked in one can reach a
 document written in another.
 
 **Only the standard request shape is ever sent.** `system` + `user` messages,
-`response_format={"type": "json_object"}` -- nothing bent to accommodate one
-particular backend's quirks. An endpoint that does not honor part of that
-contract is a configuration problem to report, not a shape to work around;
-see `check()`.
+`response_format={"type": "json_object"}`. An endpoint that does not honor
+part of that contract is a configuration problem to report, not a shape to
+work around; see `check()`.
 
 **The document is untrusted input.** It was written by people outside this
 stack, and a page can contain anything -- including text shaped like
