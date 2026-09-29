@@ -73,6 +73,10 @@ reach for.) See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) "First run" for
 exactly what it does and doesn't do. Then open
 `http://localhost:${PORT:-3080}` and log in.
 
+New to this stack? [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) walks every
+step above (and filling the knowledge base) in order, with the actual
+output each command produces.
+
 ## Day to day
 
 ```bash
@@ -139,6 +143,7 @@ agentflow/
 ├── mongo-init/              # declarative Mongo app-user creation (official mongo image convention)
 ├── scripts/                 # bootstrap, secret generation, backup, restore, agent sync
 └── docs/
+    ├── WALKTHROUGH.md       # first run, step by step, with the expected output of each command
     ├── AGENT_SYNC.md        # agent export/import: file format and semantics
     ├── KNOWLEDGE_BASE.md    # the kb catalog: sources, freshness, overrides, troubleshooting
     ├── CONFIGURATION.md     # every .env variable, what breaks if it's wrong
