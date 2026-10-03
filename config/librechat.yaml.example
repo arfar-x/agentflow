@@ -76,6 +76,19 @@ summarization:
 # exemption. allowedAddresses (not allowedDomains) exempts just this one
 # address while leaving the default SSRF block active for everything else
 # a user might try to add.
+# Tool Library contents. LibreChat's built-in tool manifest (Google, DALL-E,
+# Wolfram, Tavily, Flux, OpenWeather, ...) needs each user's own third-party
+# API key and sends their data to that service, so only the keyless,
+# in-process ones are listed. includedTools is an allowlist: anything not
+# named here is hidden from the Tool Library and refused at run time. To
+# offer a hidden tool again, add its key (api/app/clients/tools/manifest.json
+# in LibreChat, e.g. `google`, `dalle`, `wolfram`) and restart api. Native
+# tools (web search, file search, memory, ...) and MCP servers aren't
+# affected by this list -- they follow endpoints.agents.capabilities below.
+includedTools:
+  - ask_user_question
+  - calculator
+
 mcpSettings:
   allowedAddresses:
     - 'mcp-agent-skills:8321'
@@ -129,6 +142,25 @@ endpoints:
     recursionLimit: REPLACE_ME_AGENTS_RECURSION_LIMIT
     maxRecursionLimit: REPLACE_ME_AGENTS_MAX_RECURSION_LIMIT
     allowedProviders: ['OpenAI Compatible']
+    # LibreChat's default capability set minus execute_code ("Run Code"),
+    # which needs a LibreChat Code API this stack doesn't run. This list
+    # REPLACES the default rather than trimming it, so a capability LibreChat
+    # adds to its defaults in a later release stays off until listed here.
+    # Re-enable Run Code by adding execute_code (once a Code API is configured).
+    capabilities:
+      - deferred_tools
+      - file_search
+      - web_search
+      - artifacts
+      - subagents
+      - actions
+      - context
+      - skills
+      - memory
+      - ask_user_question
+      - tools
+      - chain
+      - ocr
     # mode: bypass -- any tool call NOT matched below (every jira_*/
     # confluence_* read, doc_gen, get_skill, list_skills, ...) runs without
     # a prompt. `ask` is the actual allowlist of write/mutating calls that

@@ -268,6 +268,14 @@ permissions are only written at startup.
 - An admin agent reaches users only when shared -- the Share dialog, or
   `sharing:` in `agents/*.yaml` (e.g. the USER role as `agent_viewer`, use
   only).
+- The Tool Library offers the native tools, the MCP servers, and from
+  LibreChat's built-in tool manifest only what `includedTools` lists (Ask User,
+  Calculator). The rest of the manifest (Google, DALL-E, Wolfram, Tavily, ...)
+  needs each user's own third-party key and sends their data to that service,
+  so it's hidden. To offer one again, add its key to `includedTools` and
+  `make render-config && make restart SERVICE=api`. Run Code is off because
+  it needs a LibreChat Code API: `endpoints.agents.capabilities` lists every
+  default capability except `execute_code`.
 - In the Tool Library a user can add the native tools and the MCP servers.
   agent-skills' tools only appear once that user has entered their own
   Jira/Confluence details (MCP Settings); `kb` needs nothing.
