@@ -128,6 +128,31 @@ doesn't have a matching `tokenConfig` entry yet, add one in
 `config/librechat.yaml.example` (then `make render-config`) before that
 model shows up as safe to use.
 
+**Thinking and effort level.** The endpoint's `customParams` in
+`config/librechat.yaml.example` turn on two things:
+
+- *Thinking in the UI.* The gateway returns the model's reasoning in a
+  `reasoning` field (both in full responses and stream deltas). LibreChat reads
+  `reasoning_content` from custom endpoints unless told otherwise, so
+  `reasoningKey: reasoning` is what makes the thinking block appear at all.
+- *Effort selector.* The model settings panel (and the Agent Builder's model
+  parameters) show a reasoning-effort slider limited to what the gateway
+  accepts: Auto (send nothing, the gateway default `xhigh` applies), None
+  (thinking off), Low, Medium, XHigh. `minimal`, `high` and `max` are left out
+  because the gateway rejects them with a 400.
+
+Both were established by probing the endpoint, not from documentation:
+
+```bash
+curl -s -H "Authorization: Bearer $VLLM_API_KEY" -H 'Content-Type: application/json' \
+  "$VLLM_BASE_URL/chat/completions" \
+  -d '{"model":"<id>","max_tokens":64,"reasoning_effort":"high","messages":[{"role":"user","content":"hi"}]}'
+```
+
+An unsupported level answers with the supported list in the error. Rerun this
+when the gateway or its models change. The effort list is per endpoint, not per
+model, so a model that accepts a different set needs its own endpoint entry.
+
 ## MCP: agent-skills
 
 | Variable | Required | Notes |
@@ -181,17 +206,40 @@ default rather than adding to it. That default set includes:
   default 4096).
 - **Agent control in chat** -- interrupt, steer, and queue messages while a
   run is going, plus the tool-approval prompts our `toolApproval.ask` list
+- **Memories** -- the `memory:` block in `config/librechat.yaml.example` is what
+  makes saved memories reach the model. LibreChat treats a *missing* block as
+  "disabled": the Memories panel still lets users add entries, but none is ever
+  put into a conversation. With the block, a user's memories go into every run
+  of theirs (plain chats, and agents per their `memory_scope`) unless they opt
+  out under Settings > Personalization. Automatic extraction from chat stays
+  off (no `memory.agent`) -- it costs an extra LLM call per turn.
+- **Agents and missing MCP credentials** -- since v0.8.8 an agent whose tools
+  come from an MCP server refuses to run ("The agent is configured to use MCP
+  tools, but none are available") when that server gives the user no tools.
+  For agent-skills that means a user who hasn't entered their Jira/Confluence
+  details under MCP Settings can't use any agent that lists those tools.
+
+- **Scheduled Chats (beta)** -- upstream ships it off; this stack turns it on
+  with `interface.schedules: true` in `config/librechat.yaml.example` plus
+  `SCHEDULES_SINGLE_PROCESS=true` in `.env` (below). A scheduled run has nobody
+  to answer it, so a tool on `toolApproval`'s `ask` list is blocked, not run,
+  inside one -- schedule read-only work (reports, summaries). Set
+  `SCHEDULES_DISABLED=true` and restart `api` to stop every scheduled run at once.
   triggers. No configuration.
 - **Background tasks, live activity/tool timing, the context-usage gauge, and
   manual compaction** -- UI features, no configuration.
 
 Off by default, and deliberately not enabled here because each needs a service
-or identity setup this stack doesn't have: Scheduled Chats (beta), Code
+or identity setup this stack doesn't have: Code
 workspaces / `execute_code` (needs a LibreChat Code API), Programmatic Tool
 Calling (`programmatic_tools`, same), the Agents / Agent Management API
 (`endpoints.agents.managementApi`, needs OIDC), Agent Plugins
 (`DEPLOYMENT_PLUGINS_DIR`), Langfuse tracing and the trace viewer, and the
 `/api/docs` OpenAPI routes (`openapi.enabled`). See upstream's
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `SCHEDULES_SINGLE_PROCESS` | for Scheduled Chats | `true` in `.env.example` | Tells LibreChat this is its only process, which it requires before arming the scheduler without Redis. Missing, `api` logs `[schedules] scheduler NOT started ... Schedule writes are refused (503)` on every start and Scheduled Chats doesn't work. Must go back to `false` before ever running a second `api` replica (or add Redis with `USE_REDIS_STREAMS`). Changing it needs `docker compose up -d api` (a recreate, not a restart). |
+
 `librechat.example.yaml` and its config changelogs (v1.3.15-v1.3.17) before
 turning any of these on.
 
@@ -209,6 +257,8 @@ One startup log line is expected, not a fault:
 Two mutually exclusive modes -- see `docs/KEYCLOAK.md` for the full Keycloak
 walkthrough and how to switch between them.
 
+| `REFRESH_TOKEN_EXPIRY` | How long a login lasts, in ms: `604800000`, one week. Write plain numbers, not LibreChat's `1000 * 60 ...` arithmetic form -- `scripts/` `source .env` in bash, where that form breaks. Absolute, not sliding -- token refreshes keep the original expiry, so every user logs in again 7 days after their last login. Applies to local email/password logins; under Keycloak with `OPENID_REUSE_TOKENS=true` the IdP's own session lifetime takes over. Logins issued before a change keep their old expiry. |
+| `SESSION_EXPIRY` | The access token, in ms: `900000` (15 minutes). Renewed silently from the refresh token, so it doesn't make anyone log in more often -- it bounds how long a revoked or banned user's current token keeps working. Keep it short. |
 | Variable | Notes |
 |---|---|
 | `ALLOW_EMAIL_LOGIN` | `true` for local auth (default, simplest to start with). |

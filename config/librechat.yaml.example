@@ -11,6 +11,32 @@
 version: 1.3.17
 cache: true
 
+# Scheduled Chats (LibreChat v0.8.8, beta): users schedule an agent prompt to
+# run on a cron. Upstream ships it off; `true` turns it on with LibreChat's
+# default limits (an object form with maxPerUser, minIntervalMinutes, ... is
+# also accepted -- see upstream librechat.example.yaml). The boolean form
+# writes nothing into role permissions, and listing only `schedules` here
+# doesn't disturb the rest of the interface: LibreChat fills every unset
+# interface field from its own defaults at startup.
+#
+# Without Redis the scheduler also needs SCHEDULES_SINGLE_PROCESS=true (.env)
+# -- this stack runs exactly one api. A scheduled run can't get a human
+# answer, so toolApproval's `ask` tools are blocked, never run, inside one.
+interface:
+  schedules: true
+
+# Memories. LibreChat treats a MISSING `memory:` block as "memory disabled":
+# users could still add memories in the Memories panel, but none was ever put
+# into a conversation's context. This block turns that on. Memories a user
+# saves (or edits) are injected into every run of theirs -- plain chats and
+# agents (an agent's memory_scope picks its pool) -- unless they opt out under
+# Settings > Personalization. No `agent:` here, so nothing writes memories
+# automatically from chat; add `agent: { enabled: true, provider, model }`
+# to have a model extract them after each turn (one extra LLM call per turn).
+memory:
+  disabled: false
+  personalize: true
+
 # Auto-compact: once a conversation's history approaches the model's
 # context window, LibreChat summarizes the older turns into one checkpoint
 # instead of erroring or silently dropping messages -- the checkpoint plus
@@ -63,6 +89,26 @@ endpoints:
       titleConvo: true
       titleModel: 'REPLACE_ME_VLLM_DEFAULT_MODEL'
       modelDisplayLabel: 'Qwen3.6-35B-A3B'
+      # Reasoning ("thinking") for this gateway, probed against both models it
+      # serves (GET {baseURL}/models):
+      # - reasoningKey: the gateway returns thinking text in `reasoning`
+      #   (message and stream delta), not the `reasoning_content` LibreChat
+      #   reads from custom endpoints by default -- without this the UI shows
+      #   no thinking at all.
+      # - reasoningFormat: effort goes out as top-level `reasoning_effort`.
+      # - reasoning_effort options: the gateway accepts none (thinking off),
+      #   low, medium and xhigh (its default), and rejects minimal/high/max
+      #   with a 400 -- so the selector offers only those. '' is LibreChat's
+      #   "Auto": send nothing, the gateway default applies. This list is per
+      #   endpoint, not per model: a model with a different set needs its own
+      #   endpoint entry.
+      customParams:
+        defaultParamsEndpoint: 'custom'
+        reasoningKey: 'reasoning'
+        reasoningFormat: 'reasoning_effort'
+        paramDefinitions:
+          - key: 'reasoning_effort'
+            options: ['', 'none', 'low', 'medium', 'xhigh']
       tokenConfig:
         REPLACE_ME_VLLM_DEFAULT_MODEL:
           context: REPLACE_ME_MODEL_CONTEXT_TOKENS
