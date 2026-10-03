@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config librechat-migrate kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -37,6 +37,9 @@ secrets: ## Generate the secrets .env needs (refuses to run on a live deployment
 
 render-config: ## Re-render config/librechat.yaml from its template + .env (e.g. after changing AGENTS_RECURSION_LIMIT) -- run `make restart SERVICE=api` after
 	scripts/render-librechat-config.sh
+
+librechat-migrate: ## LibreChat's one-off DB migration for an upgrade (dry run; APPLY=1 stops api, applies, restarts) -- see docs/OPERATIONS.md "Upgrades"
+	scripts/librechat-migrate.sh $(if $(APPLY),--apply,)
 
 backup: ## Snapshot every named volume + .env into backups/<timestamp>/
 	scripts/backup.sh
