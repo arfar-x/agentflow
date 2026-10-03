@@ -249,6 +249,77 @@ One startup log line is expected, not a fault:
   `JWT_SECRET`/`JWT_REFRESH_SECRET` never change -- see
   [`OPERATIONS.md`](OPERATIONS.md) "Secrets".
 
+### Web search
+
+Every user gets web search with no keys of their own. LibreChat's web search
+runs three steps, each configured once for the whole deployment in
+`config/librechat.yaml.example`'s `webSearch:` block:
+
+| Step | Service | Notes |
+|---|---|---|
+| Search | `searxng` | Finds result links. `SEARXNG_INSTANCE_URL`. |
+| Scrape | `crw` ([fastcrw/crw](https://github.com/fastcrw/crw)) | Fetches the top pages and returns them as markdown. LibreChat calls it as a self-hosted Firecrawl (`scraperProvider: firecrawl`); crw implements Firecrawl's `/v1` and `/v2` scrape API. `FIRECRAWL_API_URL=http://crw:3000`; `FIRECRAWL_API_KEY` is a placeholder (crw has no auth, but LibreChat won't scrape with an empty key). |
+| Rerank | none | `rerankerType: none`. The rerankers LibreChat supports (Jina, Cohere) are paid APIs. |
+
+LibreChat won't enable web search without a scraper, so `crw` is required, not
+optional.
+
+**JavaScript-only pages.** `crw` runs with `CRW_RENDERER__MODE=none`: plain HTTP
+plus its built-in browser-impersonation fallback, no headless browser. Pages
+that only render their content in JavaScript come back empty or fail;
+LibreChat then logs `[web_search] scrape ... failed=N` and answers from the
+pages that worked. If that happens often, add crw's LightPanda sidecar (a
+lightweight headless browser):
+
+```yaml
+# docker-compose.yml
+  lightpanda:
+    image: lightpanda/browser:<pinned tag>   # pin a tag, as for every image here
+    restart: unless-stopped
+    networks: [backend]                      # internal only, like crw
+  crw:
+    environment:
+      CRW_RENDERER__MODE: auto               # was: none
+      CRW_RENDERER__LIGHTPANDA__WS_URL: ws://lightpanda:9222/
+    depends_on: [lightpanda]
+```
+
+then `docker compose up -d crw lightpanda`. LightPanda can still fail on heavy
+single-page apps; crw's next tier is headless Chrome (`chromedp/headless-shell`,
+`CRW_RENDERER__CHROME__WS_URL`), at a few hundred MB of RAM more. See crw's own
+`docker-compose.yml` and `config.default.toml` for the full renderer settings.
+
+### Who can create and see agents
+
+`interface.agents.create: true` in `config/librechat.yaml.example` lets every
+role, USER included, open the Agent Builder. LibreChat writes it into the role
+permissions at `api` startup, so it overrides an Admin Panel change to
+`AGENTS.CREATE` on the next restart. A config change here needs
+`make restart SERVICE=api`: LibreChat reloads `librechat.yaml` live, but role
+permissions are only written at startup.
+
+| Who | Sees | Edits / deletes |
+|---|---|---|
+| ADMIN | every agent (the `manage:agents` system grant bypasses per-agent ACLs, including in lists) | every agent |
+| USER | their own agents, plus the admin agents shared with them | only their own |
+
+- A user's agent is private to them and admins: USER has no `AGENTS.SHARE`, so
+  there is no Share button for them.
+- An admin agent reaches users only when shared -- the Share dialog, or
+  `sharing:` in `agents/*.yaml` (e.g. the USER role as `agent_viewer`, use
+  only).
+- The Tool Library offers the native tools, the MCP servers, and from
+  LibreChat's built-in tool manifest only what `includedTools` lists (Ask User,
+  Calculator). The rest of the manifest (Google, DALL-E, Wolfram, Tavily, ...)
+  needs each user's own third-party key and sends their data to that service,
+  so it's hidden. To offer one again, add its key to `includedTools` and
+  `make render-config && make restart SERVICE=api`. Run Code is off because
+  it needs a LibreChat Code API: `endpoints.agents.capabilities` lists every
+  default capability except `execute_code`.
+- In the Tool Library a user can add the native tools and the MCP servers.
+  agent-skills' tools only appear once that user has entered their own
+  Jira/Confluence details (MCP Settings); `kb` needs nothing.
+
 ## Auth
 
 Two mutually exclusive modes -- see `docs/KEYCLOAK.md` for the full Keycloak

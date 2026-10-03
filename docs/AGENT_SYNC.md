@@ -11,6 +11,12 @@ make agent-import DRY_RUN=1     # preview what an import would change
 make agent-import               # agents/*.yaml -> database
 ```
 
+Only agents owned by an `ADMIN`-role account are exported: those are the
+deployment's own agents. Agents regular users create for themselves are
+private to them, so they never become files (and never end up in git), and
+the export never treats them as deleted. Import is unaffected: it only touches
+agents that have a file.
+
 Both need the stack running (`make up`). They run
 [`scripts/agent-sync.js`](../scripts/agent-sync.js) inside the `api`
 container, using LibreChat's own models and permission methods, so nothing

@@ -74,8 +74,8 @@ on its own. Day to day it is `make kb-status`, `make kb-sources`,
 `make kb-sync SOURCE=…` -- see
 [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md).
 
-Agents are managed declaratively: `make agent-export` writes every agent
-(definition, handoff/subagent links, sharing) from the database to
+Agents are managed declaratively: `make agent-export` writes every
+admin-owned agent (definition, handoff/subagent links, sharing) from the database to
 `agents/*.yaml`, and `make agent-import` (preview with `DRY_RUN=1`) applies
 those files back. The files are the source of truth for the agents they list --
 see [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md).
@@ -116,8 +116,9 @@ substitute.
   only thing end users talk to. It calls `mongodb` (users/conversations/
   agent defs), `meilisearch` (search), `rag_api` + `vectordb` (per-
   conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
-  tools, over MCP), and `searxng` (native web search).
-- `mcp-agent-skills`, `mcp-kb` and `searxng` are **internal-only, no
+  tools, over MCP), and `searxng` + `crw` (native web search: search, then
+  page scraping).
+- `mcp-agent-skills`, `mcp-kb`, `searxng` and `crw` are **internal-only, no
   published port, `backend` network only** -- reachability from `api` is
   their only access control (MCP's HTTP transport has no auth of its own).
   Never add a `ports:` entry to any of them. `mcp-kb` goes further and takes

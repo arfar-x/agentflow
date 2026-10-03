@@ -24,6 +24,16 @@ cache: true
 # answer, so toolApproval's `ask` tools are blocked, never run, inside one.
 interface:
   schedules: true
+  # Agent creation for every role, including USER. LibreChat writes this into
+  # the role permissions at each startup (so it overrides an Admin Panel edit
+  # of AGENTS.CREATE). `share`/`public` are deliberately left out: when absent,
+  # each role keeps its stored value -- USER can't share (its agents stay
+  # private to their owner), ADMIN keeps sharing. Who sees which agent is the
+  # per-agent ACL: an owner manages their own; ADMIN's manage:agents system
+  # grant sees and edits every agent; an admin agent reaches users only when
+  # shared with them (the Share dialog, or `sharing:` in agents/*.yaml).
+  agents:
+    create: true
 
 # Memories. LibreChat treats a MISSING `memory:` block as "memory disabled":
 # users could still add memories in the Memories panel, but none was ever put
@@ -66,6 +76,19 @@ summarization:
 # exemption. allowedAddresses (not allowedDomains) exempts just this one
 # address while leaving the default SSRF block active for everything else
 # a user might try to add.
+# Tool Library contents. LibreChat's built-in tool manifest (Google, DALL-E,
+# Wolfram, Tavily, Flux, OpenWeather, ...) needs each user's own third-party
+# API key and sends their data to that service, so only the keyless,
+# in-process ones are listed. includedTools is an allowlist: anything not
+# named here is hidden from the Tool Library and refused at run time. To
+# offer a hidden tool again, add its key (api/app/clients/tools/manifest.json
+# in LibreChat, e.g. `google`, `dalle`, `wolfram`) and restart api. Native
+# tools (web search, file search, memory, ...) and MCP servers aren't
+# affected by this list -- they follow endpoints.agents.capabilities below.
+includedTools:
+  - ask_user_question
+  - calculator
+
 mcpSettings:
   allowedAddresses:
     - 'mcp-agent-skills:8321'
@@ -119,6 +142,25 @@ endpoints:
     recursionLimit: REPLACE_ME_AGENTS_RECURSION_LIMIT
     maxRecursionLimit: REPLACE_ME_AGENTS_MAX_RECURSION_LIMIT
     allowedProviders: ['OpenAI Compatible']
+    # LibreChat's default capability set minus execute_code ("Run Code"),
+    # which needs a LibreChat Code API this stack doesn't run. This list
+    # REPLACES the default rather than trimming it, so a capability LibreChat
+    # adds to its defaults in a later release stays off until listed here.
+    # Re-enable Run Code by adding execute_code (once a Code API is configured).
+    capabilities:
+      - deferred_tools
+      - file_search
+      - web_search
+      - artifacts
+      - subagents
+      - actions
+      - context
+      - skills
+      - memory
+      - ask_user_question
+      - tools
+      - chain
+      - ocr
     # mode: bypass -- any tool call NOT matched below (every jira_*/
     # confluence_* read, doc_gen, get_skill, list_skills, ...) runs without
     # a prompt. `ask` is the actual allowlist of write/mutating calls that
@@ -247,8 +289,19 @@ webSearch:
   # value, so it must be an env reference matching the documented
   # pattern (see .env's SEARXNG_INSTANCE_URL).
   searxngInstanceUrl: '${SEARXNG_INSTANCE_URL}'
+  # LibreChat's web search needs a scraper as well as a search provider (it
+  # stays disabled without one). The in-Docker crw service stands in for a
+  # self-hosted Firecrawl; both values are env references for the same reason
+  # as searxngInstanceUrl. FIRECRAWL_API_KEY is a placeholder (see .env).
+  # Configured here for every user, so nobody is asked for web-search keys.
+  scraperProvider: 'firecrawl'
+  firecrawlApiUrl: '${FIRECRAWL_API_URL}'
+  firecrawlApiKey: '${FIRECRAWL_API_KEY}'
+  # The rerankers (Jina, Cohere) are paid APIs; results keep SearXNG's order.
+  rerankerType: 'none'
   # webSearch has its own SSRF allowlist, separate from mcpSettings' --
   # confirmed by hitting "SSRF protection: searxng resolved to blocked
   # address" with only mcpSettings.allowedAddresses set.
   allowedAddresses:
     - 'searxng:8080'
+    - 'crw:3000'
