@@ -110,11 +110,9 @@ ADMIN_USERNAME=admin
 **Optional, fill in if you want it from day one:**
 
 ```bash
-# Jira/Confluence as agent tools (each user can instead supply their own
-# credentials in the chat UI -- see README.md "Managing users")
+# Jira/Confluence as agent tools. Each user enters their own URL and
+# credentials in the chat UI (MCP Settings) -- nothing per-user goes here.
 MCP_TOOLSETS="jira confluence"
-JIRA_BASE_URL=... JIRA_USERNAME=... JIRA_PASSWORD=...
-CONFLUENCE_BASE_URL=... CONFLUENCE_USERNAME=... CONFLUENCE_PASSWORD=...
 CONFLUENCE_DEPLOYMENT_TYPE=cloud   # required if confluence is in MCP_TOOLSETS
 
 # Knowledge base -- see step 7 below; can be configured later, the stack
@@ -207,10 +205,10 @@ Full depth: [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md). Short version:
 Add to `.env`:
 
 ```bash
-KB_CONFLUENCE_BASE_URL=https://wiki.example.com   # falls back to CONFLUENCE_* if unset
+KB_CONFLUENCE_BASE_URL=https://wiki.example.com
 KB_CONFLUENCE_USERNAME=kb-bot
 KB_CONFLUENCE_PASSWORD=...                        # or KB_CONFLUENCE_PAT
-KB_JIRA_BASE_URL=https://jira.example.com         # falls back to JIRA_*
+KB_JIRA_BASE_URL=https://jira.example.com
 KB_JIRA_PAT=...
 
 KB_SUMMARIZER_URL=${VLLM_BASE_URL}                # or a different endpoint entirely

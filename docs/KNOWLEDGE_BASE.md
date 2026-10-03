@@ -33,10 +33,10 @@ that check still happens at the source, as the user.
 
 ```bash
 # .env
-KB_CONFLUENCE_BASE_URL=https://wiki.internal   # falls back to CONFLUENCE_* if unset
+KB_CONFLUENCE_BASE_URL=https://wiki.internal
 KB_CONFLUENCE_USERNAME=kb-bot
 KB_CONFLUENCE_PASSWORD=...                     # or KB_CONFLUENCE_PAT
-KB_JIRA_BASE_URL=https://jira.internal         # falls back to JIRA_*
+KB_JIRA_BASE_URL=https://jira.internal
 KB_JIRA_PAT=...
 GITLAB_BASE_URL=https://gitlab.internal
 GITLAB_TOKEN=...                               # read_api scope is enough

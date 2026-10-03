@@ -158,13 +158,10 @@ model, so a model that accepts a different set needs its own endpoint entry.
 | Variable | Required | Notes |
 |---|---|---|
 | `MCP_TOOLSETS` | no | Default `jira`. **Quote it** if it lists more than one (`MCP_TOOLSETS="jira confluence"`) -- `.env` is also `source`d directly by `scripts/bootstrap.sh`/`make up`, and an unquoted space-separated value breaks that (bash tries to run the second word as a command). Space-separated toolset names, each needing `skills/<name>/requirements.txt` to exist in the `agent-skills` submodule. Changing this requires `docker compose up -d --build mcp-agent-skills`. |
-| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | no (server-level) | Left blank in this deployment by design -- every Jira tool call's base URL and credential comes per-user instead, via LibreChat's `customUserVars` (`config/librechat.yaml`, injected as `X-Agent-Skills-Env-*` headers). Set these here only if you want a shared fallback identity instead of per-user. |
+| Jira/Confluence base URL, username, password, default project/space | -- | Not `.env` variables. Each user enters their own in the chat UI (MCP Settings); LibreChat's `customUserVars` (`config/librechat.yaml.example`) sends them to mcp-agent-skills as `X-Agent-Skills-Env-*` headers on every call. There's no shared fallback identity. |
 | `JIRA_AUTO_CONFIRM_WRITES` | no | Leave `false` in production. LibreChat's own `toolApproval` gate (in `config/librechat.yaml`) is the intended approval surface; this variable existing at all is an escape hatch for automation you explicitly trust, not something to flip for convenience. |
-| `JIRA_DEFAULT_PROJECT` | no | Only used by `jira_triage`, and (in this deployment) supplied per-user via `customUserVars` like the credential -- see above. |
 | `JIRA_DEPLOYMENT_TYPE` | no | Only required the first time `create_issue`/`edit_issue` sets an assignee. |
-| `CONFLUENCE_BASE_URL` / `CONFLUENCE_USERNAME` / `CONFLUENCE_PASSWORD` | no (server-level) | Same per-user pattern as Jira above -- left blank here, supplied per-user via `customUserVars`. |
 | `CONFLUENCE_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. |
-| `CONFLUENCE_DEFAULT_SPACE` | no | Used by `my_pages`/`get_page_by_title` when no `--space_key` is given; supplied per-user via `customUserVars` in this deployment. |
 | `CONFLUENCE_DEPLOYMENT_TYPE` | yes, if `confluence` is in `MCP_TOOLSETS` | `cloud` or `server` -- unlike Jira, this one is required: Confluence's REST API is mounted at a different path per deployment (Cloud: `/wiki/rest/api`, Server/DC: `/rest/api`). Server-level, not per-user -- the whole org's Confluence instance is one deployment type. |
 
 ## Summarization (auto-compact)
@@ -206,6 +203,9 @@ default rather than adding to it. That default set includes:
   default 4096).
 - **Agent control in chat** -- interrupt, steer, and queue messages while a
   run is going, plus the tool-approval prompts our `toolApproval.ask` list
+  triggers. No configuration.
+- **Background tasks, live activity/tool timing, the context-usage gauge, and
+  manual compaction** -- UI features, no configuration.
 - **Memories** -- the `memory:` block in `config/librechat.yaml.example` is what
   makes saved memories reach the model. LibreChat treats a *missing* block as
   "disabled": the Memories panel still lets users add entries, but none is ever
@@ -225,9 +225,6 @@ default rather than adding to it. That default set includes:
   to answer it, so a tool on `toolApproval`'s `ask` list is blocked, not run,
   inside one -- schedule read-only work (reports, summaries). Set
   `SCHEDULES_DISABLED=true` and restart `api` to stop every scheduled run at once.
-  triggers. No configuration.
-- **Background tasks, live activity/tool timing, the context-usage gauge, and
-  manual compaction** -- UI features, no configuration.
 
 Off by default, and deliberately not enabled here because each needs a service
 or identity setup this stack doesn't have: Code
@@ -236,12 +233,12 @@ Calling (`programmatic_tools`, same), the Agents / Agent Management API
 (`endpoints.agents.managementApi`, needs OIDC), Agent Plugins
 (`DEPLOYMENT_PLUGINS_DIR`), Langfuse tracing and the trace viewer, and the
 `/api/docs` OpenAPI routes (`openapi.enabled`). See upstream's
+`librechat.example.yaml` and its config changelogs (v1.3.15-v1.3.17) before
+turning any of these on.
+
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `SCHEDULES_SINGLE_PROCESS` | for Scheduled Chats | `true` in `.env.example` | Tells LibreChat this is its only process, which it requires before arming the scheduler without Redis. Missing, `api` logs `[schedules] scheduler NOT started ... Schedule writes are refused (503)` on every start and Scheduled Chats doesn't work. Must go back to `false` before ever running a second `api` replica (or add Redis with `USE_REDIS_STREAMS`). Changing it needs `docker compose up -d api` (a recreate, not a restart). |
-
-`librechat.example.yaml` and its config changelogs (v1.3.15-v1.3.17) before
-turning any of these on.
 
 One startup log line is expected, not a fault:
 
@@ -257,11 +254,11 @@ One startup log line is expected, not a fault:
 Two mutually exclusive modes -- see `docs/KEYCLOAK.md` for the full Keycloak
 walkthrough and how to switch between them.
 
-| `REFRESH_TOKEN_EXPIRY` | How long a login lasts, in ms: `604800000`, one week. Write plain numbers, not LibreChat's `1000 * 60 ...` arithmetic form -- `scripts/` `source .env` in bash, where that form breaks. Absolute, not sliding -- token refreshes keep the original expiry, so every user logs in again 7 days after their last login. Applies to local email/password logins; under Keycloak with `OPENID_REUSE_TOKENS=true` the IdP's own session lifetime takes over. Logins issued before a change keep their old expiry. |
-| `SESSION_EXPIRY` | The access token, in ms: `900000` (15 minutes). Renewed silently from the refresh token, so it doesn't make anyone log in more often -- it bounds how long a revoked or banned user's current token keeps working. Keep it short. |
 | Variable | Notes |
 |---|---|
 | `ALLOW_EMAIL_LOGIN` | `true` for local auth (default, simplest to start with). |
+| `REFRESH_TOKEN_EXPIRY` | How long a login lasts, in ms: `604800000`, one week. Write plain numbers, not LibreChat's `1000 * 60 ...` arithmetic form -- `scripts/` `source .env` in bash, where that form breaks. Absolute, not sliding -- token refreshes keep the original expiry, so every user logs in again 7 days after their last login. Applies to local email/password logins; under Keycloak with `OPENID_REUSE_TOKENS=true` the IdP's own session lifetime takes over. Logins issued before a change keep their old expiry. |
+| `SESSION_EXPIRY` | The access token, in ms: `900000` (15 minutes). Renewed silently from the refresh token, so it doesn't make anyone log in more often -- it bounds how long a revoked or banned user's current token keeps working. Keep it short. |
 | `ALLOW_REGISTRATION` | Keep `false` even under local auth unless you specifically want open self-registration. New accounts normally come from `make user-create` instead -- see README.md "Managing users". |
 | `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_USERNAME` / `ADMIN_PASSWORD` | The one account `make up`/`scripts/bootstrap.sh` creates automatically on a fresh deployment (skipped once any user exists). Auto-promoted to LibreChat's `ADMIN` role because it's the first user registered in this unscoped, single-tenant deployment -- see [Access Control](https://www.librechat.ai/docs/features/access_control#built-in-system-roles). Promoting anyone else to `ADMIN` afterwards is done from the Admin Panel (below), not by editing `.env`. |
 | `OPENID_*` (commented out by default) | The whole Keycloak OIDC block. Uncommenting it and setting `ALLOW_EMAIL_LOGIN=false` switches auth modes on the next `api` restart -- no rebuild. |
