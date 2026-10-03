@@ -249,6 +249,46 @@ One startup log line is expected, not a fault:
   `JWT_SECRET`/`JWT_REFRESH_SECRET` never change -- see
   [`OPERATIONS.md`](OPERATIONS.md) "Secrets".
 
+### Web search
+
+Every user gets web search with no keys of their own. LibreChat's web search
+runs three steps, each configured once for the whole deployment in
+`config/librechat.yaml.example`'s `webSearch:` block:
+
+| Step | Service | Notes |
+|---|---|---|
+| Search | `searxng` | Finds result links. `SEARXNG_INSTANCE_URL`. |
+| Scrape | `crw` ([fastcrw/crw](https://github.com/fastcrw/crw)) | Fetches the top pages and returns them as markdown. LibreChat calls it as a self-hosted Firecrawl (`scraperProvider: firecrawl`); crw implements Firecrawl's `/v1` and `/v2` scrape API. `FIRECRAWL_API_URL=http://crw:3000`; `FIRECRAWL_API_KEY` is a placeholder (crw has no auth, but LibreChat won't scrape with an empty key). |
+| Rerank | none | `rerankerType: none`. The rerankers LibreChat supports (Jina, Cohere) are paid APIs. |
+
+LibreChat won't enable web search without a scraper, so `crw` is required, not
+optional.
+
+**JavaScript-only pages.** `crw` runs with `CRW_RENDERER__MODE=none`: plain HTTP
+plus its built-in browser-impersonation fallback, no headless browser. Pages
+that only render their content in JavaScript come back empty or fail;
+LibreChat then logs `[web_search] scrape ... failed=N` and answers from the
+pages that worked. If that happens often, add crw's LightPanda sidecar (a
+lightweight headless browser):
+
+```yaml
+# docker-compose.yml
+  lightpanda:
+    image: lightpanda/browser:<pinned tag>   # pin a tag, as for every image here
+    restart: unless-stopped
+    networks: [backend]                      # internal only, like crw
+  crw:
+    environment:
+      CRW_RENDERER__MODE: auto               # was: none
+      CRW_RENDERER__LIGHTPANDA__WS_URL: ws://lightpanda:9222/
+    depends_on: [lightpanda]
+```
+
+then `docker compose up -d crw lightpanda`. LightPanda can still fail on heavy
+single-page apps; crw's next tier is headless Chrome (`chromedp/headless-shell`,
+`CRW_RENDERER__CHROME__WS_URL`), at a few hundred MB of RAM more. See crw's own
+`docker-compose.yml` and `config.default.toml` for the full renderer settings.
+
 ### Who can create and see agents
 
 `interface.agents.create: true` in `config/librechat.yaml.example` lets every

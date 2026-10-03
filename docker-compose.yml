@@ -50,6 +50,8 @@ services:
         condition: service_started
       mcp-agent-skills:
         condition: service_healthy
+      crw:
+        condition: service_started
     env_file: .env
     environment:
       HOST: 0.0.0.0
@@ -396,3 +398,25 @@ services:
       retries: 5
       start_period: 15s
     mem_limit: 512m
+
+  # Page scraper for LibreChat's web search: SearXNG finds the links, crw
+  # fetches the pages and returns them as markdown. LibreChat talks to it as
+  # a self-hosted Firecrawl (webSearch.scraperProvider: firecrawl) -- crw
+  # implements Firecrawl's /v1 and /v2 scrape API. Internal-only like
+  # searxng: no published port, `backend` network only. It has no auth of its
+  # own (no [auth] api_keys configured), which is why it must never get a
+  # `ports:` entry. CRW_RENDERER__MODE=none: plain HTTP plus crw's built-in
+  # browser-impersonation fallback, no headless-browser sidecar -- see
+  # docs/CONFIGURATION.md "Web search" for adding LightPanda when JS-only
+  # pages come back empty. The image ships no curl/wget, so there is no
+  # healthcheck; it serves GET /health on port 3000.
+  crw:
+    image: ghcr.io/fastcrw/crw:0.37.2
+    restart: unless-stopped
+    environment:
+      CRW_RENDERER__MODE: none
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    mem_limit: 256m

@@ -25,6 +25,7 @@ approval gate sitting in front of every write.
 | `mcp-kb` | the knowledge catalog's MCP server (`kb_search`, `kb_get`) -- **internal only, no published port** |
 | `kb-db` | the knowledge catalog's own Postgres (`kb/`, see [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) -- **internal only, no published port** |
 | `searxng` | self-hosted search backing LibreChat's native Web Search tool -- **internal only, no published port** |
+| `crw` | [fastcrw/crw](https://github.com/fastcrw/crw), a Firecrawl-compatible page scraper: fetches the pages web search found and returns them as markdown -- **internal only, no published port** |
 
 Everything durable lives in named Docker volumes; every service config is a
 mounted file. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for what each

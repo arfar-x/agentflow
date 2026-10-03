@@ -289,8 +289,19 @@ webSearch:
   # value, so it must be an env reference matching the documented
   # pattern (see .env's SEARXNG_INSTANCE_URL).
   searxngInstanceUrl: '${SEARXNG_INSTANCE_URL}'
+  # LibreChat's web search needs a scraper as well as a search provider (it
+  # stays disabled without one). The in-Docker crw service stands in for a
+  # self-hosted Firecrawl; both values are env references for the same reason
+  # as searxngInstanceUrl. FIRECRAWL_API_KEY is a placeholder (see .env).
+  # Configured here for every user, so nobody is asked for web-search keys.
+  scraperProvider: 'firecrawl'
+  firecrawlApiUrl: '${FIRECRAWL_API_URL}'
+  firecrawlApiKey: '${FIRECRAWL_API_KEY}'
+  # The rerankers (Jina, Cohere) are paid APIs; results keep SearXNG's order.
+  rerankerType: 'none'
   # webSearch has its own SSRF allowlist, separate from mcpSettings' --
   # confirmed by hitting "SSRF protection: searxng resolved to blocked
   # address" with only mcpSettings.allowedAddresses set.
   allowedAddresses:
     - 'searxng:8080'
+    - 'crw:3000'
