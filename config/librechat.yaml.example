@@ -24,6 +24,16 @@ cache: true
 # answer, so toolApproval's `ask` tools are blocked, never run, inside one.
 interface:
   schedules: true
+  # Agent creation for every role, including USER. LibreChat writes this into
+  # the role permissions at each startup (so it overrides an Admin Panel edit
+  # of AGENTS.CREATE). `share`/`public` are deliberately left out: when absent,
+  # each role keeps its stored value -- USER can't share (its agents stay
+  # private to their owner), ADMIN keeps sharing. Who sees which agent is the
+  # per-agent ACL: an owner manages their own; ADMIN's manage:agents system
+  # grant sees and edits every agent; an admin agent reaches users only when
+  # shared with them (the Share dialog, or `sharing:` in agents/*.yaml).
+  agents:
+    create: true
 
 # Memories. LibreChat treats a MISSING `memory:` block as "memory disabled":
 # users could still add memories in the Memories panel, but none was ever put

@@ -249,6 +249,29 @@ One startup log line is expected, not a fault:
   `JWT_SECRET`/`JWT_REFRESH_SECRET` never change -- see
   [`OPERATIONS.md`](OPERATIONS.md) "Secrets".
 
+### Who can create and see agents
+
+`interface.agents.create: true` in `config/librechat.yaml.example` lets every
+role, USER included, open the Agent Builder. LibreChat writes it into the role
+permissions at `api` startup, so it overrides an Admin Panel change to
+`AGENTS.CREATE` on the next restart. A config change here needs
+`make restart SERVICE=api`: LibreChat reloads `librechat.yaml` live, but role
+permissions are only written at startup.
+
+| Who | Sees | Edits / deletes |
+|---|---|---|
+| ADMIN | every agent (the `manage:agents` system grant bypasses per-agent ACLs, including in lists) | every agent |
+| USER | their own agents, plus the admin agents shared with them | only their own |
+
+- A user's agent is private to them and admins: USER has no `AGENTS.SHARE`, so
+  there is no Share button for them.
+- An admin agent reaches users only when shared -- the Share dialog, or
+  `sharing:` in `agents/*.yaml` (e.g. the USER role as `agent_viewer`, use
+  only).
+- In the Tool Library a user can add the native tools and the MCP servers.
+  agent-skills' tools only appear once that user has entered their own
+  Jira/Confluence details (MCP Settings); `kb` needs nothing.
+
 ## Auth
 
 Two mutually exclusive modes -- see `docs/KEYCLOAK.md` for the full Keycloak
