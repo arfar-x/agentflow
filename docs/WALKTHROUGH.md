@@ -91,7 +91,7 @@ reference for every variable: [`CONFIGURATION.md`](CONFIGURATION.md).
 **Required for the stack to start at all:**
 
 ```bash
-LIBRECHAT_IMAGE_TAG=v0.8.7        # a real published tag -- check upstream first
+LIBRECHAT_IMAGE_TAG=v0.8.8        # a real published tag -- check upstream first
 RAG_API_IMAGE_TAG=v0.9.0
 
 VLLM_BASE_URL=https://your-llm-host/v1

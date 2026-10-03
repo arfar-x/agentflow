@@ -216,6 +216,9 @@ function slugify(name) {
 function loadModels() {
   // connect.js registers the `~` module alias (-> /app/api) LibreChat's own
   // config scripts rely on, and connects to the database.
+  // Index builds are the running api's job: started here they'd be cut off
+  // when this short-lived process disconnects, logging "Index build failed".
+  process.env.MONGO_AUTO_INDEX = 'false';
   const connect = require('/app/config/connect');
   return connect().then(() => {
     const models = require('~/db/models');

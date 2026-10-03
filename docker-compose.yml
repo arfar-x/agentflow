@@ -24,7 +24,10 @@ volumes:
 
 services:
   api:
-    image: ghcr.io/danny-avila/librechat:${LIBRECHAT_IMAGE_TAG:?set LIBRECHAT_IMAGE_TAG in .env}
+    # registry.librechat.ai is the registry upstream's own compose files pull
+    # from since v0.8.8 (the project moved to the LibreChat-AI org). The old
+    # ghcr.io/danny-avila mirror stops at v0.8.7 -- don't point back at it.
+    image: registry.librechat.ai/librechat-ai/librechat:${LIBRECHAT_IMAGE_TAG:?set LIBRECHAT_IMAGE_TAG in .env}
     restart: unless-stopped
     ports:
       # Bound to all interfaces (0.0.0.0) so clients on the LAN can reach the
@@ -178,7 +181,7 @@ services:
     mem_limit: 1g
 
   rag_api:
-    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:${RAG_API_IMAGE_TAG:?set RAG_API_IMAGE_TAG in .env}
+    image: registry.librechat.ai/librechat-ai/librechat-rag-api-dev-lite:${RAG_API_IMAGE_TAG:?set RAG_API_IMAGE_TAG in .env}
     restart: unless-stopped
     # Same model-host pin as `api` -- rag_api also calls VLLM_BASE_URL (for
     # embeddings). See the api.extra_hosts comment above.

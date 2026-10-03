@@ -165,6 +165,45 @@ automatically raises this too, on the next `make render-config` +
 | `AGENTS_RECURSION_LIMIT` | no | `50` | How many tool-call steps a single agent run starts with before LibreChat raises `GraphRecursionError` and aborts it. Rendered into `config/librechat.yaml`'s `endpoints.agents.recursionLimit` -- see the note at the top of this doc. |
 | `AGENTS_MAX_RECURSION_LIMIT` | no | `100` | The ceiling a user can raise `recursionLimit` to from the UI; rendered into `endpoints.agents.maxRecursionLimit`. Changing either variable needs `make render-config` (or a full `make up`) plus `make restart SERVICE=api` to take effect -- it's read once at container start, not live. |
 
+### What's on by default (LibreChat v0.8.8+)
+
+`config/librechat.yaml.example` sets no `endpoints.agents.capabilities` list,
+so every capability in LibreChat's default set is available -- add a
+`capabilities:` list only to take some away, and remember it replaces the
+default rather than adding to it. That default set includes:
+
+- **`ask_user_question`** -- an agent can pause and ask the user a question
+  (with optional choices) instead of guessing. Like any tool, an agent only
+  has it if `ask_user_question` is in its `tools` list (`agents/*.yaml`, or the
+  Agent Builder). Answers are carried forward in the run's context even after
+  the turn that held them is compacted; tune or disable that with
+  `endpoints.agents.askUserQuestion.retainedAnswers` (`enabled`, `maxTokens`,
+  default 4096).
+- **Agent control in chat** -- interrupt, steer, and queue messages while a
+  run is going, plus the tool-approval prompts our `toolApproval.ask` list
+  triggers. No configuration.
+- **Background tasks, live activity/tool timing, the context-usage gauge, and
+  manual compaction** -- UI features, no configuration.
+
+Off by default, and deliberately not enabled here because each needs a service
+or identity setup this stack doesn't have: Scheduled Chats (beta), Code
+workspaces / `execute_code` (needs a LibreChat Code API), Programmatic Tool
+Calling (`programmatic_tools`, same), the Agents / Agent Management API
+(`endpoints.agents.managementApi`, needs OIDC), Agent Plugins
+(`DEPLOYMENT_PLUGINS_DIR`), Langfuse tracing and the trace viewer, and the
+`/api/docs` OpenAPI routes (`openapi.enabled`). See upstream's
+`librechat.example.yaml` and its config changelogs (v1.3.15-v1.3.17) before
+turning any of these on.
+
+One startup log line is expected, not a fault:
+
+- `[credentials] Existing database has no credential fingerprint record`, a
+  warning on every start for a database created before v0.8.8. LibreChat only
+  records key fingerprints on a brand-new database and ships no command to
+  add them later. It's harmless as long as `CREDS_KEY`/`CREDS_IV`/
+  `JWT_SECRET`/`JWT_REFRESH_SECRET` never change -- see
+  [`OPERATIONS.md`](OPERATIONS.md) "Secrets".
+
 ## Auth
 
 Two mutually exclusive modes -- see `docs/KEYCLOAK.md` for the full Keycloak
