@@ -131,7 +131,7 @@ user-reset-password: ## Reset a user's password -- interactive (email + new pass
 # targets mirror them (definition + handoffs/subagents + sharing) to and
 # from agents/*.yaml -- see docs/AGENT_SYNC.md.
 
-agent-export: ## Export every agent + its sharing from the database to agents/*.yaml (replaces those files)
+agent-export: ## Export every admin-owned agent + its sharing from the database to agents/*.yaml (replaces those files)
 	scripts/agents.sh export
 
 agent-import: ## Sync agents/*.yaml into the database; options: DRY_RUN=1 OWNER_EMAIL= MODEL_PROVIDER= MODEL_NAME= ALLOW_RENAME=1

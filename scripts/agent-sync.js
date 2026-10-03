@@ -234,7 +234,12 @@ async function exportAgents({ models }) {
   const yaml = require('js-yaml');
   const { Agent, AclEntry, AccessRole, User, Group } = models;
 
-  const agents = await Agent.find({}).sort({ name: 1, id: 1 }).lean();
+  // Only agents owned by an ADMIN-role account are deployment definitions.
+  // Regular users' own agents are private to them, so they never become files
+  // (which would put them in git) and never count as "deleted" here.
+  const adminIds = (await User.find({ role: 'ADMIN' }, '_id').lean()).map((u) => u._id);
+  const agents = await Agent.find({ author: { $in: adminIds } }).sort({ name: 1, id: 1 }).lean();
+  const userOwned = await Agent.countDocuments({ author: { $nin: adminIds } });
   const acl = await AclEntry.find({
     resourceType: 'agent',
     resourceId: { $in: agents.map((a) => a._id) },
@@ -346,6 +351,9 @@ async function exportAgents({ models }) {
 
   for (const w of warnings) console.error(`warning: ${w}`);
   console.log(`\n${agents.length} agent(s) exported.`);
+  if (userOwned > 0) {
+    console.log(`${userOwned} agent(s) owned by non-admin users left out (private to their owners).`);
+  }
   return 0;
 }
 

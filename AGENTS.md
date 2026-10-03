@@ -74,8 +74,8 @@ on its own. Day to day it is `make kb-status`, `make kb-sources`,
 `make kb-sync SOURCE=…` -- see
 [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md).
 
-Agents are managed declaratively: `make agent-export` writes every agent
-(definition, handoff/subagent links, sharing) from the database to
+Agents are managed declaratively: `make agent-export` writes every
+admin-owned agent (definition, handoff/subagent links, sharing) from the database to
 `agents/*.yaml`, and `make agent-import` (preview with `DRY_RUN=1`) applies
 those files back. The files are the source of truth for the agents they list --
 see [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md).

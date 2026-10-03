@@ -123,7 +123,7 @@ Agents (instructions, tools, handoffs/delegation and who they're shared with)
 live in LibreChat's database. Mirror them to files, and back, with:
 
 ```bash
-make agent-export              # database -> agents/*.yaml
+make agent-export              # database -> agents/*.yaml (admin-owned agents only)
 make agent-import DRY_RUN=1    # preview
 make agent-import              # agents/*.yaml -> database (OWNER_EMAIL=a@b.com forces the owner)
 ```
