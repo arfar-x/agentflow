@@ -246,13 +246,13 @@ stated in C6.
 
 | id | Requirement | Status |
 |---|---|---|
-| FR-CNT-01 | Each source MUST accept `store_raw_content`, `false` when absent. Setting it under `defaults` MUST be a configuration error naming the setting: sharing is decided source by source. | planned |
+| FR-CNT-01 | Each source MUST accept `store_raw_content`, `false` when absent. Setting it under `defaults` MUST be a configuration error naming the setting: sharing is decided source by source. | done |
 | FR-CNT-02 | For a source with `store_raw_content: true`, every sync that sees a document MUST leave its text stored at the source version the entry describes, whichever freshness mechanism ran. | planned |
 | FR-CNT-03 | For a source without the flag, no document text MUST be stored. | planned |
 | FR-CNT-04 | Storing or refreshing text MUST NOT, by itself, cause a model call: turning the flag on for an already-catalogued source fills its text without re-summarizing. | planned |
 | FR-CNT-05 | When a source's flag is off, any sync of it (other than a dry run) MUST delete all text stored for it. | planned |
 | FR-CNT-06 | An entry marked missing MUST lose its stored text, and stored text MUST be removed with its entry. | planned |
-| FR-CNT-07 | Text MUST be capped at `raw_content_max_bytes` (default 10 MB, at least 1 KB, settable in `defaults` and per source). Text over the cap MUST be stored truncated at a character boundary, marked truncated, with the document's original size. | planned |
+| FR-CNT-07 | Text MUST be capped at `raw_content_max_bytes` (default 10 MB, at least 1 KB, settable in `defaults` and per source). Text over the cap MUST be stored truncated at a character boundary, marked truncated, with the document's original size. | done |
 | FR-CNT-08 | `kb_get` MUST return stored text in pages (at most 24,000 characters) with the page's offset, the total length, the truncated flag, the original size and the next offset (none on the last page). It MUST accept an `offset`, and following `next_offset` MUST reproduce the stored text exactly. | planned |
 | FR-CNT-09 | Search MUST NOT match against or return stored text; results and their order MUST be the same with and without it. | planned |
 | FR-CNT-10 | The query path's role MUST be able to read stored text and MUST NOT be able to write it. | planned |

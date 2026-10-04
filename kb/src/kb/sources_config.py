@@ -31,6 +31,12 @@ from typing import Annotated, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from kb.domain.content import (
+    DEFAULT_RAW_CONTENT_MAX_BYTES,
+    MIN_RAW_CONTENT_MAX_BYTES,
+    ContentPolicy,
+)
+
 #: ${VAR} or ${VAR:-default}
 _INTERPOLATION = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
@@ -55,6 +61,16 @@ class NotApproved(ConfigError):
 #: Kept so the rename is a readable error rather than "extra fields not
 #: permitted" on a file that was correct last week.
 RENAMED_FIELDS = {"reviewed": "approved"}
+
+#: Settings that only mean something said about one source. Under `defaults`
+#: they would quietly share every source -- including ones added later by
+#: somebody who never saw that line -- so they are refused there by name.
+PER_SOURCE_ONLY = {
+    "store_raw_content": (
+        "store_raw_content is decided per source -- set it on each source that should "
+        "share its documents' text, not under defaults"
+    ),
+}
 
 
 def _comment_starts_at(line: str) -> int | None:
@@ -149,6 +165,13 @@ class _BaseSource(BaseModel):
     id: str = Field(min_length=1)
     enabled: bool = False  # discovery writes candidates disabled; opt in by hand
     mechanisms: Mechanisms = Field(default_factory=Mechanisms)
+    #: Keep each document's text in the catalog, readable through `kb_get` by
+    #: every catalog user whatever their access in the source system (spec C6).
+    #: Per source only -- `defaults` refuses it -- so sharing a source in full
+    #: is always a line somebody wrote about that source.
+    store_raw_content: bool = False
+    #: Overrides `defaults.raw_content_max_bytes` for this source.
+    raw_content_max_bytes: int | None = Field(default=None, ge=MIN_RAW_CONTENT_MAX_BYTES)
 
 
 class ConfluenceSource(_BaseSource):
@@ -243,6 +266,11 @@ class SourcesConfig(BaseModel):
     def mechanisms_for(self, source: AnySource) -> Mechanisms:
         return self.defaults.mechanisms.merged_with(source.mechanisms)
 
+    def content_policy_for(self, source: AnySource) -> ContentPolicy:
+        """Whether this source keeps its documents' text, and how much of it."""
+        max_bytes = source.raw_content_max_bytes or self.defaults.raw_content_max_bytes
+        return ContentPolicy(store=source.store_raw_content, max_bytes=max_bytes)
+
     def require_approved(self) -> None:
         if not self.approved:
             where = (
@@ -257,6 +285,11 @@ class Defaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mechanisms: Mechanisms = Field(default_factory=Mechanisms)
+    #: A size limit is a deployment-wide concern, so it may be set here; whether
+    #: to keep text at all is not (`PER_SOURCE_ONLY`).
+    raw_content_max_bytes: int = Field(
+        default=DEFAULT_RAW_CONTENT_MAX_BYTES, ge=MIN_RAW_CONTENT_MAX_BYTES
+    )
 
 
 SourcesConfig.model_rebuild()
@@ -314,6 +347,11 @@ def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> Sour
                     f"but it now defaults to true and {_APPROVED_ENV} can override it)",
                     path=location,
                 )
+        defaults = document.get("defaults")
+        if isinstance(defaults, dict):
+            for key, message in PER_SOURCE_ONLY.items():
+                if key in defaults:
+                    raise ConfigError(f"defaults.{message}", path=location)
         document = _with_environment_approval(document, environment)
 
     try:
