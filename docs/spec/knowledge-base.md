@@ -251,11 +251,11 @@ stated in C6.
 | FR-CNT-03 | For a source without the flag, no document text MUST be stored. | planned |
 | FR-CNT-04 | Storing or refreshing text MUST NOT, by itself, cause a model call: turning the flag on for an already-catalogued source fills its text without re-summarizing. | planned |
 | FR-CNT-05 | When a source's flag is off, any sync of it (other than a dry run) MUST delete all text stored for it. | planned |
-| FR-CNT-06 | An entry marked missing MUST lose its stored text, and stored text MUST be removed with its entry. | planned |
+| FR-CNT-06 | An entry marked missing MUST lose its stored text, and stored text MUST be removed with its entry. | done |
 | FR-CNT-07 | Text MUST be capped at `raw_content_max_bytes` (default 10 MB, at least 1 KB, settable in `defaults` and per source). Text over the cap MUST be stored truncated at a character boundary, marked truncated, with the document's original size. | done |
 | FR-CNT-08 | `kb_get` MUST return stored text in pages (at most 24,000 characters) with the page's offset, the total length, the truncated flag, the original size and the next offset (none on the last page). It MUST accept an `offset`, and following `next_offset` MUST reproduce the stored text exactly. | planned |
 | FR-CNT-09 | Search MUST NOT match against or return stored text; results and their order MUST be the same with and without it. | planned |
-| FR-CNT-10 | The query path's role MUST be able to read stored text and MUST NOT be able to write it. | planned |
+| FR-CNT-10 | The query path's role MUST be able to read stored text and MUST NOT be able to write it. | done |
 | FR-CNT-11 | Stored text MUST be served only when it was read at the entry's current source version, and never for a soft-deleted entry. | planned |
 | FR-CNT-12 | When no tool in this stack can read a document live (FR-ENT-09 gives no fetch hint) but its text is stored, its search hit and `kb_get` result MUST name `kb_get` as the fetch hint. A document with a live, per-user tool keeps that tool. | planned |
 | FR-CNT-13 | `kb_get`'s description MUST tell an agent to answer from `content` when present, to say when it is truncated and point to the location for the rest, and otherwise to follow the fetch hint or location. | planned |
