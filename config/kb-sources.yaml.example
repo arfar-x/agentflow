@@ -15,6 +15,9 @@
 approved: true
 
 defaults:
+  # Per-document cap for sources that keep their text (store_raw_content
+  # below). Larger documents keep their first part, marked truncated.
+  raw_content_max_bytes: 10485760    # 10 MB
   mechanisms:
     incremental:  { enabled: true,  every: 15m }
     full_scrape:  { enabled: true,  at: "03:00" }
@@ -45,6 +48,12 @@ sources:
     enabled: false
     base_url: ${GITLAB_BASE_URL:-https://your-gitlab-host}
     token_env: GITLAB_TOKEN          # the name; the value stays in .env
+    # Keep each file's full text in the catalog, so agents can read past the
+    # summary (no tool in this stack reads GitLab live). It makes the text
+    # readable by EVERY knowledge base user, whatever their GitLab access --
+    # leave it off for anything not everyone may read. Set false and sync to
+    # remove it again. Per source only: defaults refuses it.
+    store_raw_content: false
     projects:
       - path: platform/specs                 # a whole repo
         scopes: [{ dir: ".", type: spec }]

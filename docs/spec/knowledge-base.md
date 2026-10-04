@@ -437,7 +437,7 @@ which a flat catalog cannot answer.
 | 7 | The four freshness mechanisms, the scheduler, the webhook receiver | done |
 | 8 | Agent tools and instructions | done |
 | 9 | Operator documentation (`docs/KNOWLEDGE_BASE.md`) and setup automation | done |
-| 10 | Opt-in raw content (§6.10), via [`specs/001-kb-raw-content/`](../../specs/001-kb-raw-content/) | in progress |
+| 10 | Opt-in raw content (§6.10), via [`specs/001-kb-raw-content/`](../../specs/001-kb-raw-content/) | done |
 
 ## 14. Open questions
 

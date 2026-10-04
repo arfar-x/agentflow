@@ -129,6 +129,53 @@ delegating, in the user's language and the other one, to follow each hit's
 `fetch` field and read the real document, to say so and ask when the catalog has
 nothing, and to name what it used.
 
+### 5. Optionally, share a source's full text
+
+By default an agent reads the real document live, as the user: Confluence pages
+and Jira issues through `agent-skills`, with the user's own credentials. GitLab
+has no such tool yet, so a GitLab entry stops at its summary -- an agent can say
+*which* ADR answers a question, but not quote what it decided.
+
+For a source where that is not good enough, keep its documents' text in the
+catalog:
+
+```yaml
+  - id: gitlab-platform
+    kind: gitlab
+    store_raw_content: true          # per source; refused under defaults
+    raw_content_max_bytes: 2097152   # optional; defaults.raw_content_max_bytes otherwise (10 MB)
+```
+
+**What this shares.** Every user who can reach the knowledge base can then read
+that source's documents in full through `kb_get`, **whatever their access in
+GitLab** (or Confluence, or Jira). There is no per-user check -- it is the same
+all-or-nothing decision the catalog already makes about summaries, made for the
+full text. Turn it on only for sources everyone may read.
+
+**What happens.**
+
+- The next sync of the source stores each document's text at the version the
+  summary describes, with no extra model calls (`content_stored` in the
+  report). Already-catalogued documents fill in on the next full pass
+  (`make kb-sync SOURCE=<id>`), or as each one is next seen.
+- Search results show `fetch: kb_get` for those documents, so the agents
+  already follow it; `kb_get` returns the text in pages of 24,000 characters.
+  Sources with a live tool (Confluence, Jira) keep it as their `fetch`.
+- Text is never searched: results and their order do not change.
+- A document over the cap keeps its first part, marked `truncated` with its
+  original size; the agent is told to say so and give the link for the rest.
+
+**Revoking it.** Set `store_raw_content: false` (or delete the line) and sync
+the source once, in any mode -- the scheduler's next incremental tick will do.
+The report shows `content_purged`; nothing of the source's text remains. A
+document deleted at the source loses its text on the next full pass, with the
+entry.
+
+**Cost.** Text documents are small: about 2-20 KB per ADR, so a thousand come to
+roughly 20 MB before Postgres compresses them. `make kb-status` shows the
+documents kept, how many were truncated, their text size and the table's size
+on disk under `raw_content`.
+
 ## How it stays current
 
 Four mechanisms, each switchable per source in `config/kb-sources.yaml`:
@@ -202,8 +249,8 @@ an incident. Every command reports which of the two it used.
 
 `kb_data` is in `make backup` like every other volume. What is actually
 irreplaceable in it is small: the **overrides**, the **gap log** and the **sync
-checkpoints**. Entries and the search index are derived — losing them costs one
-`make kb-sync` per source, not a restore.
+checkpoints**. Entries, the search index and kept document text are derived —
+losing them costs one `make kb-sync` per source, not a restore.
 
 Schema changes are migrations in `kb/migrations/`, applied by `make kb-init`
 (which `make up` runs). They are append-only: a shipped file is never edited, so
@@ -221,15 +268,18 @@ an upgrade is always "apply what is new, skip what is recorded".
 | Entries exist but have no summaries | `KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL` are unset, or the endpoint was down when they were catalogued. Re-syncing after fixing it fills them in |
 | The nightly pass runs at the wrong hour | `KB_TIMEZONE`. `at: "03:00"` is read in that zone; the default is UTC |
 | An agent answers without searching | `make agent-import` — the instruction and the two tools live in `agents/*.yaml` |
+| `kb_get` returns `content: null` for a source with `store_raw_content: true` | The source has not been fully synced since the flag was turned on (`make kb-sync SOURCE=<id>`), or the document changed since the last sync — text is only served at the version its summary describes. `make kb-sources` shows the effective setting under `raw_content` |
 
 ## Why it is shaped this way
 
 Three constraints explain most of the design, and are worth keeping in mind
 before changing it:
 
-- **The catalog never stores document text.** Answers come from the live
-  document, read as the user, so source permissions keep working and nothing
-  goes stale behind your back.
+- **The catalog stores no document text unless a source opts in.** Answers
+  come from the live document, read as the user, so source permissions keep
+  working and nothing goes stale behind your back. A source marked
+  `store_raw_content` trades that for reach (step 5 above): its text is kept,
+  versioned with its summary, and readable by everyone.
 - **Reading and writing are different privileges.** `mcp-kb` has a read-only
   database role and no source credentials at all; `kb-scheduler` and `kb-cli`
   have both. That is why a stale entry read by an agent is *queued* for refresh
