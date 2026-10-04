@@ -46,6 +46,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     get = sub.add_parser("get", help="One entry in full, by id.")
     get.add_argument("--id", required=True)
+    get.add_argument("--offset", type=int, default=0,
+                     help="Where to start reading a kept document's text (its next_offset).")
 
     override = sub.add_parser("override", help="Record or remove a human correction.")
     override_sub = override.add_subparsers(dest="override_command", required=True)
@@ -177,14 +179,15 @@ def _dispatch(args: argparse.Namespace, container: Any) -> dict[str, Any]:
         }
 
     if args.command == "get":
-        view = container.get_entry.execute(args.id)
+        view = container.get_entry.execute(args.id, offset=args.offset)
         if view is None:
             raise _Reportable("not_found", f"no entry with id {args.id!r}", id=args.id)
         return {
             "entry": view.entry.model_dump(mode="json"),
-            "fetch": view.entry.fetch_hint,
+            "fetch": view.fetch_hint,
             "stale": view.stale,
             "hidden": view.hidden,
+            "content": view.content.model_dump(mode="json") if view.content else None,
         }
 
     if args.command == "override":

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from kb.application.ports.clock import Clock
 from kb.application.ports.entry_store import EntryStore
-from kb.domain.entry import Entry, EntryType
+from kb.domain.entry import Entry, EntryType, fetch_hint_for
 from kb.domain.merge import apply_override
 from kb.domain.policies import DEFAULT_STALE_AFTER, is_indexable, is_stale
 from kb.domain.ranking import reciprocal_rank_fusion
@@ -39,10 +39,13 @@ class SearchHit(BaseModel):
     entry: Entry
     score: float
     stale: bool
+    #: Whether the catalog keeps this document's text. Only ever used to point
+    #: `fetch` at `kb_get`; the text itself never comes back from a search.
+    has_content: bool = False
 
     @property
     def fetch_hint(self) -> dict[str, Any] | None:
-        return self.entry.fetch_hint
+        return fetch_hint_for(self.entry.id, self.entry.location, has_content=self.has_content)
 
 
 class SearchResult(BaseModel):
@@ -109,6 +112,10 @@ class SearchCatalog:
         ordered_ids = [entry_id for entry_id, _ in fused][: limit * 2]
         entries = self._store.get_many(ordered_ids)
         overrides = self._store.get_overrides(ordered_ids)
+        # One question for the whole page, after ranking: whether text is kept
+        # changes where a hit says to read it, never which hits there are or
+        # their order (FR-CNT-09).
+        with_content = self._store.content_ids(ordered_ids)
         scores = dict(fused)
 
         hits: list[SearchHit] = []
@@ -125,6 +132,7 @@ class SearchCatalog:
                     entry=effective,
                     score=scores[entry_id],
                     stale=is_stale(effective, now=now, stale_after=self._stale_after),
+                    has_content=entry_id in with_content,
                 )
             )
             if len(hits) == limit:

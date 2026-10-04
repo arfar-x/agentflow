@@ -40,7 +40,8 @@
 
 - `{"error": {"type": "not_found", ...}}`
 - `{"error": {"type": "catalog_unavailable", ...}}`
-- `{"error": {"type": "bad_argument", ...}}` when `offset` is not an integer.
+- A non-integer `offset` is rejected by the tool schema itself (fastmcp validates arguments before
+  the tool runs), like any other mistyped argument.
 
 ## `kb_search` (changed only in `fetch`)
 

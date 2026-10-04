@@ -68,6 +68,7 @@ def test_a_cap_too_small_to_be_a_choice_is_rejected():
 
 
 def test_pages_chain_until_the_end_and_then_stop():
+    # Covers: FR-CNT-08
     total = 2 * CONTENT_PAGE_CHARS + 10
     assert next_offset(0, CONTENT_PAGE_CHARS, total) == CONTENT_PAGE_CHARS
     assert next_offset(CONTENT_PAGE_CHARS, CONTENT_PAGE_CHARS, total) == 2 * CONTENT_PAGE_CHARS
@@ -75,10 +76,12 @@ def test_pages_chain_until_the_end_and_then_stop():
 
 
 def test_reading_at_or_past_the_end_is_an_empty_last_page():
+    # Covers: FR-CNT-08
     assert next_offset(100, 0, 100) is None
     assert next_offset(500, 0, 100) is None
 
 
 def test_a_negative_offset_reads_from_the_start():
+    # Covers: FR-CNT-08
     assert clamp_offset(-5) == 0
     assert clamp_offset(7) == 7
