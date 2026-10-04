@@ -4,8 +4,8 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.3.0 |
-| **Last updated** | 2026-09-28 |
+| **Version** | 2.4.0 |
+| **Last updated** | 2026-10-04 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
 
@@ -46,7 +46,10 @@ inventing one.
 
 **Non-goals**
 
-- N1. Not a document store: the catalog never holds document bodies.
+- N1. Not a document store: entries never hold document bodies. The one
+  exception is opt-in: a source an operator explicitly marks
+  `store_raw_content` has its documents' text kept beside their entries, so
+  agents can read it (§6.10, C6).
 - N2. Not an authoring tool: knowledge stays where its authors already write it.
 - N3. Not an access-control system: source systems enforce their own
   permissions, and the catalog holds nothing restricted (see §10, C4).
@@ -63,6 +66,7 @@ inventing one.
 | **Override** | A human correction applied on top of a generated entry. |
 | **Reconcile** | Compare one source document against the catalog and update it. |
 | **Stale** | The catalog's summary may lag the document; the document itself is always read live. |
+| **Stored content** | One document's text, kept beside its entry only for a source marked `store_raw_content`, at the version the entry describes. Derived, like the rest of the catalog. |
 | **Gap** | A search that matched nothing — evidence of knowledge nobody has written down. |
 
 ## 4. Users and acceptance scenarios
@@ -103,7 +107,7 @@ case.
 
 | id | Requirement | Status |
 |---|---|---|
-| FR-ENT-01 | An entry MUST record what a document is and where it lives, and MUST NOT store the document's body. | done |
+| FR-ENT-01 | An entry MUST record what a document is and where it lives, and MUST NOT store the document's body. Text kept for an opted-in source lives in the separate content store (§6.10), never in the entry. | done |
 | FR-ENT-02 | An entry whose document could never be fetched MUST be rejected when it is built: a known source kind missing its reference key, or an unknown kind with no URL. | done |
 | FR-ENT-03 | `title` and `summary` MUST be language-keyed maps, and an entry MUST have non-empty title text in at least one language. | done |
 | FR-ENT-04 | Every entry MUST name the source that produced it. | done |
@@ -233,6 +237,29 @@ something concrete has to be catalogued through them.
 | FR-AGT-02 | The front-door agent MUST search the catalog before answering or delegating, MUST NOT answer from assumption, MUST answer in the user's language, and MUST name the source document it used. | done |
 | FR-AGT-03 | Document-producing agents MUST ground their drafts in catalog results. | done |
 
+### 6.10 Raw content — `FR-CNT`
+
+Opt-in, per source. Designed in [`specs/001-kb-raw-content/`](../../specs/001-kb-raw-content/).
+The sync already holds every body it summarizes, so keeping it needs no new
+fetching and no credentials on the query path. What turning it on means is
+stated in C6.
+
+| id | Requirement | Status |
+|---|---|---|
+| FR-CNT-01 | Each source MUST accept `store_raw_content`, `false` when absent. Setting it under `defaults` MUST be a configuration error naming the setting: sharing is decided source by source. | planned |
+| FR-CNT-02 | For a source with `store_raw_content: true`, every sync that sees a document MUST leave its text stored at the source version the entry describes, whichever freshness mechanism ran. | planned |
+| FR-CNT-03 | For a source without the flag, no document text MUST be stored. | planned |
+| FR-CNT-04 | Storing or refreshing text MUST NOT, by itself, cause a model call: turning the flag on for an already-catalogued source fills its text without re-summarizing. | planned |
+| FR-CNT-05 | When a source's flag is off, any sync of it (other than a dry run) MUST delete all text stored for it. | planned |
+| FR-CNT-06 | An entry marked missing MUST lose its stored text, and stored text MUST be removed with its entry. | planned |
+| FR-CNT-07 | Text MUST be capped at `raw_content_max_bytes` (default 10 MB, at least 1 KB, settable in `defaults` and per source). Text over the cap MUST be stored truncated at a character boundary, marked truncated, with the document's original size. | planned |
+| FR-CNT-08 | `kb_get` MUST return stored text in pages (at most 24,000 characters) with the page's offset, the total length, the truncated flag, the original size and the next offset (none on the last page). It MUST accept an `offset`, and following `next_offset` MUST reproduce the stored text exactly. | planned |
+| FR-CNT-09 | Search MUST NOT match against or return stored text; results and their order MUST be the same with and without it. | planned |
+| FR-CNT-10 | The query path's role MUST be able to read stored text and MUST NOT be able to write it. | planned |
+| FR-CNT-11 | Stored text MUST be served only when it was read at the entry's current source version, and never for a soft-deleted entry. | planned |
+| FR-CNT-12 | When no tool in this stack can read a document live (FR-ENT-09 gives no fetch hint) but its text is stored, its search hit and `kb_get` result MUST name `kb_get` as the fetch hint. A document with a live, per-user tool keeps that tool. | planned |
+| FR-CNT-13 | `kb_get`'s description MUST tell an agent to answer from `content` when present, to say when it is truncated and point to the location for the rest, and otherwise to follow the fetch hint or location. | planned |
+
 ## 7. Non-functional requirements
 
 ### 7.1 Architecture — `NFR-ARC`
@@ -271,7 +298,7 @@ something concrete has to be catalogued through them.
 | Tool | Input | Output |
 |---|---|---|
 | `kb_search` | `queries[]`, `types[]?`, `tags[]?`, `limit?` | hits: entry, score, `stale`, fetch hint; plus the normalized queries actually searched |
-| `kb_get` | `id` | one entry in full; triggers a lazy refresh when stale (FR-REC-10) |
+| `kb_get` | `id`, `offset?` | one entry in full; triggers a lazy refresh when stale (FR-REC-10); for a source storing raw content, one page of the document's text (FR-CNT-08) |
 
 ### 8.2 CLI / make targets
 
@@ -288,6 +315,7 @@ same pattern as `config/librechat.yaml` and `searxng/settings.yml`:
 ```yaml
 approved: true                   # FR-CFG-05; KB_SOURCES_APPROVED overrides it
 defaults:
+  raw_content_max_bytes: 10485760  # FR-CNT-07; per document
   mechanisms:                    # FR-CFG-07
     incremental:   { enabled: true,  every: 15m }
     full_scrape:   { enabled: true,  at: "03:00" }
@@ -306,6 +334,7 @@ sources:
     enabled: true
     base_url: ${GITLAB_BASE_URL}          # FR-CFG-01
     token_env: GITLAB_TOKEN               # FR-CFG-04
+    store_raw_content: true               # FR-CNT-01; C6: readable by every kb user
     mechanisms:
       webhook: { enabled: ${KB_GITLAB_WEBHOOK_ENABLED:-false} }
     projects:
@@ -353,15 +382,23 @@ on every tick.
 - C2. The only model available is a self-hosted OpenAI-compatible endpoint,
   used during sync and never on the query path.
 - C3. Document content is read live by the calling agent with the user's own
-  credentials, so source systems enforce their own permissions.
+  credentials, so source systems enforce their own permissions -- except for
+  sources that store raw content (C6).
 - C4. The catalog is shared and unfiltered in this version; restricted material
   MUST NOT be catalogued (operational rule, enforced by source selection).
 - C5. Source documents and model drafts are untrusted input: data to store,
   never instructions to act on.
+- C6. A source marked `store_raw_content` makes its documents' full text
+  readable through `kb_get` by every user of the catalog, whatever their
+  access in the source system. Like C4, this is an operator's decision, made per
+  source in tracked configuration; there is no per-user check. Turning the flag
+  off and syncing removes the text (FR-CNT-05).
 
 ## 11. Out of scope
 
-Embeddings; per-team enforcement; chunk-level indexing of document bodies;
+Embeddings; per-team enforcement; per-user or per-team access to stored
+content (C6 is all or nothing per source); chunk-level indexing of document
+bodies, including searching stored content (FR-CNT-09);
 Confluence and Jira webhooks; write tools that let agents create entries; a
 spec-driven-workflow toolset.
 
@@ -400,6 +437,7 @@ which a flat catalog cannot answer.
 | 7 | The four freshness mechanisms, the scheduler, the webhook receiver | done |
 | 8 | Agent tools and instructions | done |
 | 9 | Operator documentation (`docs/KNOWLEDGE_BASE.md`) and setup automation | done |
+| 10 | Opt-in raw content (§6.10), via [`specs/001-kb-raw-content/`](../../specs/001-kb-raw-content/) | in progress |
 
 ## 14. Open questions
 
@@ -413,6 +451,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.4.0 | 2026-10-04 | Added §6.10 (FR-CNT-01..13) and C6: a source may opt into keeping its documents' text (`store_raw_content`), readable page by page through `kb_get`. N1, FR-ENT-01 and C3 narrowed accordingly: entries still never hold a body; the text sits in its own store, tied to the entry's version, purged when the flag is turned off. Prompted by GitLab ADRs: no tool in this stack reads GitLab live, so agents could only ever see their summaries. Designed with Spec Kit in `specs/001-kb-raw-content/`. |
 | 2.3.0 | 2026-09-28 | Added FR-CFG-09: `check()` now proves structured output actually works with a real completions round-trip (a fixed probe: `system` + `response_format: json_object`, verified against the exact reply expected), not just that `/models` answers and lists the right id. `sync` refuses to run at all against a summarizer that fails it. Prompted by the same experimental backend as 2.2.0 below -- it turned out to not merely mis-format JSON sometimes, but to silently ignore the `system` role entirely, every time, while still answering 200 with a normal chat reply. An earlier fix folded the instruction into the `user` message to route around that one backend; reverted -- the request this module sends stays the plain OpenAI standard for every endpoint, and an endpoint that cannot honor it is something to report and refuse, not something to accommodate. |
 | 2.2.0 | 2026-09-28 | Added FR-REC-12: `kb sync --force` bypasses the content-hash gate to recover entries a since-fixed summarizer defect left undescribed -- an unchanged run stops being free only when explicitly asked to. Prompted by an experimental OpenAI-compatible backend that didn't enforce the `response_format` it was sent, degrading ~38% of one sync; the summarizer itself gained a same-request retry with a sharper instruction (no spec change -- an internal robustness detail of FR-REC-06, not new externally-visible behavior), but that only helps content summarized *after* the fix, hence this flag for what came before it. |
 | 2.1.0 | 2026-09-24 | Added FR-CFG-08 and FR-CLI-05: the summarizer URL is normalized and its compatibility is checkable against the live endpoint, and `kb check` reports which dependency is not ready. |
