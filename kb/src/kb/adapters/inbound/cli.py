@@ -337,6 +337,9 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
                     "kind": source.kind,
                     "enabled": source.enabled,
                     "mechanisms": config.mechanisms_for(source).model_dump(exclude_none=True),
+                    # Shown per source because turning it on shares the
+                    # source's full text with every catalog user (spec C6).
+                    "raw_content": config.content_policy_for(source).model_dump(),
                 }
                 for source in config.sources
             ],
@@ -405,6 +408,7 @@ def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]
             force=args.force,
             checkpoint=checkpoint,
             on_progress=report_progress,
+            content=config.content_policy_for(source_config),
         )
     except Exception as exc:  # the source is unreachable, auth failed, ...
         raise _Reportable("source_unavailable", str(exc).strip()) from exc

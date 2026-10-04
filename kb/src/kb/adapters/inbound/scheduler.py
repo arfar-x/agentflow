@@ -27,6 +27,7 @@ from typing import Any
 from kb.application.use_cases.refresh_entries import RefreshEntries
 from kb.application.use_cases.schedule import Job, JobKind, ScheduleState, due
 from kb.application.use_cases.sync_source import Mode
+from kb.domain.content import ContentPolicy
 from kb.sources_config import ConfigError, SourcesConfig, load
 
 logger = logging.getLogger("kb.scheduler")
@@ -135,7 +136,12 @@ class Scheduler:
         mode = Mode.FULL if job.kind is JobKind.FULL_SCRAPE else Mode.INCREMENTAL
         checkpoint = self._container.store.get_checkpoint(source.source_id)
 
-        report = self._container.sync.execute(source, mode=mode, checkpoint=checkpoint)
+        report = self._container.sync.execute(
+            source,
+            mode=mode,
+            checkpoint=checkpoint,
+            content=config.content_policy_for(source_config),
+        )
         if report.checkpoint:
             # Only after the run returned: a checkpoint advanced past a failure
             # would skip whatever that run never saw.
@@ -150,6 +156,8 @@ class Scheduler:
             "revived": report.revived,
             "missing": report.missing,
             "summarized": report.summarized,
+            "content_stored": report.content_stored,
+            "content_purged": report.content_purged,
         }
 
     def _refresher(self, config: SourcesConfig) -> RefreshEntries:
@@ -161,11 +169,18 @@ class Scheduler:
                     return build_source(source)
             return None
 
+        def resolve_content(source_id: str) -> ContentPolicy:
+            for source in config.sources:
+                if source.id == source_id:
+                    return config.content_policy_for(source)
+            return ContentPolicy.off()
+
         return RefreshEntries(
             self._container.store,
             self._container.reconcile,  # the same funnel every mechanism uses
             resolve,
             self._container.clock,
+            resolve_content=resolve_content,
         )
 
     def _record(

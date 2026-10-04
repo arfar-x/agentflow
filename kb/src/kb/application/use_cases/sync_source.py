@@ -36,6 +36,7 @@ from kb.application.ports.clock import Clock
 from kb.application.ports.entry_store import EntryStore
 from kb.application.ports.knowledge_source import KnowledgeSource, SourceDocument
 from kb.application.use_cases.reconcile_document import Action, ReconcileDocument
+from kb.domain.content import ContentPolicy
 from kb.domain.errors import describe_for
 
 
@@ -63,6 +64,11 @@ class SyncReport(BaseModel):
     #: Documents that could not become entries, each named with the reason.
     #: A bad page is skipped and reported, never fatal to the run.
     rejected: tuple[str, ...] = Field(default_factory=tuple)
+    #: Documents whose text was written this run (new or changed), for a
+    #: source that keeps text.
+    content_stored: int = 0
+    #: Texts removed because the source no longer keeps text (FR-CNT-05).
+    content_purged: int = 0
     checkpoint: str | None = None
 
 
@@ -86,11 +92,14 @@ class SyncSource:
         force: bool = False,
         checkpoint: str | None = None,
         on_progress: Callable[[int, SourceDocument], None] | None = None,
+        content: ContentPolicy | None = None,
     ) -> SyncReport:
+        content = content or ContentPolicy.off()
         counts = {action: 0 for action in Action}
         seen: set[str] = set()
         rejected: list[str] = []
         summarized = 0
+        content_stored = 0
 
         documents = (
             source.list_all() if mode is Mode.FULL else source.changed_since(checkpoint)
@@ -110,12 +119,13 @@ class SyncSource:
                 seen.add(document.external_id)
                 continue
             try:
-                result = self._reconcile.execute(document, force=force)
+                result = self._reconcile.execute(document, force=force, content=content)
             except Exception as exc:  # a document that cannot become an entry
                 rejected.append(_describe(document, exc))
                 continue
             counts[result.action] += 1
             summarized += int(result.summarized)
+            content_stored += int(result.content_stored)
             seen.add(result.entry_id)
 
         missing = 0
@@ -124,6 +134,14 @@ class SyncSource:
             # sees an unchanged document, let alone a deleted one.
             known = self._store.ids_for_source(source.source_id)
             missing = self._store.mark_missing(known - seen, at=self._clock.now())
+
+        content_purged = 0
+        if not content.store and not dry_run:
+            # A source that does not keep text has none kept -- including text
+            # from before somebody turned the flag off. Any mode will do: this
+            # is about the source's setting, not about which documents changed,
+            # so revoking takes effect on the next incremental tick (FR-CNT-05).
+            content_purged = self._store.purge_content(source.source_id)
 
         return SyncReport(
             source_id=source.source_id,
@@ -138,6 +156,8 @@ class SyncSource:
             missing=missing,
             summarized=summarized,
             rejected=tuple(rejected),
+            content_stored=content_stored,
+            content_purged=content_purged,
             checkpoint=None if dry_run else source.checkpoint(),
         )
 
