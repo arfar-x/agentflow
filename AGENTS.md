@@ -195,6 +195,14 @@ substitute.
   decision made in a chat window; the code follows the spec, and when they
   disagree one of them is wrong and gets fixed. Requirements carry ids and a
   status, and the owning module's tests enforce that pairing.
+- `specs/`, `.specify/`, `.claude/skills/speckit-*` --
+  [GitHub Spec Kit](https://github.com/github/spec-kit), the workflow for
+  designing a change before building it: `/speckit-specify` ->
+  `/speckit-plan` -> `/speckit-tasks` -> `/speckit-implement`, one
+  `specs/NNN-<feature>/` directory per change, governed by
+  `.specify/memory/constitution.md`. Those are working documents for one
+  change; whatever a change decides about `kb/` still lands in
+  `docs/spec/knowledge-base.md`, which stays the spec of record.
 - [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md) -- the operator guide for
   the catalog: credentials, choosing sources, the four freshness mechanisms and
   their switches, overrides, the gap log, backup, and what to check when it
