@@ -195,6 +195,10 @@ database, and without the marker the agent would present partial text as complet
 - **FR-015**: Operator documentation MUST state that turning the flag on makes the source's full
   text readable by every user of the knowledge base, whatever their permissions in the source
   system, and MUST explain how to revoke it.
+- **FR-016**: When a document has stored text but no tool in this stack can read it live (its
+  fetch hint is empty), its search hit and entry MUST name the catalog's own read tool as the way
+  to read it. Agents that follow the fetch hint then reach the text without new instructions.
+  Documents with a live, per-user read tool keep that tool as their fetch hint.
 
 ### Key Entities
 
