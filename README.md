@@ -191,3 +191,21 @@ agentflow/
   right now the only visibility into any of that is `make kb-status`
   after the fact and `make logs SERVICE=kb-scheduler`, neither of which
   shows a source or the summarizer degrading before it actually fails.
+- **Cron schedules for knowledge base sources** -- each source can already
+  override the default cadence in `config/kb-sources.yaml`, but only as an
+  incremental interval (`every: 15m`) and one daily full-scrape time
+  (`at: "03:00"`). A cron expression per source and mechanism would allow
+  any pattern: every 5 minutes for a Jira project, weekly for a GitLab
+  repository, weekdays only, and so on.
+- **A custom summarizer prompt per knowledge base source** -- every source
+  is summarized with the same fixed prompt (`SYSTEM_PROMPT` in
+  `kb/src/kb/adapters/outbound/llm_summarizer.py`). A per-source prompt in
+  `config/kb-sources.yaml` would let each source describe its documents in
+  its own terms (e.g. ADRs vs. Jira tickets vs. wiki pages).
+- **A per-user GitLab read tool** in `agent-skills` -- Confluence pages and
+  Jira issues can be read live with the user's own credentials (the
+  catalog's `fetch_hint`, `FETCH_TOOLS` in `kb/src/kb/domain/entry.py`), but
+  GitLab files cannot, so a GitLab entry stops at its summary unless its
+  source stores raw content. A GitLab toolset taking each user's own token
+  (LibreChat `customUserVars`, like Jira's) would let users with GitLab
+  access read any catalogued file, with GitLab enforcing its own permissions.
