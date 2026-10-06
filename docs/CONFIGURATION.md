@@ -264,6 +264,13 @@ runs three steps, each configured once for the whole deployment in
 LibreChat won't enable web search without a scraper, so `crw` is required, not
 optional.
 
+**crw has its own network.** It fetches whatever URLs search results contain,
+so it runs on a `scraper` network that only `api` joins, never on `backend`. A
+link in a search result to an internal name (`http://mongodb:27017`,
+`http://mcp-agent-skills:8321/...`) resolves to nothing from inside crw.
+Anything you add for crw to talk to, such as a renderer sidecar, goes on
+`scraper` too.
+
 **JavaScript-only pages.** `crw` runs with `CRW_RENDERER__MODE=none`: plain HTTP
 plus its built-in browser-impersonation fallback, no headless browser. Pages
 that only render their content in JavaScript come back empty or fail;
@@ -276,7 +283,7 @@ lightweight headless browser):
   lightpanda:
     image: lightpanda/browser:<pinned tag>   # pin a tag, as for every image here
     restart: unless-stopped
-    networks: [backend]                      # internal only, like crw
+    networks: [scraper]                      # crw's network, never backend
   crw:
     environment:
       CRW_RENDERER__MODE: auto               # was: none

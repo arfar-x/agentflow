@@ -118,10 +118,13 @@ substitute.
   conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
   tools, over MCP), and `searxng` + `crw` (native web search: search, then
   page scraping).
-- `mcp-agent-skills`, `mcp-kb`, `searxng` and `crw` are **internal-only, no
+- `mcp-agent-skills`, `mcp-kb` and `searxng` are **internal-only, no
   published port, `backend` network only** -- reachability from `api` is
   their only access control (MCP's HTTP transport has no auth of its own).
-  Never add a `ports:` entry to any of them. `mcp-kb` goes further and takes
+  Never add a `ports:` entry to any of them. `crw` is internal-only too, but
+  on its **own `scraper` network**, which only `api` joins: it fetches URLs
+  that search results choose, so it must never be able to reach `backend`.
+  Never put it back on `backend`. `mcp-kb` goes further and takes
   no credentials at all: the catalog is shared, so there is nothing per-user
   for a caller to supply.
 - `kb-db` is the knowledge catalog's **own Postgres instance**, not another
