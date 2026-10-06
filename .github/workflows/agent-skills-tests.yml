@@ -1,0 +1,51 @@
+name: agent-skills tests
+
+# What `make test` does, without needing a .env: build the mcp-agent-skills
+# image the way docker-compose.yml does and run the submodule's own mcp-server
+# suite inside it, so a bad submodule pin is caught in this stack's runtime.
+on:
+  pull_request:
+    paths:
+      - "agent-skills"
+      - ".gitmodules"
+      - "docker-compose.yml"
+      - ".env.example"
+      - ".github/workflows/agent-skills-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "agent-skills"
+      - ".gitmodules"
+      - "docker-compose.yml"
+      - ".env.example"
+      - ".github/workflows/agent-skills-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # TOOLSETS matches MCP_TOOLSETS in .env.example, the documented default.
+      - name: Build the mcp-agent-skills image
+        run: |
+          docker build \
+            -f agent-skills/mcp-server/Dockerfile \
+            --build-arg TOOLSETS="jira confluence" \
+            -t mcp-agent-skills-test \
+            agent-skills
+
+      # The suite introspects every skill, telegram included, which this stack
+      # deliberately does not install -- so its requirements are added here for
+      # the test run only, or three telegram tests fail on `import telethon`.
+      - name: Run mcp-server's tests inside it
+        run: |
+          docker run --rm --user root --entrypoint sh mcp-agent-skills-test -c \
+            "pip install --no-cache-dir pytest -r skills/telegram/requirements.txt -q >/dev/null && cd mcp-server && python3 -m pytest -q"
