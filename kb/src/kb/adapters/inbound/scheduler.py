@@ -20,9 +20,9 @@ from __future__ import annotations
 import logging
 import signal
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from kb.application.use_cases.refresh_entries import RefreshEntries
 from kb.application.use_cases.schedule import Job, JobKind, ScheduleState, due
@@ -37,6 +37,11 @@ logger = logging.getLogger("kb.scheduler")
 #: answer being "nothing" costs nothing.
 TICK_SECONDS = 10.0
 
+#: How long a summarizer verdict is reused. The check is a real completion, so
+#: several sources falling due on the same tick should cost one, not one each --
+#: but short enough that a recovered endpoint is noticed by the next cadence.
+SUMMARIZER_VERDICT_TTL = timedelta(seconds=60)
+
 
 class Scheduler:
     def __init__(
@@ -45,10 +50,15 @@ class Scheduler:
         *,
         sources_file: Path,
         tick_seconds: float = TICK_SECONDS,
+        check_summarizer: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self._container = container
         self._sources_file = sources_file
         self._tick = tick_seconds
+        #: None when no summarizer is configured: entries are then catalogued
+        #: under their real titles, a deliberate and already-reported mode.
+        self._check_summarizer = check_summarizer
+        self._verdict: tuple[datetime, str | None] | None = None
         self._state = ScheduleState()
         self._stop = threading.Event()
 
@@ -122,7 +132,30 @@ class Scheduler:
             )
             self._record(job, started, finished, counts, error)
 
+    def _require_usable_summarizer(self) -> None:
+        """FR-SCH-07: the check `sync` applies (FR-CFG-09), before a run that
+        would summarize. Without it, an endpoint that answers /models but
+        refuses completions makes this loop catalogue every new document
+        undescribed -- a warning per document, nothing refused -- and the only
+        recovery is a forced re-sync."""
+        if self._check_summarizer is None:
+            return
+        now = self._now()
+        if self._verdict is None or now - self._verdict[0] >= SUMMARIZER_VERDICT_TTL:
+            result = self._check_summarizer()
+            problem = None if result.get("ok") else (
+                result.get("error") or "it failed its structured-output check"
+            )
+            self._verdict = (now, problem)
+        problem = self._verdict[1]
+        if problem is not None:
+            raise RuntimeError(
+                f"summarizer is not usable, so nothing was synced rather than catalogued "
+                f"undescribed (see `kb check`): {problem}"
+            )
+
     def _execute(self, job: Job, config: SourcesConfig) -> dict[str, int]:
+        self._require_usable_summarizer()
         if job.kind is JobKind.LAZY_REFRESH:
             report = self._refresher(config).execute()
             if report.failed:
@@ -213,8 +246,15 @@ def main() -> None:  # pragma: no cover -- the container's entrypoint
 
     settings = Settings.from_env()
     container = build(settings)
+    check = None
+    if settings.summarizer_configured:
+        from kb.container import build_summarizer
+
+        check = build_summarizer(settings).check
     try:
-        Scheduler(container, sources_file=Path(settings.sources_file)).run_forever()
+        Scheduler(
+            container, sources_file=Path(settings.sources_file), check_summarizer=check
+        ).run_forever()
     finally:
         container.close()
 

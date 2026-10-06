@@ -265,6 +265,7 @@ an upgrade is always "apply what is new, skip what is recorded".
 | `{"error": {"type": "not_approved"}}` | Syncing is switched off; the message says whether it was the file or `KB_SOURCES_APPROVED` |
 | `{"error": {"type": "missing_credential"}}` | The named variables are unset — sync needs a service account, not a user's credential |
 | `make kb-check` says the summarizer is not ok | The error is in the report, and a 401 with no key sent adds the hint to set `KB_SUMMARIZER_API_KEY` (optional otherwise). "Not an OpenAI /models list" means the URL points at something else — a proxy, a login page |
+| A scheduled run fails with "summarizer is not usable" | The scheduler runs the same check as `make kb-check` before any run that summarizes, and refuses rather than catalogue documents undescribed. Fix the endpoint or `KB_SUMMARIZER_MODEL`/`KB_SUMMARIZER_API_KEY` (the error carries the endpoint's own message, e.g. a 403); the next cadence tries again with no action needed |
 | Entries exist but have no summaries | `KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL` are unset, or the endpoint was down when they were catalogued. Re-syncing after fixing it fills them in |
 | The nightly pass runs at the wrong hour | `KB_TIMEZONE`. `at: "03:00"` is read in that zone; the default is UTC |
 | An agent answers without searching | `make agent-import` — the instruction and the two tools live in `agents/*.yaml` |

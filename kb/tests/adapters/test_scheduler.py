@@ -198,3 +198,73 @@ def test_recording_a_run_failing_does_not_take_down_the_scheduler(wired):
 
     store.record_run = explode
     assert scheduler.tick(NOON) != []
+
+
+class Gate:
+    """A stand-in for the summarizer's check, counting how often it is asked."""
+
+    def __init__(self, ok: bool = True) -> None:
+        self.ok, self.calls = ok, 0
+
+    def __call__(self) -> dict:
+        self.calls += 1
+        return {"ok": True} if self.ok else {"ok": False, "error": "403 Client Error: Forbidden"}
+
+
+def gated(wired, gate):
+    container, store, scheduler, path = wired
+    return container, store, Scheduler(container, sources_file=path, check_summarizer=gate)
+
+
+def test_an_unusable_summarizer_stops_a_run_before_it_catalogues_anything(wired):
+    # Covers: FR-SCH-07
+    gate = Gate(ok=False)
+    _, store, scheduler = gated(wired, gate)
+
+    scheduler.tick(NOON)
+
+    assert store.entries == {}, "nothing was catalogued undescribed"
+    assert len(store.runs) == 1
+    assert "summarizer" in store.runs[0]["error"] and "403" in store.runs[0]["error"]
+
+
+def test_a_working_summarizer_lets_the_run_through(wired):
+    # Covers: FR-SCH-07
+    _, store, scheduler = gated(wired, Gate(ok=True))
+    scheduler.tick(NOON)
+    assert len(store.entries) == 1 and store.runs[0]["error"] is None
+
+
+def test_the_next_cadence_tries_again_once_the_summarizer_is_back(wired):
+    # Covers: FR-SCH-07
+    gate = Gate(ok=False)
+    container, store, scheduler = gated(wired, gate)
+    scheduler.tick(NOON)
+
+    gate.ok = True
+    container.clock.advance(timedelta(minutes=15))  # the scheduler reads this clock
+    scheduler.tick(NOON + timedelta(minutes=15))
+
+    assert len(store.entries) == 1
+    assert [run["error"] is None for run in store.runs] == [False, True]
+
+
+def test_jobs_due_together_share_one_probe(wired):
+    # Covers: FR-SCH-07
+    container, store, scheduler, path = wired
+    path.write_text(CONFIG + """  - id: confluence-ops
+    kind: confluence
+    enabled: true
+    spaces: [OPS]
+""", encoding="utf-8")
+    gate = Gate()
+    Scheduler(container, sources_file=path, check_summarizer=gate).tick(NOON)
+    assert len(store.runs) == 2 and gate.calls == 1
+
+
+def test_without_a_summarizer_configured_nothing_is_gated(wired):
+    # The degraded mode (entries under their real titles) is a deliberate,
+    # already-reported choice, not a defect to refuse over.
+    _, store, scheduler, _ = wired
+    scheduler.tick(NOON)
+    assert len(store.entries) == 1

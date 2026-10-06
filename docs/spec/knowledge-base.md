@@ -4,8 +4,8 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.4.0 |
-| **Last updated** | 2026-10-04 |
+| **Version** | 2.5.0 |
+| **Last updated** | 2026-10-06 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
 
@@ -170,6 +170,7 @@ case.
 | FR-SCH-04 | Every run MUST be recorded with its counts, duration and error, so "is this thing still working" is answerable after the fact. | done |
 | FR-SCH-05 | A run MUST NOT start while another run for the same source is still going, however slow that one is. | done |
 | FR-SCH-06 | A scheduled time of day MUST be interpreted in the deployment's own timezone (`KB_TIMEZONE`, an IANA name, default UTC), and an unknown zone MUST fail at startup naming the value. Every timestamp MUST be timezone-aware, so everything that compares instants stays correct regardless. | done |
+| FR-SCH-07 | When a summarizer is configured, a scheduled run that would summarize (an incremental or full sync, or a lazy refresh) MUST first confirm the summarizer passes the same check `sync` requires (FR-CFG-09), and MUST NOT run, recording the failure as that run's error, when it does not. The verdict MAY be reused for a short while so several jobs due together cost one probe. | done |
 
 ### 6.5 Overrides — `FR-OVR`
 
@@ -451,6 +452,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.5.0 | 2026-10-06 | Added FR-SCH-07: the scheduler applies FR-CFG-09's summarizer check before any run that summarizes, as `sync` already did. Found live: with the summarizer's endpoint answering 403 to completions, the scheduler catalogued 39 new documents undescribed (a warning per document, nothing refused), and they had to be recovered with `sync --force`. |
 | 2.4.0 | 2026-10-04 | Added §6.10 (FR-CNT-01..13) and C6: a source may opt into keeping its documents' text (`store_raw_content`), readable page by page through `kb_get`. N1, FR-ENT-01 and C3 narrowed accordingly: entries still never hold a body; the text sits in its own store, tied to the entry's version, purged when the flag is turned off. Prompted by GitLab ADRs: no tool in this stack reads GitLab live, so agents could only ever see their summaries. Designed with Spec Kit in `specs/001-kb-raw-content/`. |
 | 2.3.0 | 2026-09-28 | Added FR-CFG-09: `check()` now proves structured output actually works with a real completions round-trip (a fixed probe: `system` + `response_format: json_object`, verified against the exact reply expected), not just that `/models` answers and lists the right id. `sync` refuses to run at all against a summarizer that fails it. Prompted by the same experimental backend as 2.2.0 below -- it turned out to not merely mis-format JSON sometimes, but to silently ignore the `system` role entirely, every time, while still answering 200 with a normal chat reply. An earlier fix folded the instruction into the `user` message to route around that one backend; reverted -- the request this module sends stays the plain OpenAI standard for every endpoint, and an endpoint that cannot honor it is something to report and refuse, not something to accommodate. |
 | 2.2.0 | 2026-09-28 | Added FR-REC-12: `kb sync --force` bypasses the content-hash gate to recover entries a since-fixed summarizer defect left undescribed -- an unchanged run stops being free only when explicitly asked to. Prompted by an experimental OpenAI-compatible backend that didn't enforce the `response_format` it was sent, degrading ~38% of one sync; the summarizer itself gained a same-request retry with a sharper instruction (no spec change -- an internal robustness detail of FR-REC-06, not new externally-visible behavior), but that only helps content summarized *after* the fix, hence this flag for what came before it. |
