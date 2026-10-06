@@ -66,9 +66,10 @@ services:
       # access token until it can't, at which point it redirects to /login:
       # users were force-logged-out ~15 min after every sign-in. This stack
       # is HTTP on the LAN (no TLS in front), so the cookie must not be
-      # Secure -- same setting admin-panel already uses. If a TLS reverse
-      # proxy is ever put in front, set this to "true" instead.
-      SESSION_COOKIE_SECURE: "false"
+      # Secure -- same setting admin-panel already uses. Read from .env, and
+      # false when it isn't there, so an older .env is still correct. If a TLS
+      # reverse proxy is ever put in front, set it to true in .env.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     volumes:
       # Generated (gitignored) from config/librechat.yaml.example by
       # scripts/render-librechat-config.sh -- `make up` runs this before
