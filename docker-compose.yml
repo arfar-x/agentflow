@@ -59,6 +59,16 @@ services:
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag_api:8000
       ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
+      # The image runs node with NODE_ENV=production, so LibreChat marks the
+      # httpOnly `refreshToken` cookie `Secure` (see shouldUseSecureCookie in
+      # packages/api) -- and browsers DROP Secure cookies set over plain
+      # HTTP. With no refresh cookie the UI can only renew its 15-minute
+      # access token until it can't, at which point it redirects to /login:
+      # users were force-logged-out ~15 min after every sign-in. This stack
+      # is HTTP on the LAN (no TLS in front), so the cookie must not be
+      # Secure -- same setting admin-panel already uses. If a TLS reverse
+      # proxy is ever put in front, set this to "true" instead.
+      SESSION_COOKIE_SECURE: "false"
     volumes:
       # Generated (gitignored) from config/librechat.yaml.example by
       # scripts/render-librechat-config.sh -- `make up` runs this before
