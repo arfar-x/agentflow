@@ -28,9 +28,11 @@ logger = logging.getLogger("kb.mcp")
 INSTRUCTIONS = """\
 The catalog of what knowledge exists in this organization and where it lives.
 
-It holds pointers and summaries, never document text. Search it to find out
-*which* document answers a question, then read that document with the tool named
-in the result's `fetch` field -- the summary is a pointer, not a source.
+It holds pointers and summaries. Search it to find out *which* document answers
+a question, then read that document with the tool named in the result's `fetch`
+field -- the summary is a pointer, not a source. For some sources the catalog
+also keeps each document's full text; for those, `fetch` names `kb_get`, which
+returns the text page by page.
 
 Search in the user's language AND with the same key terms in the other language
 in one call: documents are catalogued in both, and the rankings are combined.
@@ -63,18 +65,23 @@ Find which documents answer a question, and where they live.
 
 Returns hits with a `fetch` field naming the tool and arguments that read the
 real document -- always read it before answering; a catalog summary is a
-pointer, not a source. Search in the user's language AND with the key terms in
+pointer, not a source. That tool is sometimes `kb_get` itself, for documents
+whose full text the catalog keeps. Search in the user's language AND with the key terms in
 the other language in the same call: documents are catalogued in both, and the
 rankings are combined. A hit marked `stale` may have an out-of-date summary,
 but the document itself is always current.
 """
 
 GET_DESCRIPTION = """\
-Everything the catalog knows about one entry, by its id.
+Everything the catalog knows about one entry, by its id -- and, for sources
+that keep it, the document's own text.
 
-Use after kb_search when you need an entry's full keywords, ownership or
-location. This does not return the document's text either: read it with the
-tool named in `fetch`.
+When the result has `content`, answer from `content.text`: it is the real
+document, not a summary. It comes in pages; if `content.next_offset` is set
+and you need more, call again with `offset` set to it. If `content.truncated`
+is true the catalog holds only the start of the document -- say so, and give
+the entry's `location.url` for the rest. When `content` is null, read the
+document with the tool named in `fetch`, or point the user to `location.url`.
 """
 
 
@@ -120,15 +127,20 @@ def build_app(container: Container) -> FastMCP:
         }
 
     @app.tool(description=GET_DESCRIPTION)
-    def kb_get(id: str) -> dict[str, Any]:
+    def kb_get(id: str, offset: int = 0) -> dict[str, Any]:
         """Everything the catalog knows about one entry, by its id.
 
-        Use after `kb_search` when you need an entry's full keywords, ownership
-        or location. This still does not return the document's text: read it
-        with the tool named in `fetch`.
+        Args:
+            id: An entry id, as returned by `kb_search`.
+            offset: Where in the document's text to start reading, for the
+                next page of a long document: pass the previous result's
+                `content.next_offset`. Leave at 0 for the first page.
+
+        Returns the entry, its `fetch` hint and, for a source that keeps
+        documents' text, one page of it in `content` (null otherwise).
         """
         try:
-            view = container.get_entry.execute(id)
+            view = container.get_entry.execute(id, offset=offset)
         except Exception as exc:
             logger.exception("kb_get failed")
             return {"error": {"type": "catalog_unavailable", "message": str(exc).strip()}}
@@ -136,9 +148,10 @@ def build_app(container: Container) -> FastMCP:
             return {"error": {"type": "not_found", "message": f"no entry with id {id!r}"}}
         return {
             "entry": view.entry.model_dump(mode="json"),
-            "fetch": view.entry.fetch_hint,
+            "fetch": view.fetch_hint,
             "stale": view.stale,
             "hidden": view.hidden,
+            "content": view.content.model_dump(mode="json") if view.content else None,
         }
 
     return app

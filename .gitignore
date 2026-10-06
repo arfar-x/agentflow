@@ -21,9 +21,12 @@ config/librechat.yaml
 
 # Local state and config of AI coding agents -- per-developer, not part of
 # this repo. (Project instructions live in AGENTS.md, which every tool reads;
-# CLAUDE.md is a symlink to it.)
+# CLAUDE.md is a symlink to it.) The exception is .claude/skills/, which holds
+# the Spec Kit skills (/speckit-*) installed by `specify init` and shared by
+# everyone working on the specs under specs/.
 .kilo/
-.claude/
+.claude/*
+!.claude/skills/
 .cursor/
 .codex/
 .gemini/

@@ -133,3 +133,48 @@ def test_the_server_asks_for_no_credentials(app):
     for tool in asyncio.run(app.list_tools()):
         names = set(tool.parameters["properties"])
         assert not {"token", "password", "credential", "api_key", "user"} & names
+
+
+def test_kb_get_says_when_to_answer_from_content_and_when_to_go_elsewhere(tools):
+    # Covers: FR-CNT-13
+    get = tools["kb_get"]
+    description = get.description
+    assert "content.text" in description and "next_offset" in description
+    assert "truncated" in description and "location.url" in description
+    assert "fetch" in description, "the fallback when there is no content"
+    assert set(get.parameters["properties"]) == {"id", "offset"}
+    assert get.parameters["required"] == ["id"]
+    assert "next_offset" in get.parameters["properties"]["offset"]["description"]
+
+
+def test_kb_get_hands_back_a_page_of_kept_text():
+    # Covers: FR-CNT-08, FR-CNT-12
+    from kb.domain.content import prepare
+
+    adr = Entry(
+        id="gitlab-adrs:7",
+        type=EntryType.SPEC,
+        title={"en": "ADR-7"},
+        location=Location(kind="gitlab", ref={"path": "docs/adr-7.md"}, url="https://gitlab/adr-7"),
+        source_id="gitlab-adrs",
+        source_version="sha-1",
+        last_seen_at=NOW,
+    )
+    store = FakeEntryStore()
+    store.upsert(adr)
+    store.upsert(REFUNDS)
+    store.put_content(adr.id, prepare("We chose Postgres.", 1024), source_version="sha-1")
+    app = build_app(StubContainer(store))
+
+    payload = call(app, "kb_get", id=adr.id)
+    assert payload["content"] == {
+        "text": "We chose Postgres.",
+        "offset": 0,
+        "total_chars": 18,
+        "next_offset": None,
+        "truncated": False,
+        "original_bytes": 18,
+    }
+    assert payload["fetch"] == {"tool": "kb_get", "args": {"id": adr.id}}
+    assert call(app, "kb_get", id=adr.id, offset=9)["content"]["text"] == "Postgres."
+    assert call(app, "kb_get", id=REFUNDS.id)["content"] is None

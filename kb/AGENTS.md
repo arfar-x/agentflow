@@ -150,6 +150,11 @@ Dependencies point inward only: `adapters → application → domain`.
 - **`entry_search` is derived** — the entry merged with its override,
   normalized. Rebuild it rather than patching it (`_rebuild_search`), so there
   is one definition of what is searchable and it lives in the domain.
+- **Kept document text lives in `entry_content`, never in `entry.data`** --
+  only for sources marked `store_raw_content` (spec §6.10). Every search loads
+  `entry.data`, so text there would be paid for on every query; in its own table
+  it is read a page at a time (`substr` in SQL) and only by `kb_get`. Writes go
+  through `reconcile_document` like everything else.
 - **Ranking stops at the adapter.** It returns one ranked list per query;
   fusing several is the domain's job.
 

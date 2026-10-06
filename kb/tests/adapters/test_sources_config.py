@@ -299,3 +299,71 @@ sources:
     jql: "project = PAY AND text ~ '#${TICKET}'"
 """)
     assert "#42" in load(path, env={"TICKET": "42"}).source("jira").jql
+
+
+def test_a_source_keeps_no_text_unless_it_says_so(tmp_path):
+    # Covers: FR-CNT-01
+    config = load(write(tmp_path, """
+approved: true
+sources:
+  - id: confluence-eng
+    kind: confluence
+  - id: gitlab-adrs
+    kind: gitlab
+    base_url: https://gitlab.internal
+    store_raw_content: true
+"""))
+    assert config.content_policy_for(config.source("confluence-eng")).store is False
+    assert config.content_policy_for(config.source("gitlab-adrs")).store is True
+
+
+def test_sharing_every_source_from_defaults_is_refused_by_name(tmp_path):
+    # Covers: FR-CNT-01
+    # Under defaults it would also share every source added later, by people
+    # who never saw this line.
+    path = write(tmp_path, """
+approved: true
+defaults:
+  store_raw_content: true
+sources: []
+""")
+    with pytest.raises(ConfigError) as excinfo:
+        load(path)
+    assert "store_raw_content" in str(excinfo.value)
+    assert "per source" in str(excinfo.value)
+
+
+def test_the_text_cap_comes_from_defaults_and_a_source_may_override_it(tmp_path):
+    # Covers: FR-CNT-07
+    config = load(write(tmp_path, """
+approved: true
+defaults:
+  raw_content_max_bytes: 2097152
+sources:
+  - id: a
+    kind: confluence
+    store_raw_content: true
+  - id: b
+    kind: confluence
+    store_raw_content: true
+    raw_content_max_bytes: 4096
+  - id: c
+    kind: confluence
+"""))
+    assert config.content_policy_for(config.source("a")).max_bytes == 2097152
+    assert config.content_policy_for(config.source("b")).max_bytes == 4096
+    assert SourcesConfig().defaults.raw_content_max_bytes == 10 * 1024 * 1024
+
+
+def test_a_text_cap_too_small_to_mean_anything_is_rejected(tmp_path):
+    # Covers: FR-CNT-07
+    path = write(tmp_path, """
+approved: true
+sources:
+  - id: a
+    kind: confluence
+    raw_content_max_bytes: 10
+""")
+    with pytest.raises(ConfigError) as excinfo:
+        load(path)
+    assert "raw_content_max_bytes" in str(excinfo.value)

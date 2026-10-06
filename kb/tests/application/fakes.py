@@ -12,8 +12,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable, Iterator, Sequence
 
+from kb.application.ports.entry_store import ContentSlice
 from kb.application.ports.knowledge_source import SourceDocument
 from kb.application.ports.summarizer import SummaryDraft
+from kb.domain.content import RawContent
 from kb.domain.entry import Entry, EntryType
 from kb.domain.merge import Override
 from kb.domain.text import normalize, normalize_all
@@ -38,6 +40,8 @@ class FakeEntryStore:
         self.refresh_queue: dict[str, dict] = {}
         self.checkpoints: dict[str, str | None] = {}
         self.runs: list[dict] = []
+        #: entry id -> (text as stored, the version it was read at)
+        self.contents: dict[str, tuple[RawContent, str | None]] = {}
         self.upserts = 0
         self.touches = 0
 
@@ -115,11 +119,46 @@ class FakeEntryStore:
             if entry is None or entry.deleted_at is not None:
                 continue
             self.entries[entry_id] = entry.model_copy(update={"deleted_at": at})
+            self.contents.pop(entry_id, None)
             changed += 1
         return changed
 
     def revive(self, entry_id: str) -> None:
         self.entries[entry_id] = self.entries[entry_id].model_copy(update={"deleted_at": None})
+
+    # -- raw content -------------------------------------------------------
+    def put_content(self, entry_id: str, content: RawContent, *, source_version: str | None) -> bool:
+        if entry_id not in self.entries:
+            raise KeyError(entry_id)  # the real table's foreign key
+        if self.contents.get(entry_id) == (content, source_version):
+            return False
+        self.contents[entry_id] = (content, source_version)
+        return True
+
+    def delete_content(self, entry_id: str) -> None:
+        self.contents.pop(entry_id, None)
+
+    def purge_content(self, source_id: str) -> int:
+        doomed = [i for i in self.contents if self.entries[i].source_id == source_id]
+        for entry_id in doomed:
+            del self.contents[entry_id]
+        return len(doomed)
+
+    def read_content(self, entry_id: str, *, offset: int, limit: int) -> ContentSlice | None:
+        if entry_id not in self.contents:
+            return None
+        content, version = self.contents[entry_id]
+        return ContentSlice(
+            text=content.text[offset : offset + limit],
+            offset=offset,
+            total_chars=len(content.text),
+            truncated=content.truncated,
+            original_bytes=content.original_bytes,
+            source_version=version,
+        )
+
+    def content_ids(self, entry_ids: Sequence[str]) -> set[str]:
+        return {i for i in entry_ids if i in self.contents}
 
     def log_miss(self, query: str, *, at: datetime) -> None:
         self.misses.append((query, at))
