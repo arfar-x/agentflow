@@ -59,6 +59,10 @@ services:
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag_api:8000
       ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
+      # Defaults to false so a deployment whose .env predates this setting is
+      # still correct: the published port is plain HTTP, and a Secure login
+      # cookie is dropped by browsers there. See .env.example.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     volumes:
       # Generated (gitignored) from config/librechat.yaml.example by
       # scripts/render-librechat-config.sh -- `make up` runs this before
