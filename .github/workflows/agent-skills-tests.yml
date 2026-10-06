@@ -42,10 +42,7 @@ jobs:
             -t mcp-agent-skills-test \
             agent-skills
 
-      # The suite introspects every skill, telegram included, which this stack
-      # deliberately does not install -- so its requirements are added here for
-      # the test run only, or three telegram tests fail on `import telethon`.
       - name: Run mcp-server's tests inside it
         run: |
           docker run --rm --user root --entrypoint sh mcp-agent-skills-test -c \
-            "pip install --no-cache-dir pytest -r skills/telegram/requirements.txt -q >/dev/null && cd mcp-server && python3 -m pytest -q"
+            "pip install --no-cache-dir pytest -q >/dev/null && cd mcp-server && python3 -m pytest -q"
