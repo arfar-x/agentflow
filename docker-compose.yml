@@ -12,6 +12,15 @@
 networks:
   frontend:
   backend:
+  # crw's own network, and the only one it is on. crw fetches whatever URLs
+  # search results contain -- addresses chosen by the internet, not by us --
+  # so it must not share a network with anything that trusts its callers by
+  # reachability, which is every service on `backend` (mongodb, the MCP
+  # servers, kb-webhook, ...). A link to http://mongodb:27017 in a search
+  # result must resolve to nothing. `api` joins this network to call crw; a
+  # container on two networks doesn't route between them, so that gives api
+  # crw, never crw backend.
+  scraper:
 
 volumes:
   mongodb_data:
@@ -82,7 +91,7 @@ services:
       - librechat_uploads:/app/uploads
       - librechat_images:/app/client/public/images
       - librechat_logs:/app/api/logs
-    networks: [frontend, backend]
+    networks: [frontend, backend, scraper]
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -413,10 +422,12 @@ services:
   # Page scraper for LibreChat's web search: SearXNG finds the links, crw
   # fetches the pages and returns them as markdown. LibreChat talks to it as
   # a self-hosted Firecrawl (webSearch.scraperProvider: firecrawl) -- crw
-  # implements Firecrawl's /v1 and /v2 scrape API. Internal-only like
-  # searxng: no published port, `backend` network only. It has no auth of its
-  # own (no [auth] api_keys configured), which is why it must never get a
-  # `ports:` entry. CRW_RENDERER__MODE=none: plain HTTP plus crw's built-in
+  # implements Firecrawl's /v1 and /v2 scrape API. No published port, and
+  # NOT on `backend`: only on `scraper`, which only `api` joins (see the
+  # networks comment at the top). It has no auth of its own (no [auth]
+  # api_keys configured), which is why it must never get a `ports:` entry --
+  # and it fetches attacker-chosen URLs, which is why it must never join
+  # `backend`. CRW_RENDERER__MODE=none: plain HTTP plus crw's built-in
   # browser-impersonation fallback, no headless-browser sidecar -- see
   # docs/CONFIGURATION.md "Web search" for adding LightPanda when JS-only
   # pages come back empty. The image ships no curl/wget, so there is no
@@ -426,7 +437,7 @@ services:
     restart: unless-stopped
     environment:
       CRW_RENDERER__MODE: none
-    networks: [backend]
+    networks: [scraper]
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
