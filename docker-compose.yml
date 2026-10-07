@@ -245,6 +245,11 @@ services:
       # exception server.py's own startup warning calls out. See
       # agent-skills/AUTHENTICATION.md, Part 3.
       MCP_TRUST_REQUEST_CREDENTIALS: "1"
+      # A per-user field LibreChat can't leave empty is entered as `-`; this
+      # makes such a header mean "not set" for that call rather than a
+      # literal value (agent-skills >= v0.17.1). The comment above
+      # config/librechat.yaml.example's agent-skills headers explains why.
+      MCP_UNSET_HEADER_VALUE: "-"
     networks: [backend]
     logging:
       driver: json-file
