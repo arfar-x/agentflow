@@ -78,6 +78,18 @@ provider API key and every tool/MCP credential (including the shared
 database that opens normally but whose stored credentials cannot be
 decrypted, ever.** There is no re-encryption step to recover from this.
 
+`volumes/plugin_signing/agentflow.{private,public}.pem` is a different
+kind of secret: the keypair `scripts/bootstrap.sh` generates once to sign
+the `agentflow-mcp-auth` plugin (see `docs/CONFIGURATION.md`
+"agentflow-mcp-auth plugin"), trusted by `plugin_daemon` via
+`THIRD_PARTY_SIGNATURE_VERIFICATION_PUBLIC_KEYS`. Nothing is encrypted
+with it (unlike `SECRET_KEY`), so **losing it is recoverable, not
+catastrophic** -- delete the directory and rerun `scripts/bootstrap.sh`;
+it generates a fresh keypair, re-signs, and re-installs the same plugin.
+It's still worth backing up alongside `./volumes/` (already covered
+automatically, since it lives under `./volumes/`) purely to avoid that
+one extra step, not because losing it threatens any stored data.
+
 The same "must match its pair" rule from `docs/CONFIGURATION.md` applies
 to `REDIS_PASSWORD`/`CELERY_BROKER_URL`, `PGVECTOR_PASSWORD`/
 `PGVECTOR_POSTGRES_PASSWORD`, and `SANDBOX_API_KEY`/`CODE_EXECUTION_API_KEY`

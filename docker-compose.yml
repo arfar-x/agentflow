@@ -515,6 +515,15 @@ services:
       PLUGIN_REMOTE_INSTALLING_PORT: ${PLUGIN_DEBUGGING_PORT:-5003}
       PLUGIN_WORKING_PATH: ${PLUGIN_WORKING_PATH:-/app/storage/cwd}
       FORCE_VERIFYING_SIGNATURE: ${FORCE_VERIFYING_SIGNATURE:-true}
+      # agentflow addition -- lets scripts/bootstrap.sh install its own
+      # locally-signed agentflow-mcp-auth plugin (see docs/CONFIGURATION.md
+      # "agentflow-mcp-auth plugin") without weakening FORCE_VERIFYING_SIGNATURE
+      # for anything else: only a package signed with volumes/plugin_signing/
+      # agentflow.public.pem's matching private key is trusted, everything
+      # else (Marketplace plugins, langgenius-authored ones) still needs a
+      # real langgenius signature exactly as before.
+      THIRD_PARTY_SIGNATURE_VERIFICATION_ENABLED: ${THIRD_PARTY_SIGNATURE_VERIFICATION_ENABLED:-true}
+      THIRD_PARTY_SIGNATURE_VERIFICATION_PUBLIC_KEYS: ${THIRD_PARTY_SIGNATURE_VERIFICATION_PUBLIC_KEYS:-/app/keys/agentflow.public.pem}
       PYTHON_ENV_INIT_TIMEOUT: ${PLUGIN_PYTHON_ENV_INIT_TIMEOUT:-120}
       PLUGIN_MAX_EXECUTION_TIMEOUT: ${PLUGIN_MAX_EXECUTION_TIMEOUT:-600}
       PLUGIN_STDIO_BUFFER_SIZE: ${PLUGIN_STDIO_BUFFER_SIZE:-1024}
@@ -554,6 +563,10 @@ services:
       - "${EXPOSE_PLUGIN_DEBUGGING_PORT:-5003}:${PLUGIN_DEBUGGING_PORT:-5003}"
     volumes:
       - ./volumes/plugin_daemon:/app/storage
+      # agentflow addition -- scripts/generate-secrets.sh generates this
+      # keypair (gitignored, under /volumes/); only the public half is ever
+      # mounted here. See THIRD_PARTY_SIGNATURE_VERIFICATION_* above.
+      - ./volumes/plugin_signing:/app/keys:ro
     depends_on:
       db_postgres:
         condition: service_healthy

@@ -40,7 +40,10 @@ echo "SANDBOX_API_KEY=${SANDBOX_KEY}"
 echo "CODE_EXECUTION_API_KEY=${SANDBOX_KEY}"
 echo
 echo "DIFY_AGENT_API_TOKEN=$(openssl rand -hex 24)"
-echo "DIFY_AGENT_SERVER_SECRET_KEY=$(openssl rand -hex 24)"
+# Must decode to exactly 32 raw bytes (dify-agent-backend urlsafe-base64-
+# decodes it to derive a JWE key) -- hex text doesn't satisfy that. Same
+# generator docker-compose.yml's own comment on this var recommends.
+echo "DIFY_AGENT_SERVER_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 echo
 echo "DIFY_ADMIN_PASSWORD=$(openssl rand -hex 12)"
 echo

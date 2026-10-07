@@ -44,7 +44,8 @@ volume is worth.
 | Variable | Notes |
 |---|---|
 | `MCP_TOOLSETS` | Default `jira`. **Quote it** if it lists more than one (`MCP_TOOLSETS="jira confluence"`). Space-separated toolset names, each needing `skills/<name>/requirements.txt` in the `agent-skills` submodule. Changing this requires `docker compose up -d --build mcp-agent-skills`. |
-| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | Required for every `jira_*` tool call -- see "Per-user vs. shared credentials" below for why these are filled in here at all, unlike the Open WebUI branch of this project. |
+| `MCP_TRUST_REQUEST_CREDENTIALS` | `1` to let the `agentflow-mcp-auth` plugin (see its own section below) override a caller's Jira/Confluence credentials per request. Trusted here on network isolation alone -- see that section for the reasoning. |
+| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | The **fallback** identity for any `jira_*` call from a Dify end user who hasn't set their own credentials via `agentflow-mcp-auth` -- see "Per-user vs. shared credentials" below. |
 | `JIRA_AUTO_CONFIRM_WRITES` | Leave `false`. This is agent-skills' own write gate (enforced in its code) -- see "Tool approval" below; there's no second layer above it in this deployment, so this is the one thing standing between a model and an unconfirmed write. |
 | `JIRA_DEFAULT_PROJECT` / `JIRA_DEPLOYMENT_TYPE` | Same as before -- see `skills/jira/README.md` in the submodule. |
 | `CONFLUENCE_BASE_URL` / `CONFLUENCE_USERNAME` / `CONFLUENCE_PASSWORD` / `CONFLUENCE_AUTO_CONFIRM_WRITES` / `CONFLUENCE_DEFAULT_SPACE` | Same pattern as Jira above. |
@@ -54,32 +55,100 @@ volume is worth.
 
 LibreChat (`customUserVars`) and this project's Open WebUI branch (a
 Tool's per-user Valves) both let each person chatting use their own Jira/
-Confluence identity. **This Dify deployment does not** -- it's one shared
-identity for every workspace member, configured once in `.env`, by
-deliberate scope decision confirmed against Dify's own source, not a
-workaround for a missing feature nobody looked for:
+Confluence identity. **This Dify deployment now does too**, via
+`dify-plugins/agentflow-mcp-auth` -- a Dify plugin this repo builds and
+installs itself, not a Community Edition feature.
 
-`api/models/tools.py`'s `MCPToolProvider.identity_mode` column supports
-exactly one non-`"off"` value, `idp_token`, which calls a
-**Dify-Enterprise-only** internal endpoint
-(`/inner/api/mcp/issue-token`) to mint a per-user SSO access token and
-stamp it on the outbound MCP request. There is no Community Edition path
-to "each caller's own secret gets forwarded to the MCP server" the way
-LibreChat's `customUserVars` or Open WebUI's Tool Valves work. Because of
-that, `mcp-agent-skills` here runs the same way LibreChat's own
-"AUTHENTICATION.md shape 3" describes: one identity, configured in the
-server's own process environment, with `MCP_TRUST_REQUEST_CREDENTIALS`
-**not** set (there's no per-request credential to trust in the first
-place).
+`api/models/tools.py`'s `MCPToolProvider.identity_mode` column (the
+native Dify mechanism for this) supports exactly one non-`"off"` value,
+`idp_token`, which calls a **Dify-Enterprise-only** internal endpoint
+(`/inner/api/mcp/issue-token`). There is no Community Edition path to
+"each caller's own secret gets forwarded to the MCP server" built into
+Dify's own MCP tool-provider integration -- confirmed by reading that
+source directly. That's why this is a separate plugin bridging the exact
+same mechanism `agent-skills/AUTHENTICATION.md` (Part 2) already exposes
+for any HTTP client, rather than a Dify config value: `mcp-agent-skills`
+never needed to change, only something to call it per-user needed to
+exist. See "agentflow-mcp-auth plugin" below for exactly how.
 
-**Upgrading this to per-user later** would mean writing a Dify plugin
-(Dify's own Plugin SDK packages a "tool provider," similar in spirit to
-Open WebUI's Tool but implemented completely differently) that reads a
-per-conversation or per-user input and forwards it as
-`X-Agent-Skills-Env-*` headers itself -- a real, scoped engineering task,
-not a config change, and out of scope for this deployment because it
-wasn't asked for and couldn't be verified without a live Dify instance
-to build and test the plugin against.
+The shared `JIRA_*`/`CONFLUENCE_*` vars above are still meaningful: any
+Dify end user who never sets their own credentials falls back to them, the
+same one-shared-identity behavior this deployment always had. Leave them
+blank instead if you want every user to be required to set their own.
+
+### agentflow-mcp-auth plugin
+
+Source: `dify-plugins/agentflow-mcp-auth`. Installed and configured
+entirely by `scripts/bootstrap.sh` (package -> self-sign -> upload ->
+install -> create its Endpoint -> configure its one provider setting) --
+nothing here is a Studio-only manual step. Full design notes live in the
+plugin's own `README.md`; this section only covers deployment-level
+config and the trust model.
+
+**What it does, in one sentence:** each Dify end user gets a one-time link
+(`get_credentials_link` tool) to their own small HTML form (never through
+chat) for entering their own Jira/Confluence username+password, encrypted
+and stored per-user inside the plugin, then injected as
+`X-Agent-Skills-Env-*` headers (`agent-skills/AUTHENTICATION.md` Part 2)
+on every `mcp_call_tool` call that user makes.
+
+**Signing, not a weaker `FORCE_VERIFYING_SIGNATURE`.** Self-hosted Dify
+rejects any plugin package without a trusted signature by default. Rather
+than setting `FORCE_VERIFYING_SIGNATURE=false` (which would accept *any*
+unsigned plugin, Marketplace or not -- a real security regression for
+this whole deployment, not just this one plugin), `scripts/bootstrap.sh`:
+
+1. Generates its own keypair once (`dify signature generate`), kept at
+   `volumes/plugin_signing/agentflow.{private,public}.pem` (gitignored;
+   back it up like any other secret -- see `docs/OPERATIONS.md`
+   "Secrets"; losing it just means the next `bootstrap.sh` run generates a
+   new one and re-signs, nothing stored is encrypted with it).
+2. Signs the packaged plugin with `-c community` (`dify signature sign`)
+   -- deliberately not `-c langgenius`, which would make
+   `ENFORCE_LANGGENIUS_PLUGIN_SIGNATURES` (still `true`, unchanged) reject
+   it for not actually being signed by langgenius.
+3. `docker-compose.yml`'s `plugin_daemon` service trusts *only* that one
+   public key (`THIRD_PARTY_SIGNATURE_VERIFICATION_ENABLED=true`,
+   `THIRD_PARTY_SIGNATURE_VERIFICATION_PUBLIC_KEYS=/app/keys/agentflow.public.pem`)
+   -- every other plugin (Marketplace, langgenius-authored) still needs a
+   real langgenius signature exactly as before this change.
+
+**Trust model: network isolation, not inbound auth
+(`agent-skills/AUTHENTICATION.md` Part 3/4a, deliberately).** The plugin
+sets `MCP_TRUST_REQUEST_CREDENTIALS=1` on `mcp-agent-skills`, which prints
+a startup warning ("a caller's self-asserted credential header will be
+honored with nothing verifying who's actually calling") -- expected and
+accounted for here, not a misconfiguration: `mcp-agent-skills` has no
+published port and is reachable only from `api`/`worker`/`plugin_daemon`
+on this compose project's own internal `default` network, so the header
+is only ever set by this plugin's own server-side code, keyed off
+`ToolRuntime.user_id` -- populated by Dify's own backend from the actual
+authenticated caller, not a value the end user's chat message can
+influence. Standing up Keycloak for Part 3's stronger guarantee (verifying
+the *caller*, i.e. the plugin daemon itself, cryptographically) was
+considered and deliberately skipped: it would only prove what network
+isolation already guarantees here, for a real deployment cost (a new
+service, a new credential to manage) this repo doesn't currently carry
+anywhere else.
+
+**Credentials never reach the LLM's context.** `get_credentials_link`
+returns a link, not a form -- the human opens it in their own browser and
+posts straight to the plugin's Endpoint. Verified live: the Endpoint
+correctly serves the real form for a valid signed token and a "link
+isn't usable" page for a forged/expired one.
+
+**Every secret is encrypted at rest**, with a root key the plugin
+generates for itself on first use and keeps in its own persistent
+storage -- never a workspace-visible Studio credential field, never in
+`.env`. See the plugin's own `README.md`/`PRIVACY.md` for the exact
+mechanism.
+
+**Verified against a live server, not just constructed:** calling
+`jira_search` through the plugin's own MCP client with a per-request
+`X-Agent-Skills-Env-JIRA_BASE_URL` header pointed at a nonexistent host
+produced a connection error naming *that* host, not the deployment's real
+configured Jira -- confirming the header genuinely overrides the shared
+identity per call.
 
 ### Tool approval
 

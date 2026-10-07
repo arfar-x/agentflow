@@ -1,0 +1,22 @@
+identity:
+  name: "mcp_list_tools"
+  author: "agentflow"
+  label:
+    en_US: "MCP: List agent-skills Tools"
+    zh_Hans: "MCP: List agent-skills Tools"
+    pt_BR: "MCP: List agent-skills Tools"
+    ja_JP: "MCP: List agent-skills Tools"
+description:
+  human:
+    en_US: "Lists every tool currently exposed by agentflow's agent-skills MCP server, with its arguments."
+    zh_Hans: "Lists every tool currently exposed by agentflow's agent-skills MCP server, with its arguments."
+    pt_BR: "Lists every tool currently exposed by agentflow's agent-skills MCP server, with its arguments."
+    ja_JP: "Lists every tool currently exposed by agentflow's agent-skills MCP server, with its arguments."
+  llm: >-
+    Discover which agent-skills tools exist right now and what arguments
+    each one takes. Call this before "Call agent-skills Tool" if the exact
+    tool name/schema isn't already known.
+parameters: []
+extra:
+  python:
+    source: tools/mcp_list_tools.py

@@ -1,0 +1,66 @@
+identity:
+  name: "mcp_call_tool"
+  author: "agentflow"
+  label:
+    en_US: "Call agent-skills Tool"
+    zh_Hans: "Call agent-skills Tool"
+    pt_BR: "Call agent-skills Tool"
+    ja_JP: "Call agent-skills Tool"
+description:
+  human:
+    en_US: >-
+      Calls one tool on agentflow's agent-skills MCP server (jira_search,
+      confluence_create_page, ...), automatically using the calling user's
+      own stored Jira/Confluence credentials if they've set any (see the
+      "Get My Credentials Link" tool) -- otherwise falls back to
+      mcp-agent-skills' own shared/default identity, if it has one
+      configured.
+    zh_Hans: >-
+      Calls one tool on agentflow's agent-skills MCP server, using the
+      calling user's own stored credentials if set.
+    pt_BR: >-
+      Calls one tool on agentflow's agent-skills MCP server, using the
+      calling user's own stored credentials if set.
+    ja_JP: >-
+      Calls one tool on agentflow's agent-skills MCP server, using the
+      calling user's own stored credentials if set.
+  llm: >-
+    Call one tool exposed by the agent-skills MCP server (e.g. jira_search,
+    jira_worklog, confluence_create_page, list_skills). Use "MCP: List
+    agent-skills Tools" first if you don't already know the exact tool
+    name and its arguments.
+parameters:
+  - name: tool_name
+    type: string
+    required: true
+    label:
+      en_US: Tool name
+      zh_Hans: Tool name
+      pt_BR: Tool name
+      ja_JP: Tool name
+    human_description:
+      en_US: "Exact agent-skills tool name, e.g. jira_search."
+      zh_Hans: "Exact agent-skills tool name, e.g. jira_search."
+      pt_BR: "Exact agent-skills tool name, e.g. jira_search."
+      ja_JP: "Exact agent-skills tool name, e.g. jira_search."
+    llm_description: "Exact name of the agent-skills tool to call, e.g. jira_search, jira_worklog, confluence_create_page."
+    form: llm
+  - name: arguments
+    type: string
+    required: false
+    default: "{}"
+    label:
+      en_US: Arguments (JSON)
+      zh_Hans: Arguments (JSON)
+      pt_BR: Arguments (JSON)
+      ja_JP: Arguments (JSON)
+    human_description:
+      en_US: "The tool's arguments, as a JSON object string, e.g. {\"query\": \"project = PAY\"}."
+      zh_Hans: "The tool's arguments, as a JSON object string."
+      pt_BR: "The tool's arguments, as a JSON object string."
+      ja_JP: "The tool's arguments, as a JSON object string."
+    llm_description: "JSON object (as a string) of the arguments this tool call takes. Use {} for a tool that takes no arguments."
+    form: llm
+extra:
+  python:
+    source: tools/mcp_call_tool.py

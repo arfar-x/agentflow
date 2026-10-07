@@ -1,0 +1,60 @@
+version: 0.0.1
+type: plugin
+author: agentflow
+name: agentflow_mcp_auth
+label:
+  en_US: agentflow MCP Auth Bridge
+  ja_JP: agentflow MCP Auth Bridge
+  zh_Hans: agentflow MCP Auth Bridge
+  pt_BR: agentflow MCP Auth Bridge
+description:
+  en_US: >-
+    Per-user Jira/Confluence credential bridge for agentflow's mcp-agent-skills
+    server -- each Dify end user stores their own credentials (via a one-time
+    link, never through chat) and every call is made under their own identity,
+    injected as X-Agent-Skills-Env-* headers on the outbound MCP request.
+  ja_JP: >-
+    Per-user Jira/Confluence credential bridge for agentflow's mcp-agent-skills
+    server -- each Dify end user stores their own credentials (via a one-time
+    link, never through chat) and every call is made under their own identity,
+    injected as X-Agent-Skills-Env-* headers on the outbound MCP request.
+  zh_Hans: >-
+    Per-user Jira/Confluence credential bridge for agentflow's mcp-agent-skills
+    server -- each Dify end user stores their own credentials (via a one-time
+    link, never through chat) and every call is made under their own identity,
+    injected as X-Agent-Skills-Env-* headers on the outbound MCP request.
+  pt_BR: >-
+    Per-user Jira/Confluence credential bridge for agentflow's mcp-agent-skills
+    server -- each Dify end user stores their own credentials (via a one-time
+    link, never through chat) and every call is made under their own identity,
+    injected as X-Agent-Skills-Env-* headers on the outbound MCP request.
+icon: icon.svg
+icon_dark: icon-dark.svg
+resource:
+  memory: 268435456
+  permission:
+    tool:
+      enabled: true
+    endpoint:
+      enabled: true
+    storage:
+      enabled: true
+      size: 5242880
+plugins:
+  tools:
+    - provider/agentflow_mcp_auth.yaml
+  endpoints:
+    - group/credentials.yaml
+meta:
+  version: 0.0.1
+  arch:
+    - amd64
+    - arm64
+  runner:
+    language: python
+    version: "3.12"
+    entrypoint: main
+  minimum_dify_version: null
+created_at: 2026-09-18T10:01:01.300869704Z
+privacy: PRIVACY.md
+verified: false

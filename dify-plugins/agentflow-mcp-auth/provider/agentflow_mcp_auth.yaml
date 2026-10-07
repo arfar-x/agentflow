@@ -1,0 +1,54 @@
+identity:
+  author: "agentflow"
+  name: "agentflow_mcp_auth"
+  label:
+    en_US: "agentflow MCP Auth Bridge"
+    zh_Hans: "agentflow MCP Auth Bridge"
+    pt_BR: "agentflow MCP Auth Bridge"
+    ja_JP: "agentflow MCP Auth Bridge"
+  description:
+    en_US: "Per-user Jira/Confluence credentials for agent-skills, bridged over MCP."
+    zh_Hans: "Per-user Jira/Confluence credentials for agent-skills, bridged over MCP."
+    pt_BR: "Per-user Jira/Confluence credentials for agent-skills, bridged over MCP."
+    ja_JP: "Per-user Jira/Confluence credentials for agent-skills, bridged over MCP."
+  icon: "icon.svg"
+
+# The only workspace-level (shared, admin-visible) setting this provider
+# needs: the externally-reachable URL of this plugin's own credentials
+# Endpoint (see group/credentials.yaml), so the get_credentials_link tool
+# can hand a user a real, clickable link. Everyone's actual Jira/Confluence
+# secret lives per-user in this plugin's own encrypted storage, never here
+# -- see utils/secret_store.py and utils/user_credentials.py.
+#
+# scripts/bootstrap.sh sets this declaratively, the same way it already
+# configures the vLLM model provider's credentials, right after it creates
+# the Endpoint instance and learns its real URL. No value here is a secret,
+# so this field is intentionally not `secret-input`.
+credentials_for_provider:
+  credentials_endpoint_url:
+    type: text-input
+    required: false
+    label:
+      en_US: "Credentials Endpoint URL"
+      zh_Hans: "Credentials Endpoint URL"
+      pt_BR: "Credentials Endpoint URL"
+      ja_JP: "Credentials Endpoint URL"
+    placeholder:
+      en_US: "https://your-dify-host/e/<hook_id>/credentials"
+      zh_Hans: "https://your-dify-host/e/<hook_id>/credentials"
+      pt_BR: "https://your-dify-host/e/<hook_id>/credentials"
+      ja_JP: "https://your-dify-host/e/<hook_id>/credentials"
+    help:
+      en_US: "Set once by scripts/bootstrap.sh after it creates this plugin's Endpoint instance. Leave blank until then -- get_credentials_link will say so plainly if it's unset."
+      zh_Hans: "Set once by scripts/bootstrap.sh after it creates this plugin's Endpoint instance. Leave blank until then -- get_credentials_link will say so plainly if it's unset."
+      pt_BR: "Set once by scripts/bootstrap.sh after it creates this plugin's Endpoint instance. Leave blank until then -- get_credentials_link will say so plainly if it's unset."
+      ja_JP: "Set once by scripts/bootstrap.sh after it creates this plugin's Endpoint instance. Leave blank until then -- get_credentials_link will say so plainly if it's unset."
+
+tools:
+  - tools/mcp_call_tool.yaml
+  - tools/mcp_list_tools.yaml
+  - tools/get_credentials_link.yaml
+  - tools/clear_my_credentials.yaml
+extra:
+  python:
+    source: provider/agentflow_mcp_auth.py

@@ -103,22 +103,30 @@ upgrades a diffable, low-risk operation rather than a rewrite.
   `api/services/tools/mcp_tools_manage_service.py` directly. Unlike
   Open WebUI's/LibreChat's own agent-skills integrations, no custom
   bridge code was needed for the MCP connection itself.
-- **Jira/Confluence credentials are ONE SHARED identity for this whole
-  deployment, not per end-user -- a deliberate scope decision, confirmed
-  necessary by reading the actual Dify source, not assumed.** Dify's own
-  `MCPToolProvider.identity_mode` column supports exactly one
-  non-`"off"` value (`idp_token`), which calls a Dify-Enterprise-only
-  internal API (`/inner/api/mcp/issue-token`) to mint a per-user SSO
-  token -- there is no Community Edition equivalent of LibreChat's
-  `customUserVars` or Open WebUI's per-user Tool Valves for MCP tool
-  providers. `JIRA_*`/`CONFLUENCE_*` in `.env` configure
-  `mcp-agent-skills`' own process environment directly (unlike the
-  Open WebUI branch's per-user design, `MCP_TRUST_REQUEST_CREDENTIALS`
-  is NOT set here -- there is no per-request credential to trust). A
-  genuine per-user upgrade later would mean writing a custom Dify plugin
-  (Dify's own Plugin SDK, not a config change) -- out of scope here
-  because it wasn't asked for and couldn't be verified without a live
-  instance to test against.
+- **Jira/Confluence credentials can be per end-user, via this repo's own
+  Dify plugin (`dify-plugins/agentflow-mcp-auth`), not Dify's native MCP
+  identity mechanism.** Dify's own `MCPToolProvider.identity_mode` column
+  supports exactly one non-`"off"` value (`idp_token`), which calls a
+  Dify-Enterprise-only internal API (`/inner/api/mcp/issue-token`) -- there
+  is no Community Edition equivalent of LibreChat's `customUserVars` or
+  Open WebUI's per-user Tool Valves built into Dify's MCP tool-provider
+  integration itself, confirmed by reading that source directly. So this
+  repo bridges the same mechanism a different way: `agentflow-mcp-auth` is
+  a real Dify plugin (Tool + Endpoint), packaged/self-signed/installed by
+  `scripts/bootstrap.sh`, that lets each Dify end user store their own
+  Jira/Confluence credentials (via a one-time link to its own HTML form,
+  never through chat) and injects them as `X-Agent-Skills-Env-*` headers
+  per call -- exactly the mechanism `agent-skills/AUTHENTICATION.md`
+  Part 2 already exposes for any HTTP client, `mcp-agent-skills` itself
+  unchanged. `MCP_TRUST_REQUEST_CREDENTIALS=1` is set for this reason; the
+  `JIRA_*`/`CONFLUENCE_*` vars in `.env` are now the fallback identity for
+  a user who hasn't set their own. Trusted on network isolation alone
+  (`mcp-agent-skills` has no published port), not inbound auth -- see
+  `docs/CONFIGURATION.md`'s "agentflow-mcp-auth plugin" section for the
+  full reasoning, the signing model (a locally-generated key trusted via
+  `THIRD_PARTY_SIGNATURE_VERIFICATION_PUBLIC_KEYS`, not a weakened
+  `FORCE_VERIFYING_SIGNATURE`), and why Keycloak was deliberately not
+  added on top.
 - **Tool-call approval is one layer, not two, in this deployment.**
   `agent-skills`' own `--confirm` requirement (enforced in that repo's
   code, independent of any caller) is unchanged and is the only
@@ -196,3 +204,7 @@ upgrades a diffable, low-risk operation rather than a rewrite.
 - `agent-skills/` -- git submodule, pinned to a tag (see Architecture
   above); has its own `AGENTS.md` and `AUTHENTICATION.md` governing that
   subtree.
+- `dify-plugins/agentflow-mcp-auth/` -- this repo's own Dify plugin (per-user
+  Jira/Confluence credentials, bridged over MCP); has its own `README.md`
+  and `PRIVACY.md` covering its internals. Installed by `scripts/bootstrap.sh`,
+  not by hand.
