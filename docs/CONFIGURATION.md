@@ -159,6 +159,9 @@ model, so a model that accepts a different set needs its own endpoint entry.
 |---|---|---|
 | `MCP_TOOLSETS` | no | Default `jira`. **Quote it** if it lists more than one (`MCP_TOOLSETS="jira confluence"`) -- `.env` is also `source`d directly by `scripts/bootstrap.sh`/`make up`, and an unquoted space-separated value breaks that (bash tries to run the second word as a command). Space-separated toolset names, each needing `skills/<name>/requirements.txt` to exist in the `agent-skills` submodule. Changing this requires `docker compose up -d --build mcp-agent-skills`. |
 | Jira/Confluence base URL, username, password, default project/space | -- | Not `.env` variables. Each user enters their own in the chat UI (MCP Settings); LibreChat's `customUserVars` (`config/librechat.yaml.example`) sends them to mcp-agent-skills as `X-Agent-Skills-Env-*` headers on every call. There's no shared fallback identity. |
+| GitLab base URL, token | -- | Same mechanism as Jira's, for the `glab` toolset (needs `glab` in `MCP_TOOLSETS`). The token is a **personal access token** from the user's own GitLab profile (`read_api`, or `api` to comment on merge requests); it reaches every project that user can, so there is no default-project field and requests name their project. **Optional by convention, not by LibreChat:** v0.8.8 has no optional `customUserVars` field, and a user with any field blank gets none of agent-skills' tools. A user without GitLab enters `-` in both fields, which mcp-agent-skills reads as "not set" (`MCP_UNSET_HEADER_VALUE`, below): Jira and Confluence work, and `glab_*` calls report the variables as not set. `-` works the same way in any other per-user field. |
+| `MCP_UNSET_HEADER_VALUE` | -- | Set to `-` in `docker-compose.yml`, not `.env`. A per-user header carrying exactly this value means "not set" for that call: the variable is removed, never filled from the server's own environment, so a user who enters `-` never runs as the server's identity. Needs agent-skills v0.17.1 or later. Empty disables it, and `-` is then sent as a literal value. |
+| `GITLAB_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. Server-level, not per-user. |
 | `JIRA_AUTO_CONFIRM_WRITES` | no | Leave `false` in production. LibreChat's own `toolApproval` gate (in `config/librechat.yaml`) is the intended approval surface; this variable existing at all is an escape hatch for automation you explicitly trust, not something to flip for convenience. |
 | `JIRA_DEPLOYMENT_TYPE` | no | Only required the first time `create_issue`/`edit_issue` sets an assignee. |
 | `CONFLUENCE_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. |
@@ -217,7 +220,8 @@ default rather than adding to it. That default set includes:
   come from an MCP server refuses to run ("The agent is configured to use MCP
   tools, but none are available") when that server gives the user no tools.
   For agent-skills that means a user who hasn't entered their Jira/Confluence
-  details under MCP Settings can't use any agent that lists those tools.
+  details under MCP Settings can't use any agent that lists those tools. The
+  same applies to the optional GitLab fields left blank rather than set to `-`.
 
 - **Scheduled Chats (beta)** -- upstream ships it off; this stack turns it on
   with `interface.schedules: true` in `config/librechat.yaml.example` plus
@@ -325,7 +329,8 @@ permissions are only written at startup.
   default capability except `execute_code`.
 - In the Tool Library a user can add the native tools and the MCP servers.
   agent-skills' tools only appear once that user has entered their own
-  Jira/Confluence details (MCP Settings); `kb` needs nothing.
+  Jira/Confluence details and its GitLab details, or `-` for each field it doesn't use
+  (MCP Settings); `kb` needs nothing.
 
 ## Auth
 

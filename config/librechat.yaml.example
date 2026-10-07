@@ -202,6 +202,8 @@ endpoints:
         - 'confluence_add_comment_mcp_agent-skills'
         - 'confluence_add_label_mcp_agent-skills'
         - 'confluence_remove_label_mcp_agent-skills'
+        - 'glab_add_mr_note_mcp_agent-skills'
+        - 'glab_add_mr_discussion_mcp_agent-skills'
       reason: 'The actions writing data must be approved by the user -- review before it runs.'
 
 mcpServers:
@@ -224,6 +226,18 @@ mcpServers:
     # Jira or Confluence identity through this server. Both toolsets'
     # base URLs are per-user too, by deliberate choice here -- not just the
     # credential -- so there's no shared server-level instance URL either.
+    #
+    # Every customUserVars entry is required: LibreChat (v0.8.8) has no
+    # optional flag, and a user with any of them blank gets none of this
+    # server's tools. So a value a user doesn't have is entered as `-`:
+    # mcp-agent-skills runs with MCP_UNSET_HEADER_VALUE=- (docker-compose.yml),
+    # which treats a `-` header as "not set" for that call -- never as a
+    # value, and never filled from the server's own environment. A user
+    # without GitLab enters `-` in both GitLab fields; Jira and Confluence
+    # keep working, and glab_* calls report the variables as not set.
+    # There is deliberately no default-project field for GitLab: a personal
+    # access token reaches every project the user can, so requests name
+    # their project.
     headers:
       X-Agent-Skills-Env-JIRA_BASE_URL: '{{JIRA_BASE_URL}}'
       X-Agent-Skills-Env-JIRA_USERNAME: '{{JIRA_USERNAME}}'
@@ -233,6 +247,8 @@ mcpServers:
       X-Agent-Skills-Env-CONFLUENCE_USERNAME: '{{CONFLUENCE_USERNAME}}'
       X-Agent-Skills-Env-CONFLUENCE_PASSWORD: '{{CONFLUENCE_PASSWORD}}'
       X-Agent-Skills-Env-CONFLUENCE_DEFAULT_SPACE: '{{CONFLUENCE_DEFAULT_SPACE}}'
+      X-Agent-Skills-Env-GITLAB_BASE_URL: '{{GITLAB_BASE_URL}}'
+      X-Agent-Skills-Env-GITLAB_TOKEN: '{{GITLAB_TOKEN}}'
     customUserVars:
       JIRA_BASE_URL:
         title: 'Jira server URL'
@@ -266,6 +282,14 @@ mcpServers:
         title: 'Confluence default space'
         description: 'Confluence default space key -- used for your Confluence tool calls when a space is not given explicitly'
         sensitive: false
+      GITLAB_BASE_URL:
+        title: 'GitLab server URL (optional)'
+        description: 'GitLab server URL, e.g. https://gitlab.example.com. Optional: enter - if you do not use GitLab.'
+        sensitive: false
+      GITLAB_TOKEN:
+        title: 'GitLab access token (optional)'
+        description: 'Your own GitLab personal access token, created under your profile (User settings > Access tokens): read_api to read, api to also comment on merge requests. It reaches every project you can. Used only for your GitLab tool calls, never stored by agent-skills itself. Optional: enter - if you do not use GitLab.'
+        sensitive: true
 
   # The knowledge catalog (this repo's own kb/ module): what knowledge exists
   # in the organization and where it lives. Deliberately has no customUserVars

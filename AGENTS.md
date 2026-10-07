@@ -138,7 +138,7 @@ substitute.
 - **Tool approval is two-layered, deliberately**: LibreChat's own
   `toolApproval` (`config/librechat.yaml`) prompts before any tool call
   matching its `ask` list; independently, each write-capable toolset
-  inside `agent-skills` (Jira and Confluence today) refuses to execute
+  inside `agent-skills` (Jira, Confluence and GitLab) refuses to execute
   without its own `--confirm`, enforced in that repo's own code. Neither
   layer is a substitute for the other -- see that same file's inline comment for why
   the `ask` list uses LibreChat's real `<toolset>_<action>_mcp_<server>`

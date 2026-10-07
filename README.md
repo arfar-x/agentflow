@@ -37,7 +37,8 @@ volume holds and how backup/restore works.
 - A running, OpenAI-compatible vLLM endpoint (base URL + API key)
 - Jira and/or Confluence credentials, if you want those tools live from
   the start (each user supplies their own via LibreChat's MCP Settings
-  form -- see "Managing users" below)
+  form -- see "Managing users" below). GitLab is optional per user: someone
+  without it enters `-` in the two GitLab fields
 - (Optional) An existing Keycloak instance, if you want SSO from day one --
   see [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md)
 
@@ -172,7 +173,7 @@ agentflow/
   `docs/CONFIGURATION.md` for how that's configured explicitly instead.
 - **Approval is two-layered, deliberately.** LibreChat's own
   `toolApproval` (in `config/librechat.yaml`) prompts before any tool call;
-  each write-capable toolset in `agent-skills` (Jira and Confluence today)
+  each write-capable toolset in `agent-skills` (Jira, Confluence and GitLab)
   additionally refuses to execute without its own `--confirm`, enforced in
   code, not just in a prompt. Neither layer alone is a substitute for the
   other.
@@ -202,10 +203,9 @@ agentflow/
   `kb/src/kb/adapters/outbound/llm_summarizer.py`). A per-source prompt in
   `config/kb-sources.yaml` would let each source describe its documents in
   its own terms (e.g. ADRs vs. Jira tickets vs. wiki pages).
-- **A per-user GitLab read tool** in `agent-skills` -- Confluence pages and
-  Jira issues can be read live with the user's own credentials (the
-  catalog's `fetch_hint`, `FETCH_TOOLS` in `kb/src/kb/domain/entry.py`), but
-  GitLab files cannot, so a GitLab entry stops at its summary unless its
-  source stores raw content. A GitLab toolset taking each user's own token
-  (LibreChat `customUserVars`, like Jira's) would let users with GitLab
-  access read any catalogued file, with GitLab enforcing its own permissions.
+- **GitLab entries in the catalog's fetch hints** -- `agent-skills` has a
+  per-user GitLab toolset (`glab`), but the catalog's `fetch_hint`
+  (`FETCH_TOOLS` in `kb/src/kb/domain/entry.py`) maps only Confluence and
+  Jira entries to a read tool, so a GitLab entry still stops at its summary.
+  Mapping it to `glab_get_file` would let users read any catalogued file
+  with their own token, with GitLab enforcing its own permissions.
