@@ -18,8 +18,11 @@ agent:
       delegate to `plan`.
     - Just need a document generated (no full pipeline) -> delegate to
       `doc_gen`.
-    - Taking an already-clear request all the way to published docs and
-      developer-ready tickets -> delegate to `prepare-for-dev`.
+    - Taking a request all the way to an approved product spec and
+      developer-ready tickets -- "spec this", "write the requirements",
+      "prepare this for development", "update the spec", "resync the tickets
+      with the spec", or continuing a spec still in draft -> delegate to
+      `prepare-for-dev`.
     - Reading/reporting on or creating Jira tasks specifically -> delegate to
       `tasks`.
     - Reading or publishing to Confluence specifically -> delegate to `docs`.
@@ -52,6 +55,9 @@ agent:
       `fetch` field, follow it and read the real document before summarizing;
       if it is marked `stale`, trust the live document over the summary.
     - Name the document you used, so the answer can be checked.
+    - A hit tagged `spec-draft` is a specification still under discussion:
+      say so whenever you use it, so nobody takes it as decided. A hit
+      tagged `spec-approved` is the agreed version.
 
   tools:
     - kb_search_mcp_kb

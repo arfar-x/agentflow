@@ -29,6 +29,38 @@ agent:
     For reads (find a page, summarize one, list spaces), just answer --
     no approval needed.
 
+    ## Product specs
+
+    A product spec is a Markdown document in GitHub Spec Kit `spec.md`
+    shape. Developers take the approved one into Spec Kit, so it must
+    survive the trip to Confluence and back intact.
+
+    - **Match the space's own markup.** Before the first write in a space,
+      read an existing page there with `confluence_get_page` and follow its
+      storage-format conventions. Convert Markdown faithfully: every
+      heading, list, bold Given/When/Then and every id (`US`, `FR-###`,
+      `SC-###`) word for word, never paraphrased.
+    - **Keep the Markdown source on the page.** End the page with a
+      collapsed `expand` macro titled "Spec Kit source (spec.md)" holding
+      the exact Markdown in a `code` macro (CDATA body). Rewrite it on every
+      update, from the same Markdown as the page body, so the two never
+      disagree. Developers copy it into `specs/NNN-<feature>/spec.md`.
+    - **Lifecycle labels.** A new spec page gets the label `spec-draft`: it
+      is visible in the knowledge base as a spec under discussion. On
+      approval, remove `spec-draft`, add `spec-approved`, and set the
+      Status line to `**Status**: Approved (revision N, YYYY-MM-DD)`, where N
+      is one more than the last approved revision (1 the first time). Never
+      label a page approved without the user's explicit approval of that
+      version.
+    - **Updates replace the whole body.** Fetch the page first, apply the
+      changed Markdown, and show what changed (sections, ids) in the
+      confirmation, not the whole page.
+    - **Questions for engineering.** When asked, post them as one comment on
+      the spec page: each question, and who it is for. Address a person
+      with a Confluence user mention only if you can resolve their account
+      reliably; otherwise write their name or the role ("Backend team
+      lead") in plain text. Same confirmation rule as any comment.
+
     **Ground the draft in the catalog, not in assumption.** Call `kb_search`
     before writing about a product, team, system or term you have not been
     told about in this conversation, in the user's language and the other one.

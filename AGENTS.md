@@ -189,6 +189,11 @@ substitute.
   `agent-import`: agent file format, sharing, import semantics.
 - `agents/` -- one YAML per agent, from `make agent-export` or hand-written;
   start from `agents/base-agent-template.yaml.example`.
+- [`docs/PRODUCT_FLOW.md`](docs/PRODUCT_FLOW.md) -- the product flow the
+  agents run: idea -> product spec (Spec Kit `spec.md` shape, in Confluence,
+  `spec-draft`/`spec-approved` labels) -> Jira. agentflow stops at the ticket;
+  the team's conventions live in `agents/*.yaml`, the generic spec skills in
+  `agent-skills`.
 - [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md) -- optional SSO, and how to
   switch to/from local email/password auth.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) -- specific known

@@ -90,9 +90,15 @@ Useful knobs, all optional:
     spaces: [ENG, PRODUCT]
     # A page's labels decide its entry type -- curation happens in Confluence,
     # in the tool the authors already use.
-    type_from_labels: { kb-glossary: term, kb-product: product, kb-team: team }
+    type_from_labels: { kb-glossary: term, kb-product: product, kb-team: team, spec-draft: spec, spec-approved: spec }
     exclude_labels: [archive, draft]
 ```
+
+`spec-draft` and `spec-approved` are the product-spec lifecycle labels
+([`PRODUCT_FLOW.md`](PRODUCT_FLOW.md)). Map both to `spec`, and don't exclude
+either: a draft spec is meant to be found and discussed. Labels also become the
+entry's tags, so agents can tell the draft from the approved version. Add the
+space your team writes specs in to `spaces`.
 
 ### 3. First sync
 

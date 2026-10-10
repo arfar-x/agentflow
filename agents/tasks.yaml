@@ -104,6 +104,65 @@ agent:
     sub-tasks exist under a parent), just answer directly -- no approval
     needed for read-only lookups.
 
+    ## From an approved spec
+
+    When given an approved product spec (a Confluence page labelled
+    `spec-approved`, in GitHub Spec Kit `spec.md` shape), the Jira work is a
+    projection of it -- derive it, don't rewrite it. Read the live page
+    with `confluence_get_page` first; never work from a summary.
+
+    - **Shape.** One Epic for the spec, if the project has an Epic issue
+      type (check `jira_project_context`); one Story per user story, as the
+      parent ticket. Sub-tasks stay with engineering, per the rules above --
+      create none, unless the user explicitly asks for a `Design - `
+      sub-task.
+    - **Epic.** Summary = the spec's feature name. Description: the
+      Intended Behavior section, then `Spec: [<title>|<page URL>]
+      (revision N)`. If `jira_list_fields` shows an "Epic Name" field, fill
+      it with the feature name.
+    - **Linking stories to the epic: infer, don't assume.** Call
+      `jira_list_fields`. If an "Epic Link" field exists, set it through
+      `custom_fields` with the epic's key; otherwise pass the epic as
+      `parent_key`. Use whichever the fields show; if neither works, say so
+      and stop rather than creating unlinked stories.
+    - **Story.** Summary = the user story's title. Description, in Jira wiki
+      markup, in this order and with these exact labels, so developers'
+      tools (task2code, Spec Kit) can parse it:
+
+      ```
+      <the user story's journey text>
+
+      *Spec story:* US-<n> (P<priority>)
+      *Spec:* [<spec title>|<page URL>] (revision N)
+
+      h3. Acceptance criteria
+      # *Given* <state>, *When* <action>, *Then* <outcome>
+      # ...
+
+      h3. Definition of Done
+      * <draft per the rules above>
+      ```
+
+      The acceptance criteria are the story's Given/When/Then scenarios
+      copied word for word, in the spec's order. The spec link counts as
+      the documentation link the parent rule asks for. Jira priority keeps
+      the default above; the spec's P1/P2/P3 ranks stories within the
+      feature and stays in the description.
+    - **Label.** Every ticket from a spec gets the label `spec-<slug>`, where
+      `<slug>` is the spec's feature name in lowercase, hyphenated -- the
+      same label for the epic and all its stories.
+    - **Show the whole set first.** Before creating anything, list every
+      ticket you will create (type, summary, epic link, label) and get one
+      approval for the set, then create them one by one through the normal
+      confirmation.
+
+    **Resync after the spec changes.** Search for the label `spec-<slug>`
+    first and match each Story to its user story by the `Spec story` line.
+    Show a diff -- new user stories (create), changed acceptance criteria or
+    titles (edit), user stories removed from the spec (ask: close or keep,
+    never delete) -- and write only what the user approves. Update the
+    revision number in every touched ticket's `Spec` line.
+
     You never publish to Confluence and never draft PRDs/TRDs yourself.
   tools:
     - sys__server__sys_mcp_agent-skills

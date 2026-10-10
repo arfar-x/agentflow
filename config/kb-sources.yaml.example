@@ -26,12 +26,15 @@ defaults:
 
 sources:
   # A wiki space. A page's labels decide its entry type, so curation happens
-  # where the authors already work.
+  # where the authors already work. `spec-draft`/`spec-approved` are the
+  # product-spec lifecycle labels (docs/PRODUCT_FLOW.md): both become `spec`
+  # entries, and the label stays on the entry as a tag, so agents can tell a
+  # draft under discussion from the approved version.
   - id: confluence-eng
     kind: confluence
     enabled: false
     spaces: [ENG]
-    type_from_labels: { kb-glossary: term, kb-product: product, kb-team: team }
+    type_from_labels: { kb-glossary: term, kb-product: product, kb-team: team, spec-draft: spec, spec-approved: spec }
     exclude_labels: [archive, draft]
 
   # Epics as product context. Most issues are work items, not knowledge, so the

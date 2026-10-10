@@ -6,10 +6,14 @@ to your own self-hosted, OpenAI-compatible LLM endpoint (vLLM), with Jira
 and Confluence exposed as tools via the
 [`agent-skills`](https://github.com/arfar-x/agent-skills) MCP server.
 
-The first flow this stack supports end-to-end: a PM discusses a feature in
-chat, pulls context from Jira, asks for a PRD, reviews and revises it in
-conversation, and on approval publishes it -- with LibreChat's own tool
-approval gate sitting in front of every write.
+The flow this stack supports end-to-end: a product member describes a
+feature in chat; agents gather the current behavior from the knowledge
+catalog, draft a product spec in GitHub Spec Kit's `spec.md` shape, clarify
+it with the requester (and engineering, through wiki comments), check it is
+ready, and on approval publish it to Confluence and turn it into Jira
+tickets developers can start from -- with LibreChat's own tool approval gate
+sitting in front of every write. See
+[`docs/PRODUCT_FLOW.md`](docs/PRODUCT_FLOW.md).
 
 ## What's running
 
@@ -146,6 +150,7 @@ agentflow/
 ├── scripts/                 # bootstrap, secret generation, backup, restore, agent sync
 └── docs/
     ├── WALKTHROUGH.md       # first run, step by step, with the expected output of each command
+    ├── PRODUCT_FLOW.md      # idea -> product spec -> Jira: stages, labels, what developers receive
     ├── AGENT_SYNC.md        # agent export/import: file format and semantics
     ├── KNOWLEDGE_BASE.md    # the kb catalog: sources, freshness, overrides, troubleshooting
     ├── CONFIGURATION.md     # every .env variable, what breaks if it's wrong
