@@ -70,7 +70,12 @@ It never says how to build anything. Ids never change once published; a
 revision adds new ids and marks removed ones.
 
 The wiki page ends with a collapsed **"Spec Kit source (spec.md)"** block
-holding the exact Markdown, kept in step with the page on every update.
+holding the exact Markdown. The page is rendered from that Markdown by the
+Confluence tools, not written by the model, and every change after the
+first save is a patch of it -- exact text, a whole section, labels -- in
+one call with one approval, so a small change takes seconds and the page
+and its Markdown never drift apart. Ticket resyncs patch descriptions the
+same way.
 
 ## Labels and the knowledge base
 
