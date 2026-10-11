@@ -4,7 +4,7 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.6.0 |
+| **Version** | 2.7.0 |
 | **Last updated** | 2026-10-11 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
@@ -159,6 +159,7 @@ case.
 | FR-REC-10 | Reading a stale entry MUST queue a refresh of that entry. | done |
 | FR-REC-11 | A webhook MUST refresh only the paths in its payload, and MUST be rejected without a valid secret token. | done |
 | FR-REC-12 | An operator MUST be able to force re-summarization of every document a sync sees, bypassing the content-hash gate, to recover entries a since-fixed summarizer defect left undescribed. | done |
+| FR-REC-13 | A change to a document's source-derived classification -- its type or tags, such as a wiki page's labels -- MUST reach its entry on the next sync even when the content hash is unchanged, without a model call. | done |
 
 ### 6.4a Scheduling — `FR-SCH`
 
@@ -452,6 +453,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.7.0 | 2026-10-11 | Added FR-REC-13: a label-only change re-classifies the entry without re-summarizing. Adding or swapping a wiki label changes neither the page's text nor its version, so the content-hash gate treated it as unchanged and the entry kept its old type and tags until the text next changed. |
 | 2.6.0 | 2026-10-11 | FR-AGT-02 narrowed: the front door searches the catalog before answering itself, not before delegating. Found in a live trial of the product-spec flow: the front door searched, then handed off to a specialist that searched the same question again, before doing everything itself. The front door is now a router with no write tools; the specialist it hands to grounds the work (FR-AGT-03). |
 | 2.5.0 | 2026-10-06 | Added FR-SCH-07: the scheduler applies FR-CFG-09's summarizer check before any run that summarizes, as `sync` already did. Found live: with the summarizer's endpoint answering 403 to completions, the scheduler catalogued 39 new documents undescribed (a warning per document, nothing refused), and they had to be recovered with `sync --force`. |
 | 2.4.0 | 2026-10-04 | Added §6.10 (FR-CNT-01..13) and C6: a source may opt into keeping its documents' text (`store_raw_content`), readable page by page through `kb_get`. N1, FR-ENT-01 and C3 narrowed accordingly: entries still never hold a body; the text sits in its own store, tied to the entry's version, purged when the flag is turned off. Prompted by GitLab ADRs: no tool in this stack reads GitLab live, so agents could only ever see their summaries. Designed with Spec Kit in `specs/001-kb-raw-content/`. |

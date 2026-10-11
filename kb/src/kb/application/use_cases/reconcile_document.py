@@ -6,7 +6,9 @@ four mechanisms cannot drift into four subtly different definitions of what an
 entry should look like (spec, Part 3).
 
 The expensive step -- summarization -- happens only when the document's content
-hash has actually changed. Everything else is a timestamp update.
+hash has actually changed. A change of classification alone (type or tags)
+rewrites the entry without a model call; everything else is a timestamp
+update.
 
 For a source that keeps its documents' text (`store_raw_content`, spec §6.10)
 the text is written here too, after the entry, on *every* path including the
@@ -100,6 +102,22 @@ class ReconcileDocument:
                 self._store.revive(entry_id)
                 self._store.touch(entry_id, at=now, source_version=document.version)
                 return ReconcileResult(entry_id=entry_id, action=Action.REVIVED, summarized=False)
+            if (existing.type, existing.tags) != (document.type, document.tags):
+                # Same text, new classification -- a wiki label added or
+                # swapped changes neither body nor version (FR-REC-13). The
+                # summary still describes the text, so no model call.
+                self._store.upsert(
+                    existing.model_copy(
+                        update={
+                            "type": document.type,
+                            "tags": document.tags,
+                            "updated_at": now,
+                            "last_seen_at": now,
+                            "source_version": document.version,
+                        }
+                    )
+                )
+                return ReconcileResult(entry_id=entry_id, action=Action.UPDATED, summarized=False)
             self._store.touch(entry_id, at=now, source_version=document.version)
             return ReconcileResult(entry_id=entry_id, action=Action.UNCHANGED, summarized=False)
 
