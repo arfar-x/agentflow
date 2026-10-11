@@ -206,6 +206,10 @@ endpoints:
         - 'glab_add_mr_discussion_mcp_agent-skills'
         - 'glab_edit_mr_note_mcp_agent-skills'
         - 'glab_delete_mr_note_mcp_agent-skills'
+        - 'jira_upload_attachment_mcp_agent-skills'
+        - 'jira_delete_attachment_mcp_agent-skills'
+        - 'confluence_upload_attachment_mcp_agent-skills'
+        - 'confluence_delete_attachment_mcp_agent-skills'
       reason: 'The actions writing data must be approved by the user -- review before it runs.'
 
 mcpServers:
