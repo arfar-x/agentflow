@@ -32,14 +32,20 @@ The draft is also saved to Confluence at the first stage, so a spec can be
 paused and resumed in a later conversation ("continue the spec for …") without
 being redrafted.
 
+Prepare for Dev makes the spec's Confluence and Jira writes itself, in the
+main conversation, so each approval prompt runs exactly the call it shows. A
+write approved inside a subagent is not executed as approved in this LibreChat
+version -- the subagent restarts and proposes a new call -- so the flow never
+delegates a write.
+
 | Stage | What happens | Who does it |
 |---|---|---|
 | 0. Understand | Current behavior is collected from the knowledge base and the documents behind it. Related Jira work is checked. A raw idea goes to **Plan** first, to be shaped. | Prepare for Dev, Plan |
-| 1. Specify | A first draft of the product spec, published straight away as a wiki page labelled `spec-draft` | Prepare for Dev (`product-spec`), Docs manager |
-| 2. Clarify | At most five questions per round, each with a recommended answer. Every answer is written back into the spec. Questions only engineering can answer are posted as a comment on the page, to a named person or a role ("Backend team lead"). Replies are read and folded in when you resume. | Prepare for Dev (`spec-clarify`), Docs manager |
+| 1. Specify | A first draft of the product spec, published straight away as a wiki page labelled `spec-draft` | Prepare for Dev (`product-spec`) |
+| 2. Clarify | At most five questions per round, each with a recommended answer. Every answer is written back into the spec. Questions only engineering can answer are posted as a comment on the page, to a named person or a role ("Backend team lead"). Replies are read and folded in when you resume. | Prepare for Dev (`spec-clarify`) |
 | 3. Readiness | The spec is checked against Spec Kit's requirements checklist plus product checks. It is not ready while any open question remains. | Prepare for Dev (`spec-readiness`) |
-| 4. Approve | You approve that exact version. The page is relabelled `spec-approved` and its Status line gets a revision number and date. | You, then Docs manager |
-| 5. Tickets | One Epic per spec and one Story per user story, each with its acceptance criteria and a link back to the spec | Tasks |
+| 4. Approve | You approve that exact version. The page is relabelled `spec-approved` and its Status line gets a revision number and date. | You, then Prepare for Dev |
+| 5. Tickets | One Epic per spec and one Story per user story, each with its acceptance criteria and a link back to the spec | Prepare for Dev |
 
 Every write (wiki page, comment, label, ticket) still asks for your
 confirmation first, as it always has.
@@ -102,7 +108,7 @@ they need the latest text.
   ```
 
 Sub-tasks stay with engineering: each specialty creates its own under the
-Story, as the Tasks agent's rules already say.
+Story, as the team's Jira conventions (the Tasks agent) already say.
 
 To continue with Spec Kit:
 
@@ -117,7 +123,7 @@ To continue with Spec Kit:
 ## When the spec changes after approval
 
 Ask Prepare for Dev to "update the spec for …". The page goes back through
-clarify, readiness and approval, and gets the next revision number. Tasks then
+clarify, readiness and approval, and gets the next revision number. Prepare for Dev then
 **resyncs** the tickets: it finds them by the `spec-<feature>` label and shows
 a diff (new stories, changed acceptance criteria, removed stories). It writes
 only what you approve. A removed story is closed or kept, never deleted.
