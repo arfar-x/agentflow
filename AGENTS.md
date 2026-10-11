@@ -177,6 +177,15 @@ substitute.
   undecryptable -- see [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
   "Secrets" before touching backup/restore.
 
+## Commit messages
+
+Always follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:`, `fix:`, `docs:`, `chore:`, ...). Don't add scopes excessively:
+scope at the level of the project's main parts, and keep the subject a
+high-level overview of the change. The body says **what** changed, not how,
+and carries nothing specific to the session or conversation that produced
+it.
+
 ## Project map
 
 - [`README.md`](README.md) -- start here: prerequisites, first run, what
