@@ -22,15 +22,20 @@ that becomes a question for engineering, never a guess.
 ## The stages
 
 Start in **Product Assistant** with something like "spec this: …", "write the
-requirements for …" or "prepare … for development". It routes the request
-to **Prepare for Dev**, which drives the stages below and tells you which one
-you're in. A spec can be paused and resumed in a later conversation ("continue
-the spec for …").
+requirements for …" or "prepare … for development", or open **Prepare for Dev**
+directly. The Product Assistant is a router: it has no write tools, and it
+*hands the conversation over* to the right specialist (a LibreChat handoff, not
+a background subagent). Prepare for Dev then talks to you directly -- it can
+ask questions, and everything it drafts stays in the conversation. Every later
+turn of the same flow ("continue", answers, approvals) is handed back to it.
+The draft is also saved to Confluence at the first stage, so a spec can be
+paused and resumed in a later conversation ("continue the spec for …") without
+being redrafted.
 
 | Stage | What happens | Who does it |
 |---|---|---|
 | 0. Understand | Current behavior is collected from the knowledge base and the documents behind it. Related Jira work is checked. A raw idea goes to **Plan** first, to be shaped. | Prepare for Dev, Plan |
-| 1. Specify | A first draft of the product spec, published straight away as a wiki page labelled `spec-draft` | Doc Gen (`product-spec`), Docs manager |
+| 1. Specify | A first draft of the product spec, published straight away as a wiki page labelled `spec-draft` | Prepare for Dev (`product-spec`), Docs manager |
 | 2. Clarify | At most five questions per round, each with a recommended answer. Every answer is written back into the spec. Questions only engineering can answer are posted as a comment on the page, to a named person or a role ("Backend team lead"). Replies are read and folded in when you resume. | Prepare for Dev (`spec-clarify`), Docs manager |
 | 3. Readiness | The spec is checked against Spec Kit's requirements checklist plus product checks. It is not ready while any open question remains. | Prepare for Dev (`spec-readiness`) |
 | 4. Approve | You approve that exact version. The page is relabelled `spec-approved` and its Status line gets a revision number and date. | You, then Docs manager |

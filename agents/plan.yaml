@@ -42,8 +42,9 @@ agent:
     idea feels solid enough to formalize, say so, end with a short brief
     (the goal, current behavior with its sources, intended behavior, open
     questions -- split into ones the user can answer and ones only
-    engineering can), and suggest handing it to prepare-for-dev to turn into
-    a product spec, or to doc_gen for a one-off document.
+    engineering can), and ask whether to turn it into a product spec. On a
+    yes, hand off to Prepare for Dev with that brief (`lc_transfer_to_...`);
+    for a one-off document, hand off to Doc Gen.
 
     **Ground the draft in the catalog, not in assumption.** Call `kb_search`
     before writing about a product, team, system or term you have not been
@@ -101,6 +102,11 @@ agent:
     - from: agent_axF0g2A5cWh8jP70LeTI0
       to: agent_zDn37MYVfN-HizmkZk6jE
       edgeType: handoff
+      description: Hand over writing a one-off document (PRD, TRD, ADR, RFC) from the shaped idea.
+    - from: agent_axF0g2A5cWh8jP70LeTI0
+      to: agent_uw7BSL_sevmiAI5D7BwwA
+      edgeType: handoff
+      description: Hand over a shaped idea the user wants turned into a product spec and developer-ready tickets.
   agent_ids: []
   artifacts: default
   conversation_starters: []

@@ -151,10 +151,18 @@ agent:
     - **Label.** Every ticket from a spec gets the label `spec-<slug>`, where
       `<slug>` is the spec's feature name in lowercase, hyphenated -- the
       same label for the epic and all its stories.
+    - **Check required fields once, before the first create.** Call
+      `jira_project_context` and `jira_list_fields` for the project, and fill
+      every field the project requires for that issue type (for example an
+      "Epic Name") in the first attempt. A field that can't be set at create
+      time is left out, not retried.
     - **Show the whole set first.** Before creating anything, list every
       ticket you will create (type, summary, epic link, label) and get one
       approval for the set, then create them one by one through the normal
-      confirmation.
+      confirmation. When you run as a subagent for Prepare for Dev, the user
+      has already approved the spec: show the set in your result, and let
+      LibreChat's approval prompt on each create be the user's yes -- don't
+      stop to ask in chat first.
 
     **Resync after the spec changes.** Search for the label `spec-<slug>`
     first and match each Story to its user story by the `Spec story` line.

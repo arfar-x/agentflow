@@ -153,7 +153,10 @@ def test_the_front_door_agent_must_search_before_it_assumes():
     assert "kb_search_mcp_kb" in text and "kb_get_mcp_kb" in text
 
     instructions = text.split("  tools:")[0]
-    assert "before delegating" in instructions
+    # It searches before answering itself, and hands work over without a
+    # duplicate search -- the specialist grounds it (FR-AGT-03).
+    assert "search the knowledge base first" in instructions
+    assert "Do not search" in instructions
     assert "language the user wrote in" in instructions
     assert "never answer from your own assumptions" in instructions.lower()
     assert "pointer, not a source" in instructions

@@ -4,8 +4,8 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.5.0 |
-| **Last updated** | 2026-10-06 |
+| **Version** | 2.6.0 |
+| **Last updated** | 2026-10-11 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
 
@@ -235,7 +235,7 @@ something concrete has to be catalogued through them.
 | id | Requirement | Status |
 |---|---|---|
 | FR-AGT-01 | `kb_search` and `kb_get` MUST be read-only, and therefore MUST NOT require a `toolApproval` entry. | done |
-| FR-AGT-02 | The front-door agent MUST search the catalog before answering or delegating, MUST NOT answer from assumption, MUST answer in the user's language, and MUST name the source document it used. | done |
+| FR-AGT-02 | The front-door agent MUST search the catalog before answering a question itself, MUST NOT answer from assumption, MUST answer in the user's language, and MUST name the source document it used. When it hands work to a specialist it MUST NOT search first: the specialist grounds its own work (FR-AGT-03), and a second search of the same question only adds latency. | done |
 | FR-AGT-03 | Document-producing agents MUST ground their drafts in catalog results. | done |
 
 ### 6.10 Raw content — `FR-CNT`
@@ -452,6 +452,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.6.0 | 2026-10-11 | FR-AGT-02 narrowed: the front door searches the catalog before answering itself, not before delegating. Found in a live trial of the product-spec flow: the front door searched, then handed off to a specialist that searched the same question again, before doing everything itself. The front door is now a router with no write tools; the specialist it hands to grounds the work (FR-AGT-03). |
 | 2.5.0 | 2026-10-06 | Added FR-SCH-07: the scheduler applies FR-CFG-09's summarizer check before any run that summarizes, as `sync` already did. Found live: with the summarizer's endpoint answering 403 to completions, the scheduler catalogued 39 new documents undescribed (a warning per document, nothing refused), and they had to be recovered with `sync --force`. |
 | 2.4.0 | 2026-10-04 | Added §6.10 (FR-CNT-01..13) and C6: a source may opt into keeping its documents' text (`store_raw_content`), readable page by page through `kb_get`. N1, FR-ENT-01 and C3 narrowed accordingly: entries still never hold a body; the text sits in its own store, tied to the entry's version, purged when the flag is turned off. Prompted by GitLab ADRs: no tool in this stack reads GitLab live, so agents could only ever see their summaries. Designed with Spec Kit in `specs/001-kb-raw-content/`. |
 | 2.3.0 | 2026-09-28 | Added FR-CFG-09: `check()` now proves structured output actually works with a real completions round-trip (a fixed probe: `system` + `response_format: json_object`, verified against the exact reply expected), not just that `/models` answers and lists the right id. `sync` refuses to run at all against a summarizer that fails it. Prompted by the same experimental backend as 2.2.0 below -- it turned out to not merely mis-format JSON sometimes, but to silently ignore the `system` role entirely, every time, while still answering 200 with a normal chat reply. An earlier fix folded the instruction into the `user` message to route around that one backend; reverted -- the request this module sends stays the plain OpenAI standard for every endpoint, and an endpoint that cannot honor it is something to report and refuse, not something to accommodate. |

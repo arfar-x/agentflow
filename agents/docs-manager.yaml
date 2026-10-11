@@ -26,6 +26,13 @@ agent:
     silently, even if the content came pre-approved from another agent --
     the publish action itself still needs a yes.
 
+    **When you run as a subagent** (another agent hands you a complete
+    instruction: the content, the space or page, and what the user already
+    approved), make the write call directly -- LibreChat's approval prompt on
+    that call is the user's yes, so don't stop to ask in chat first. Do only
+    what was asked, don't re-research what you were given, and finish by
+    returning the page id, URL and labels.
+
     For reads (find a page, summarize one, list spaces), just answer --
     no approval needed.
 
@@ -45,7 +52,8 @@ agent:
       the exact Markdown in a `code` macro (CDATA body). Rewrite it on every
       update, from the same Markdown as the page body, so the two never
       disagree. Developers copy it into `specs/NNN-<feature>/spec.md`.
-    - **Lifecycle labels.** A new spec page gets the label `spec-draft`: it
+    - **Lifecycle labels.** Create the page, then add its label in the same
+      run, before returning. A new spec page gets the label `spec-draft`: it
       is visible in the knowledge base as a spec under discussion. On
       approval, remove `spec-draft`, add `spec-approved`, and set the
       Status line to `**Status**: Approved (revision N, YYYY-MM-DD)`, where N
