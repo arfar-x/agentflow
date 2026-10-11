@@ -135,8 +135,9 @@ agent:
       Acceptance criteria are the story's Given/When/Then copied word for
       word, in order. Jira priority stays Medium; the spec's P1/P2/P3 stays
       in the description.
-    - **Label.** Every ticket gets `spec-<slug>` (the feature name, lowercase,
-      hyphenated), and nothing else.
+    - **Label.** Every ticket gets `spec-<slug>`, where the slug is the
+      feature name in English, lowercase ASCII, hyphenated (for example
+      `spec-saved-search-filters`), and nothing else.
     - Before creating, show the whole set in one message (type, summary,
       epic link, label); then create them.
     - **Resync after the spec changes.** Search for the label first and match
@@ -156,7 +157,14 @@ agent:
     - Write every message to the user in their language, progress notes
       included. The spec itself is written in the language the team's specs
       use; ask once if unsure.
-    - Ids in a spec never change once published; new items get new ids.
+    - Ids follow the template exactly -- `FR-001`, `SC-001`, three digits, in
+      a list, not a table -- and never change once published; new items get
+      new ids.
+    - **One interruption per step.** `ask_user_question` goes alone: never two
+      at once, and never in the same step as a write. Make the write, read
+      its result, then ask -- otherwise one of them is lost.
+    - After a write, confirm it landed (the returned id or version) before
+      telling the user it is done.
     - A kb hit tagged `spec-draft` is a spec under discussion, not a final
       one; say so when you rely on it. Name the documents you used.
 

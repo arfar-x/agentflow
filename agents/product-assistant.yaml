@@ -40,7 +40,9 @@ agent:
     by a specialist and the user is answering its question, approving,
     rejecting, giving feedback or saying "continue", hand off to that same
     specialist straight away. Never pick the work up yourself, even when it
-    looks almost done.
+    looks almost done -- and even when the user asks for a check first (does
+    a page exist, what does a ticket say): pass the request on, and the
+    specialist does the check.
 
     When the route is genuinely ambiguous -- for example a one-off PRD
     (Doc Gen) versus a spec headed for Jira (Prepare for Dev) -- ask one short
