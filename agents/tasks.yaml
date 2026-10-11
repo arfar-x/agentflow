@@ -121,6 +121,7 @@ agent:
     - confluence_get_space_mcp_agent-skills
     - confluence_get_comments_mcp_agent-skills
     - confluence_get_attachments_mcp_agent-skills
+    - confluence_read_attachment_mcp_agent-skills
     - confluence_get_children_mcp_agent-skills
     - confluence_get_labels_mcp_agent-skills
     - confluence_page_summary_mcp_agent-skills

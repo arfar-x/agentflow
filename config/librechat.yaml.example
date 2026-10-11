@@ -256,6 +256,10 @@ mcpServers:
       X-Agent-Skills-Env-CONFLUENCE_DEFAULT_SPACE: '{{CONFLUENCE_DEFAULT_SPACE}}'
       X-Agent-Skills-Env-GITLAB_BASE_URL: '{{GITLAB_BASE_URL}}'
       X-Agent-Skills-Env-GITLAB_TOKEN: '{{GITLAB_TOKEN}}'
+      # Not a credential: names whose upload folder this request may attach
+      # files from (docker-compose.yml, AGENT_SKILLS_ATTACHMENT_DIR). Filled
+      # by LibreChat from the signed-in user, never by the user.
+      X-Agent-Skills-User: '{{LIBRECHAT_USER_ID}}'
     customUserVars:
       JIRA_BASE_URL:
         title: 'Jira server URL'

@@ -166,6 +166,12 @@ model, so a model that accepts a different set needs its own endpoint entry.
 | `JIRA_DEPLOYMENT_TYPE` | no | Only required the first time `create_issue`/`edit_issue` sets an assignee. |
 | `CONFLUENCE_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. |
 | `CONFLUENCE_DEPLOYMENT_TYPE` | yes, if `confluence` is in `MCP_TOOLSETS` | `cloud` or `server` -- unlike Jira, this one is required: Confluence's REST API is mounted at a different path per deployment (Cloud: `/wiki/rest/api`, Server/DC: `/rest/api`). Server-level, not per-user -- the whole org's Confluence instance is one deployment type. |
+| `AGENT_SKILLS_ATTACHMENT_DIR`, `MCP_ATTACHMENT_DIR_PER_USER` | -- | Set in `docker-compose.yml`, not `.env`. Files users upload in chat can be attached to Jira issues and Confluence pages: LibreChat's upload volume is mounted read-only at `/attachments`, and each request may read only the signed-in user's own folder, named by the `X-Agent-Skills-User: '{{LIBRECHAT_USER_ID}}'` header in `config/librechat.yaml.example`. agent-skills refuses any path outside that folder, and hidden or secret-looking files inside it. Content an agent generates is attached by value, with no file at all. |
+
+mcp-agent-skills deliberately gets no `env_file`: only the variables above,
+listed in `docker-compose.yml`, reach it, so the stack's own secrets in `.env`
+are never on its disk or in its environment. A new server-level setting for
+it must be added there too.
 
 ## Summarization (auto-compact)
 

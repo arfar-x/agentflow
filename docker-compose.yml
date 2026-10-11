@@ -234,8 +234,23 @@ services:
       args:
         TOOLSETS: ${MCP_TOOLSETS:-jira}
     restart: unless-stopped
-    env_file: .env
+    # Deliberately no `env_file: .env`: that file holds the whole stack's
+    # secrets, and every user credential this service needs arrives per
+    # request in headers. It gets only the settings below.
     environment:
+      JIRA_AUTO_CONFIRM_WRITES: ${JIRA_AUTO_CONFIRM_WRITES:-false}
+      JIRA_DEPLOYMENT_TYPE: ${JIRA_DEPLOYMENT_TYPE:-}
+      CONFLUENCE_AUTO_CONFIRM_WRITES: ${CONFLUENCE_AUTO_CONFIRM_WRITES:-false}
+      CONFLUENCE_DEPLOYMENT_TYPE: ${CONFLUENCE_DEPLOYMENT_TYPE:-}
+      GITLAB_AUTO_CONFIRM_WRITES: ${GITLAB_AUTO_CONFIRM_WRITES:-false}
+      # Files users upload in chat, attachable to Jira/Confluence. LibreChat
+      # keeps one folder per user in this volume, mounted read-only below;
+      # per-user mode limits each request to the folder of the user named
+      # in its X-Agent-Skills-User header (config/librechat.yaml.example),
+      # and agent-skills refuses anything outside it, hidden, or
+      # secret-looking.
+      AGENT_SKILLS_ATTACHMENT_DIR: /attachments
+      MCP_ATTACHMENT_DIR_PER_USER: "1"
       # Honors X-Agent-Skills-Env-<VAR> per-request headers (e.g. a
       # different Jira credential per LibreChat user) instead of only this
       # server process's own env. Safe to enable *here* specifically
@@ -250,6 +265,8 @@ services:
       # literal value (agent-skills >= v0.17.1). The comment above
       # config/librechat.yaml.example's agent-skills headers explains why.
       MCP_UNSET_HEADER_VALUE: "-"
+    volumes:
+      - librechat_uploads:/attachments:ro
     networks: [backend]
     logging:
       driver: json-file
