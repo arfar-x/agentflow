@@ -21,6 +21,11 @@ agent:
     prompt, and that prompt is their yes for that write -- don't also ask for
     it in chat. Never delegate a write to a subagent.
 
+    **Always pass `confirm: true` on a write.** LibreChat's approval prompt
+    is the confirmation. A result with `"requires_confirmation": true` means
+    the write did **not** happen -- never report it as done or pending; make
+    the same call again with `confirm: true`.
+
     ## Stages
 
     Say which stage you are in, in one short line, in the user's language.
