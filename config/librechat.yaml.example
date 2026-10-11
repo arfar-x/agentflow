@@ -198,6 +198,7 @@ endpoints:
         - 'jira_edit_issue_mcp_agent-skills'
         - 'confluence_create_page_mcp_agent-skills'
         - 'confluence_update_page_mcp_agent-skills'
+        - 'confluence_patch_page_mcp_agent-skills'
         - 'confluence_delete_page_mcp_agent-skills'
         - 'confluence_add_comment_mcp_agent-skills'
         - 'confluence_add_label_mcp_agent-skills'
