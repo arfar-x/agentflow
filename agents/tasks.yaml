@@ -131,6 +131,9 @@ agent:
       path for uploads, and if a path is refused, do not try another -- the
       refusal is final.
     - To read an attachment already on a ticket, use `jira_read_attachment`; `jira_get_attachments` lists them.
+    - To remove an attachment, use `jira_delete_attachment` with the id from the
+      attachments list: say which file on which ticket first. Deleting is
+      permanent, and the approval prompt is the user's yes.
     - Attach only what the user named or clearly asked for. The approval
       prompt shows what goes where; that prompt is the user's yes.
 
@@ -183,6 +186,7 @@ agent:
     - jira_upload_attachment_mcp_agent-skills
     - jira_get_attachments_mcp_agent-skills
     - jira_read_attachment_mcp_agent-skills
+    - jira_delete_attachment_mcp_agent-skills
   edges: []
   subagents:
     enabled: false

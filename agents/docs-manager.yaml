@@ -61,6 +61,9 @@ agent:
       path for uploads, and if a path is refused, do not try another -- the
       refusal is final.
     - To read an attachment already on a page, use `confluence_read_attachment`.
+    - To remove an attachment, use `confluence_delete_attachment` with the id from the
+      attachments list: say which file on which page first. Deleting is
+      permanent, and the approval prompt is the user's yes.
     - Attach only what the user named or clearly asked for. The approval
       prompt shows what goes where; that prompt is the user's yes.
 
@@ -113,6 +116,7 @@ agent:
     - list_attachment_files_mcp_agent-skills
     - read_attachment_file_mcp_agent-skills
     - confluence_upload_attachment_mcp_agent-skills
+    - confluence_delete_attachment_mcp_agent-skills
   edges: []
   subagents:
     enabled: false
