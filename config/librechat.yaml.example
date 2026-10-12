@@ -294,12 +294,12 @@ mcpServers:
         description: 'Confluence default space key -- used for your Confluence tool calls when a space is not given explicitly'
         sensitive: false
       GITLAB_BASE_URL:
-        title: 'GitLab server URL (optional)'
-        description: 'GitLab server URL, e.g. https://gitlab.example.com. Optional: enter - if you do not use GitLab.'
+        title: 'GitLab server URL (type - if you do not use GitLab)'
+        description: 'If you do not use GitLab, type a single dash: - . LibreChat requires every field to be filled, and a dash means "not set". Otherwise your GitLab server URL, e.g. https://gitlab.example.com.'
         sensitive: false
       GITLAB_TOKEN:
-        title: 'GitLab access token (optional)'
-        description: 'Your own GitLab personal access token, created under your profile (User settings > Access tokens): read_api to read, api to also comment on merge requests. It reaches every project you can. Used only for your GitLab tool calls, never stored by agent-skills itself. Optional: enter - if you do not use GitLab.'
+        title: 'GitLab access token (type - if you do not use GitLab)'
+        description: 'If you do not use GitLab, type a single dash: - . LibreChat requires every field to be filled, and a dash means "not set". Otherwise your own GitLab personal access token, created under your profile (User settings > Access tokens): read_api to read, api to also comment on merge requests. It reaches every project you can. Used only for your GitLab tool calls, never stored by agent-skills itself.'
         sensitive: true
 
   # The knowledge catalog (this repo's own kb/ module): what knowledge exists
