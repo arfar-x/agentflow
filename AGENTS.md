@@ -119,9 +119,12 @@ substitute.
   tools, over MCP), and `searxng` + `crw` (native web search: search, then
   page scraping).
 - `mcp-agent-skills`, `mcp-kb` and `searxng` are **internal-only, no
-  published port, `backend` network only** -- reachability from `api` is
-  their only access control (MCP's HTTP transport has no auth of its own).
-  Never add a `ports:` entry to any of them. `crw` is internal-only too, but
+  published port** -- reachability from `api` is their only access control
+  (MCP's HTTP transport has no auth of its own). Never add a `ports:` entry
+  to any of them. `mcp-agent-skills` is on its **own `agent-tools` network**,
+  which only `api` joins: it honors per-request headers naming the caller's
+  credentials and whose uploads they may read, so no other container may be
+  able to reach it. Never put it back on `backend`. `crw` is internal-only too, but
   on its **own `scraper` network**, which only `api` joins: it fetches URLs
   that search results choose, so it must never be able to reach `backend`.
   Never put it back on `backend`. `mcp-kb` goes further and takes
@@ -168,8 +171,8 @@ substitute.
 - Per-user Jira credentials (LibreChat's `customUserVars`) are injected
   per-request into `mcp-agent-skills` via `X-Agent-Skills-Env-<VAR>`
   headers, trusted only because `MCP_TRUST_REQUEST_CREDENTIALS=1` is safe
-  specifically *here* (no published port, `api` is the only caller on the
-  `backend` network) -- see `agent-skills/AUTHENTICATION.md` before
+  specifically *here* (no published port, `api` is the only container on the
+  `agent-tools` network) -- see `agent-skills/AUTHENTICATION.md` before
   changing anything in that trust chain.
 - `CREDS_KEY`/`CREDS_IV`/`JWT_SECRET`/`JWT_REFRESH_SECRET` encrypt
   everything LibreChat stores in Mongo. Restoring `mongodb_data` next to

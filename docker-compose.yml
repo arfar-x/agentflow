@@ -21,6 +21,12 @@ networks:
   # container on two networks doesn't route between them, so that gives api
   # crw, never crw backend.
   scraper:
+  # mcp-agent-skills' own network. It trusts per-request headers (Jira and
+  # Confluence credentials, and which user's upload folder a request may
+  # read) because only `api` can reach it -- so nothing else may share a
+  # network with it. On `backend` any of a dozen containers (searxng, rag_api,
+  # ...) could send those headers and read any user's uploads.
+  agent-tools:
 
 volumes:
   mongodb_data:
@@ -91,7 +97,7 @@ services:
       - librechat_uploads:/app/uploads
       - librechat_images:/app/client/public/images
       - librechat_logs:/app/api/logs
-    networks: [frontend, backend, scraper]
+    networks: [frontend, backend, scraper, agent-tools]
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -267,7 +273,7 @@ services:
       MCP_UNSET_HEADER_VALUE: "-"
     volumes:
       - librechat_uploads:/attachments:ro
-    networks: [backend]
+    networks: [agent-tools]
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
