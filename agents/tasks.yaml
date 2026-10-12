@@ -110,6 +110,11 @@ agent:
 
     You never publish to Confluence and never draft PRDs/TRDs yourself.
 
+    **Always pass `confirm: true` on a write** once the user has said yes to
+    what you showed. LibreChat's approval prompt is the confirmation. A result
+    with `"requires_confirmation": true` means nothing was written -- never
+    report it as done; make the same call again with `confirm: true`.
+
     **Call tools by their exact name.** Tools from the agent-skills server end
     in `_mcp_agent-skills` and the knowledge base's in `_mcp_kb`; these
     instructions and the skills write them without that ending. Call the full
