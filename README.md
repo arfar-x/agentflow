@@ -21,6 +21,7 @@ sitting in front of every write. See
 |---|---|
 | `api` | LibreChat itself -- the chat UI and backend |
 | `mongodb` | users, conversations, agent definitions |
+| `redis` | in-flight generation state and caches (needed for scheduled runs of agents that can pause); holds nothing worth backing up |
 | `meilisearch` | conversation search |
 | `vectordb` (pgvector) | embeddings for per-conversation file uploads |
 | `rag_api` | LibreChat's RAG sidecar, backed by `vectordb` |

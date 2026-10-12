@@ -59,6 +59,8 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       meilisearch:
         condition: service_healthy
       rag_api:
@@ -73,6 +75,14 @@ services:
       MONGO_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag_api:8000
+      # Shared generation store: a scheduled run of an agent that can pause
+      # (ask_user_question, or a tool on toolApproval's `ask` list) is
+      # refused without it. LibreChat only builds its Redis client when
+      # USE_REDIS is on, so streams can't be had without it; that also moves
+      # its caches into Redis, which are all rebuildable.
+      USE_REDIS: "true"
+      REDIS_URI: redis://redis:6379
+      USE_REDIS_STREAMS: ${USE_REDIS_STREAMS:-true}
       ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
       # The image runs node with NODE_ENV=production, so LibreChat marks the
       # httpOnly `refreshToken` cookie `Secure` (see shouldUseSecureCookie in
@@ -166,6 +176,26 @@ services:
       retries: 5
       start_period: 20s
     mem_limit: 1g
+
+  # In-flight generation state and caches for LibreChat (USE_REDIS /
+  # USE_REDIS_STREAMS). No auth and no published port: reachable only from
+  # `api` on `backend`, like mongodb. Nothing here is worth keeping across a
+  # restart (a lost job just fails that run, a lost cache is rebuilt), so no
+  # volume and no persistence -- and nothing to back up.
+  redis:
+    image: redis:7.4.7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 256m
 
   meilisearch:
     image: getmeili/meilisearch:v1.35.1

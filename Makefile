@@ -116,11 +116,11 @@ user-invite: ## Email an invite link instead of setting a password yourself -- n
 	docker compose exec -T api node config/invite-user.js "$(EMAIL)"
 
 user-delete: ## Delete a user and ALL their data -- interactive, asks you to confirm (irreversible)
-	# This deployment has no Redis, so LibreChat can't coordinate a live
-	# generation abort across processes -- delete-user.js additionally
-	# asks you to confirm every LibreChat process (this `api` included)
-	# is stopped before it'll proceed. Only answer y there if that's true;
-	# otherwise stop `api` first (`make down`), then run this.
+	# delete-user.js reaches the stack's Redis (the `redis` service) to abort
+	# the user's live generations. If it can't, it asks you to confirm every
+	# LibreChat process (this `api` included) is stopped before it'll proceed.
+	# Only answer y there if that's true; otherwise stop `api` first
+	# (`make down`), then run this.
 	docker compose exec api node config/delete-user.js $(EMAIL)
 
 user-reset-password: ## Reset a user's password -- interactive (email + new password prompts)

@@ -19,9 +19,12 @@ cache: true
 # doesn't disturb the rest of the interface: LibreChat fills every unset
 # interface field from its own defaults at startup.
 #
-# Without Redis the scheduler also needs SCHEDULES_SINGLE_PROCESS=true (.env)
-# -- this stack runs exactly one api. A scheduled run can't get a human
-# answer, so toolApproval's `ask` tools are blocked, never run, inside one.
+# The scheduler needs SCHEDULES_SINGLE_PROCESS=true (.env) -- this stack runs
+# exactly one api. A scheduled run can't get a human answer, so an agent that
+# can pause (ask_user_question, or a tool on toolApproval's `ask` list) is only
+# allowed to run on a schedule with the shared generation store, i.e. the
+# `redis` service plus USE_REDIS_STREAMS=true; it still can't have the pause
+# answered, so schedule read-only work.
 interface:
   schedules: true
   # Agent creation for every role, including USER. LibreChat writes this into

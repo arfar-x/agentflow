@@ -232,8 +232,12 @@ default rather than adding to it. That default set includes:
 - **Scheduled Chats (beta)** -- upstream ships it off; this stack turns it on
   with `interface.schedules: true` in `config/librechat.yaml.example` plus
   `SCHEDULES_SINGLE_PROCESS=true` in `.env` (below). A scheduled run has nobody
-  to answer it, so a tool on `toolApproval`'s `ask` list is blocked, not run,
-  inside one -- schedule read-only work (reports, summaries). Set
+  to answer it, so schedule read-only work (reports, summaries). An agent that
+  can pause -- it has `ask_user_question` or any tool on `toolApproval`'s `ask`
+  list -- is refused outright on a schedule without `USE_REDIS_STREAMS` and the
+  `redis` service ("Scheduled agent runs that can pause require a shared
+  generation store"); this stack has both, so it starts, but nobody is there to
+  answer the pause. Set
   `SCHEDULES_DISABLED=true` and restart `api` to stop every scheduled run at once.
 
 Off by default, and deliberately not enabled here because each needs a service
@@ -248,7 +252,8 @@ turning any of these on.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `SCHEDULES_SINGLE_PROCESS` | for Scheduled Chats | `true` in `.env.example` | Tells LibreChat this is its only process, which it requires before arming the scheduler without Redis. Missing, `api` logs `[schedules] scheduler NOT started ... Schedule writes are refused (503)` on every start and Scheduled Chats doesn't work. Must go back to `false` before ever running a second `api` replica (or add Redis with `USE_REDIS_STREAMS`). Changing it needs `docker compose up -d api` (a recreate, not a restart). |
+| `SCHEDULES_SINGLE_PROCESS` | for Scheduled Chats | `true` in `.env.example` | Tells LibreChat this is its only process, which it requires before arming the scheduler without Redis. Missing, `api` logs `[schedules] scheduler NOT started ... Schedule writes are refused (503)` on every start and Scheduled Chats doesn't work. Must go back to `false` before ever running a second `api` replica (the `redis` service and `USE_REDIS_STREAMS` are already here, so a second replica is the only thing left to change). Changing it needs `docker compose up -d api` (a recreate, not a restart). |
+| `USE_REDIS_STREAMS` | for scheduled runs of agents that can pause | `true` (compose default; `.env.example` sets it) | Puts LibreChat's in-flight generation state in the `redis` service (internal only, no auth, no volume, nothing to back up). Without it a scheduled run of an agent with `ask_user_question` or an `ask`-list tool fails with `Scheduled agent runs that can pause require a shared generation store`. Compose also sets `USE_REDIS=true` and `REDIS_URI=redis://redis:6379` (LibreChat builds no Redis client otherwise), so its caches live in Redis too -- all rebuildable. Changing it needs `docker compose up -d api`. |
 
 One startup log line is expected, not a fault:
 
