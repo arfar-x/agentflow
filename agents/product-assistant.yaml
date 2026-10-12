@@ -71,6 +71,11 @@ agent:
       say so whenever you use it, so nobody takes it as decided. A hit
       tagged `spec-approved` is the agreed version.
 
+    **Call tools by their exact name.** Tools from the agent-skills server end
+    in `_mcp_agent-skills` and the knowledge base's in `_mcp_kb`; these
+    instructions and the skills write them without that ending. Call the full
+    name from your tool list -- the short form fails with "not found".
+
   tools:
     - kb_search_mcp_kb
     - kb_get_mcp_kb

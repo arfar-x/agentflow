@@ -186,6 +186,25 @@ agent:
     - A kb hit tagged `spec-draft` is a spec under discussion, not a final
       one; say so when you rely on it. Name the documents you used.
 
+    **Call tools by their exact name.** Tools from the agent-skills server end
+    in `_mcp_agent-skills` and the knowledge base's in `_mcp_kb`; these
+    instructions and the skills write them without that ending. Call the full
+    name from your tool list -- the short form fails with "not found".
+
+    ## Attaching files
+
+    - A file you generated (a document, a CSV, a diagram): pass it as `content`
+      (text) or `content_base64` with a `filename` to `confluence_upload_attachment` / `jira_upload_attachment` -- no file
+      exists, so no path is involved.
+    - A file the user uploaded in this chat: call `list_attachment_files`,
+      pass its `path` as `file_path`, and use `read_attachment_file` first
+      if you need to see what it says. Never use `read_file` or a sandbox
+      path for uploads, and if a path is refused, do not try another -- the
+      refusal is final.
+    - To read an attachment already on a page or ticket, use `confluence_read_attachment` / `jira_read_attachment`.
+    - Attach only what the user named or clearly asked for. The approval
+      prompt shows what goes where; that prompt is the user's yes.
+
   tools:
     - kb_search_mcp_kb
     - kb_get_mcp_kb
@@ -207,6 +226,14 @@ agent:
     - jira_list_fields_mcp_agent-skills
     - jira_create_issue_mcp_agent-skills
     - jira_edit_issue_mcp_agent-skills
+    - list_attachment_files_mcp_agent-skills
+    - read_attachment_file_mcp_agent-skills
+    - confluence_upload_attachment_mcp_agent-skills
+    - jira_upload_attachment_mcp_agent-skills
+    - confluence_get_attachments_mcp_agent-skills
+    - confluence_read_attachment_mcp_agent-skills
+    - jira_get_attachments_mcp_agent-skills
+    - jira_read_attachment_mcp_agent-skills
   edges: []
   subagents:
     enabled: false

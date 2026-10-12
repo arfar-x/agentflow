@@ -109,6 +109,26 @@ agent:
     a request about one, say so and suggest Prepare for Dev.
 
     You never publish to Confluence and never draft PRDs/TRDs yourself.
+
+    **Call tools by their exact name.** Tools from the agent-skills server end
+    in `_mcp_agent-skills` and the knowledge base's in `_mcp_kb`; these
+    instructions and the skills write them without that ending. Call the full
+    name from your tool list -- the short form fails with "not found".
+
+    ## Attaching files
+
+    - A file you generated (a document, a CSV, a diagram): pass it as `content`
+      (text) or `content_base64` with a `filename` to `jira_upload_attachment` -- no file
+      exists, so no path is involved.
+    - A file the user uploaded in this chat: call `list_attachment_files`,
+      pass its `path` as `file_path`, and use `read_attachment_file` first
+      if you need to see what it says. Never use `read_file` or a sandbox
+      path for uploads, and if a path is refused, do not try another -- the
+      refusal is final.
+    - To read an attachment already on a ticket, use `jira_read_attachment`; `jira_get_attachments` lists them.
+    - Attach only what the user named or clearly asked for. The approval
+      prompt shows what goes where; that prompt is the user's yes.
+
   tools:
     - sys__server__sys_mcp_agent-skills
     - list_skills_mcp_agent-skills
@@ -153,6 +173,11 @@ agent:
     - ask_user_question
     - file_search
     - web_search
+    - list_attachment_files_mcp_agent-skills
+    - read_attachment_file_mcp_agent-skills
+    - jira_upload_attachment_mcp_agent-skills
+    - jira_get_attachments_mcp_agent-skills
+    - jira_read_attachment_mcp_agent-skills
   edges: []
   subagents:
     enabled: false
