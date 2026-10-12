@@ -59,6 +59,11 @@ Run `make help` for the full target list -- `Makefile` is a thin wrapper
 over `docker compose`/`scripts/`, nothing in it isn't documented in
 [`README.md`](README.md) or [`docs/OPERATIONS.md`](docs/OPERATIONS.md) too.
 
+A script that needs a value from `.env` sources `scripts/lib/env.sh` and calls
+`env_get NAME` / `env_fill NAME...` rather than parsing the file itself (a
+`grep | cut` keeps an inline `# comment` in the value). Scripts that need the
+whole file keep using `source .env`. `bash scripts/lib/env.test.sh` tests it.
+
 User account management also goes through `make user-*` targets (create,
 list, ban, invite, delete, reset-password) -- see README.md "Managing
 users" for the full list and what each wraps. Role/permission management
