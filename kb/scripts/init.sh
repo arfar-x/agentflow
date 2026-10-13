@@ -13,17 +13,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 # The module's own env file, never the stack's .env (kb/scripts/prepare.sh
 # creates it).
-if [ ! -f kb/.env.kb ]; then
-  echo "No kb/.env.kb found. Run kb/scripts/prepare.sh (make up does) first." >&2
+if [ ! -f kb/.env ]; then
+  echo "No kb/.env found. Run kb/scripts/prepare.sh (make up does) first." >&2
   exit 1
 fi
 
 # shellcheck disable=SC1091
-source kb/.env.kb
+source kb/.env
 
 : "${KB_POSTGRES_DB:=agentflow_kb}"
 : "${KB_POSTGRES_USER:=kb}"
-: "${KB_READER_PASSWORD:?set KB_READER_PASSWORD in kb/.env.kb -- kb/scripts/prepare.sh generates one}"
+: "${KB_READER_PASSWORD:?set KB_READER_PASSWORD in kb/.env -- kb/scripts/prepare.sh generates one}"
 
 psql_kb() {
   docker compose exec -T kb-db psql -v ON_ERROR_STOP=1 -U "${KB_POSTGRES_USER}" -d "${KB_POSTGRES_DB}" "$@"

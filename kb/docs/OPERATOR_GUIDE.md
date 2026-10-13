@@ -32,7 +32,7 @@ catalog it. This is *not* the per-user credential an agent reads a page with —
 that check still happens at the source, as the user.
 
 ```bash
-# kb/.env.kb -- every variable: CONFIGURATION.md
+# kb/.env -- every variable: CONFIGURATION.md
 KB_CONFLUENCE_BASE_URL=https://wiki.internal
 KB_CONFLUENCE_USERNAME=kb-bot
 KB_CONFLUENCE_PASSWORD=...                     # or KB_CONFLUENCE_PAT
@@ -205,7 +205,7 @@ Two properties hold everywhere, and are worth knowing before tuning anything:
 ### The GitLab webhook (optional)
 
 ```bash
-# kb/.env.kb
+# kb/.env
 KB_WEBHOOK_SECRET=<long random string>
 ```
 

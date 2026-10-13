@@ -76,12 +76,12 @@ Rules that follow from that:
 
 - Back up `.env` **every time** you back up the volumes, as one unit.
   `scripts/backup.sh` does this automatically -- and copies each module's env
-  file (`kb/.env.kb`) beside it. The catalog database only accepts the
+  file (`kb/.env`) beside it. The catalog database only accepts the
   passwords it was initialised with, so that file is part of the same unit.
 - Never run `scripts/generate-secrets.sh` again on a host that already has
   data in `mongodb_data` -- it refuses to run if `.env` already has secrets
   set, but a manual hand-edit of those four values bypasses that guard.
-- Store at least one copy of `.env` (and `kb/.env.kb`) somewhere other than this host.
+- Store at least one copy of `.env` (and `kb/.env`) somewhere other than this host.
 
 ## Backup / restore
 

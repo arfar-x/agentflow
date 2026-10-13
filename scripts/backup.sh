@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Snapshots every named volume this stack persists state in, plus .env and each
-# module's env file (kb/.env.kb, ...) -- the secrets that make the snapshots
+# module's env file (kb/.env, ...) -- the secrets that make the snapshots
 # readable: Mongo's stored credentials are encrypted with .env's keys, and the
-# catalog database was initialised with kb/.env.kb's passwords.
+# catalog database was initialised with kb/.env's passwords.
 #
 # Usage: scripts/backup.sh [output-dir]   (default: ./backups/<timestamp>)
 #
@@ -43,10 +43,9 @@ else
   echo "  WARNING: no .env found to back up" >&2
 fi
 
-# Module env files: <module>/.env.<name>, never the tracked .env.example.
-for module_env in */.env.*; do
+# Module env files: <module>/.env (the tracked template is .env.example).
+for module_env in */.env; do
   [ -f "${module_env}" ] || continue
-  case "${module_env}" in *.example) continue ;; esac
   mkdir -p "${OUT_DIR}/$(dirname "${module_env}")"
   cp "${module_env}" "${OUT_DIR}/${module_env}"
   chmod 600 "${OUT_DIR}/${module_env}"

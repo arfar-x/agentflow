@@ -69,7 +69,7 @@ jobs:
 
       - run: python -m pytest
 
-      # The script that creates kb/.env.kb and carries an older deployment's
+      # The script that creates kb/.env and carries an older deployment's
       # values across. Needs no services.
       - run: bash kb/scripts/prepare.test.sh
         working-directory: .

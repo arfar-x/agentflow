@@ -67,7 +67,7 @@ def test_the_catalog_volume_is_backed_up(compose):
     backup = (REPO_ROOT / "scripts" / "backup.sh").read_text(encoding="utf-8")
     assert "kb_data" in backup
     # ... and so is the env file whose passwords the restored database accepts.
-    assert ".env.*" in backup
+    assert "*/.env" in backup
 
 
 def test_the_two_database_identities_are_documented(compose):
@@ -78,7 +78,7 @@ def test_the_two_database_identities_are_documented(compose):
     env_example = (KB_ROOT / ".env.example").read_text(encoding="utf-8")
     assert "KB_POSTGRES_PASSWORD" in env_example
     assert "KB_READER_PASSWORD" in env_example
-    # The module generates its own, on first creation of kb/.env.kb.
+    # The module generates its own, on first creation of kb/.env.
     prepare = (KB_ROOT / "scripts" / "prepare.sh").read_text(encoding="utf-8")
     assert "KB_POSTGRES_PASSWORD" in prepare and "KB_READER_PASSWORD" in prepare
     assert "openssl rand" in prepare
@@ -135,7 +135,7 @@ def test_the_webhook_receiver_is_separate_and_off_by_default(compose):
     block = _service_block(compose, "kb-webhook")
     assert 'profiles: ["webhook"]' in block, "opt-in: it is the only inbound port"
     assert '127.0.0.1:' in block, "bound to loopback, not published to the world"
-    assert "KB_WEBHOOK_SECRET" not in block, "the secret comes from kb/.env.kb, never the compose file"
+    assert "KB_WEBHOOK_SECRET" not in block, "the secret comes from kb/.env, never the compose file"
 
     mcp = _service_block(compose, "mcp-kb")
     assert "webhook" not in mcp, "mcp-kb keeps its no-published-port rule"
@@ -246,9 +246,10 @@ def test_the_syncing_services_read_the_modules_env_file_only():
     # Covers: NFR-CFG-04
     text = compose_text()
     for service in ("kb-cli", "kb-scheduler", "kb-webhook"):
-        assert re.search(r"^\s+env_file: \.env\.kb$", _service_block(text, service), re.MULTILINE), service
-    # Nothing in this file may reach for the stack's .env.
-    assert not re.search(r"env_file:\s*(\.\./)?\.env\s*$", text, re.MULTILINE)
+        assert re.search(r"^\s+env_file: \.env$", _service_block(text, service), re.MULTILINE), service
+    # `.env` here is relative to kb/ -- the module's own. Nothing in this file may
+    # reach up to the stack's.
+    assert "../.env" not in text
 
 
 def test_the_stack_includes_the_module_with_its_own_env_file_alone():
@@ -260,7 +261,7 @@ def test_the_stack_includes_the_module_with_its_own_env_file_alone():
     assert include, "the root compose file must include the module"
     entry = include.group(1)
     assert "path: kb/compose.yaml" in entry
-    assert re.search(r"env_file: kb/\.env\.kb\s*$", entry, re.MULTILINE), (
+    assert re.search(r"env_file: kb/\.env\s*$", entry, re.MULTILINE), (
         "the module interpolates from its own env file only, not the stack's .env"
     )
     assert "kb-db:" not in re.sub(r"^include:\n(?:[ \t]+.*\n)+", "", text, flags=re.MULTILINE), (

@@ -10,7 +10,7 @@
 # set it false (or KB_SOURCES_APPROVED=false) to stop all syncing at once.
 #
 # ${VAR} and ${VAR:-default} work anywhere except in comments. Credentials are
-# named, never written here: the value stays in kb/.env.kb.
+# named, never written here: the value stays in kb/.env.
 
 approved: true
 
@@ -50,7 +50,7 @@ sources:
     kind: gitlab
     enabled: false
     base_url: ${GITLAB_BASE_URL:-https://your-gitlab-host}
-    token_env: GITLAB_TOKEN          # the name; the value stays in kb/.env.kb
+    token_env: GITLAB_TOKEN          # the name; the value stays in kb/.env
     # Keep each file's full text in the catalog, so agents can read past the
     # summary (no tool in this stack reads GitLab live). It makes the text
     # readable by EVERY knowledge base user, whatever their GitLab access --

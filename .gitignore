@@ -1,8 +1,6 @@
 .env
-# module-owned env files (kb/.env.kb, ...); each module's tracked template is
-# its .env.example
-.env.*
-!.env.example
+# (also matches module env files such as kb/.env; each module's tracked
+# template is its .env.example)
 backups/
 *.env.bak
 # real secret_key generated from searxng/settings.yml.example -- see

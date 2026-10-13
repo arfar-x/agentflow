@@ -82,13 +82,13 @@ Dependencies point inward only: `adapters → application → domain`.
   `config.py`, [`.env.example`](.env.example) (commented, with what breaks if
   it's wrong), [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md), `compose.yaml`
   if only some roles should see it, and a test.
-- **The module's variables live in `.env.kb`, never the stack's `.env`.** The
+- **The module's variables live in `.env`, never the stack's `.env`.** The
   query path (`mcp-kb`) gets an explicit list and no env file; only the roles
-  that sync get `env_file: .env.kb`. Keep it that way -- a source credential
+  that sync get `env_file: .env`. Keep it that way -- a source credential
   reachable from the query path is the failure this layout prevents.
-- **`sources.yaml` says *what* to catalog; `.env.kb` holds *how to get in*.**
+- **`sources.yaml` says *what* to catalog; `.env` holds *how to get in*.**
   The file names a credential (`token_env:`), never contains one.
-- Scripts here read `.env.kb` (`env_get NAME kb/.env.kb`), never `.env`.
+- Scripts here read `.env` (`env_get NAME kb/.env`), never `.env`.
 
 ## Conventions
 

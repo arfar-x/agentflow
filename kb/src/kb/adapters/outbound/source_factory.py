@@ -37,7 +37,7 @@ class MissingCredential(RuntimeError):
         self.variables = variables
         super().__init__(
             f"source {source_id!r} needs one of: {', '.join(variables)} -- "
-            "sync uses a read-only service account, set it in kb/.env.kb"
+            "sync uses a read-only service account, set it in kb/.env"
         )
 
 
@@ -97,7 +97,7 @@ def build_source(config: AnySource, env: Mapping[str, str] | None = None) -> Kno
 
         token = environment.get(config.token_env)
         if not token:
-            # The config names the variable; the value lives in kb/.env.kb. A
+            # The config names the variable; the value lives in kb/.env. A
             # self-hosted GitLab may allow anonymous reads of public projects,
             # but a catalog built from only what is public is a trap.
             raise MissingCredential(config.id, (config.token_env,))

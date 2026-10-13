@@ -8,7 +8,7 @@ kb-init: ## Create/upgrade the knowledge base schema + its read-only role (idemp
 
 kb-setup: ## Bring the knowledge base up and report what is still needed (runs inside `make up` too)
 	# The env file and source configuration must exist before any `docker compose`
-	# command: the compose file interpolates from kb/.env.kb, and kb-scheduler
+	# command: the compose file interpolates from kb/.env, and kb-scheduler
 	# bind-mounts kb/config/sources.yaml (Docker would create the mountpoint as an
 	# empty directory when the file doesn't exist yet).
 	kb/scripts/prepare.sh

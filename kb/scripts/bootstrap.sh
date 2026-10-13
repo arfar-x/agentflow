@@ -27,7 +27,7 @@ kb/scripts/prepare.sh
 
 # The module's own env file -- not the stack's .env.
 # shellcheck disable=SC1091
-source kb/.env.kb
+source kb/.env
 
 : "${KB_POSTGRES_DB:=agentflow_kb}"
 : "${KB_POSTGRES_USER:=kb}"
@@ -44,7 +44,7 @@ if [ -n "${KB_SUMMARIZER_URL:-}" ] && [ -n "${KB_SUMMARIZER_MODEL:-}" ]; then
     missing+=("a reachable OpenAI-compatible summarizer -- KB_SUMMARIZER_URL is set but the endpoint did not answer GET \${KB_SUMMARIZER_URL}/models; run 'make kb-check' for the error")
   fi
 else
-  missing+=("KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL (+ KB_SUMMARIZER_API_KEY if it needs one) in kb/.env.kb -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work")
+  missing+=("KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL (+ KB_SUMMARIZER_API_KEY if it needs one) in kb/.env -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work")
 fi
 
 has_source_creds=false
@@ -52,7 +52,7 @@ has_source_creds=false
 [ -n "${KB_JIRA_BASE_URL:-${JIRA_BASE_URL:-}}" ] && has_source_creds=true
 [ -n "${GITLAB_BASE_URL:-}" ] && has_source_creds=true
 $has_source_creds || \
-  missing+=("a read-only service account: KB_CONFLUENCE_* / KB_JIRA_* / GITLAB_TOKEN (in kb/.env.kb) -- sync has to see a space in order to catalog it")
+  missing+=("a read-only service account: KB_CONFLUENCE_* / KB_JIRA_* / GITLAB_TOKEN (in kb/.env) -- sync has to see a space in order to catalog it")
 
 enabled="$(grep -cE '^\s*enabled:\s*true' kb/config/sources.yaml || true)"
 if [ "${enabled}" = "0" ]; then

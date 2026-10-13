@@ -84,7 +84,7 @@ A script that needs a value from `.env` sources `scripts/lib/env.sh` and calls
 `grep | cut` keeps an inline `# comment` in the value). Scripts that need the
 whole file keep using `source .env`. `bash scripts/lib/env.test.sh` tests it.
 A module's scripts do the same against the module's own env file
-(`env_get NAME kb/.env.kb`); `bash kb/scripts/prepare.test.sh` tests the one that
+(`env_get NAME kb/.env`); `bash kb/scripts/prepare.test.sh` tests the one that
 creates it.
 
 User account management also goes through `make user-*` targets (create,
@@ -95,12 +95,12 @@ the Admin Panel UI, not the CLI -- see README.md and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Admin panel".
 
 The knowledge base comes up with the stack: `make up` runs
-`kb/scripts/prepare.sh` (creates `kb/.env.kb` -- generating the database
+`kb/scripts/prepare.sh` (creates `kb/.env` -- generating the database
 passwords, or carrying `KB_*` values over from an older root `.env` -- and
 `kb/config/sources.yaml` if they are missing) and then `kb/scripts/bootstrap.sh`,
 which creates its schema and read-only role and prints whatever is still
 missing before the catalog can fill itself. Every `docker compose` command needs
-`kb/.env.kb` to exist, so on a fresh checkout `make up` is the first thing to
+`kb/.env` to exist, so on a fresh checkout `make up` is the first thing to
 run. `make kb-setup` does the same
 on its own. Day to day it is `make kb-status`, `make kb-sources`,
 `make kb-sync SOURCE=…` -- see

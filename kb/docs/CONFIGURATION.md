@@ -1,17 +1,17 @@
 # Knowledge base configuration
 
 Everything that configures the catalog, and where it lives. The module reads
-exactly two things: its env file, `kb/.env.kb`, and its source configuration,
+exactly two things: its env file, `kb/.env`, and its source configuration,
 `kb/config/sources.yaml`. It does not read the stack's `.env`.
 
 | File | Tracked template | Holds |
 |---|---|---|
-| `kb/.env.kb` (gitignored, `chmod 600`) | `kb/.env.example` | Database passwords, source credentials, the summarizer endpoint, timezone, languages, webhook secret |
+| `kb/.env` (gitignored, `chmod 600`) | `kb/.env.example` | Database passwords, source credentials, the summarizer endpoint, timezone, languages, webhook secret |
 | `kb/config/sources.yaml` (gitignored) | `kb/config/sources.yaml.example` | *Which* spaces, projects and repositories are catalogued, and on what cadence. Credentials are only ever *named* here (`token_env:`), never written |
 
 `make up` creates both from their templates (`kb/scripts/prepare.sh`, also run by
 `make kb-setup`). It is idempotent and never overwrites a file that exists. On
-the first creation of `kb/.env.kb` it carries over any `KB_*` values (and the
+the first creation of `kb/.env` it carries over any `KB_*` values (and the
 older `CONFLUENCE_*`/`JIRA_*` spellings of the source credentials) from the
 stack's `.env`, so an existing deployment keeps the database password its volume
 was initialised with. If there was nothing to carry over it generates the two
@@ -21,17 +21,17 @@ file -- they are no longer read, and `make up` says so while they remain.
 ## Which service sees what
 
 The services are in [`kb/compose.yaml`](../compose.yaml), which the root
-`docker-compose.yml` includes with `kb/.env.kb` as its only interpolation source.
+`docker-compose.yml` includes with `kb/.env` as its only interpolation source.
 
 | Service | Gets | Why |
 |---|---|---|
 | `mcp-kb` (query path) | `KB_DATABASE_URL` (as `kb_reader`), `KB_MCP_HOST`, `KB_MCP_PORT` -- nothing else, no env file | It must not be able to see the owner credential or any source credential (NFR-CFG-03) |
-| `kb-scheduler`, `kb-cli`, `kb-webhook` | All of `kb/.env.kb`, plus the owner DSN | They sync, so they hold the source credentials and the writable role |
+| `kb-scheduler`, `kb-cli`, `kb-webhook` | All of `kb/.env`, plus the owner DSN | They sync, so they hold the source credentials and the writable role |
 | `kb-db` | The three `KB_POSTGRES_*` values, as Postgres's own `POSTGRES_*` | |
 
 ## Variables
 
-All live in `kb/.env.kb` unless a row says otherwise.
+All live in `kb/.env` unless a row says otherwise.
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
@@ -73,10 +73,10 @@ from what Confluence, Jira and GitLab actually contain, writing every candidate
 disabled. A source syncs once you set `enabled: true` on it; `approved: false`
 (or `KB_SOURCES_APPROVED=false`) stops all of them at once. `${VAR}` and
 `${VAR:-default}` work anywhere except in comments, resolved from the same
-environment the sync services have -- that is, `kb/.env.kb`.
+environment the sync services have -- that is, `kb/.env`.
 
 Losing `kb_data` costs the gap log and the sync checkpoints; the catalog itself
 is rebuilt from its sources. See [`docs/OPERATIONS.md`](../../docs/OPERATIONS.md)
-"Volumes". The database passwords in `kb/.env.kb` are part of that backup:
+"Volumes". The database passwords in `kb/.env` are part of that backup:
 `make backup` copies the file beside the volumes, and a restored catalog only
 accepts the passwords it was made with.

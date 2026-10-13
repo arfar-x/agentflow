@@ -59,7 +59,7 @@ just stop decrypting. See `docs/OPERATIONS.md`.
 ## Knowledge base (kb)
 
 Not configured here. The knowledge catalog is a module with its own variables,
-in its own env file, `kb/.env.kb` (template: `kb/.env.example`). `make up`
+in its own env file, `kb/.env` (template: `kb/.env.example`). `make up`
 creates it, generates its two database passwords, and -- on an upgrade -- carries
 over any `KB_*` values it finds in this `.env`. Nothing in this file is visible
 to kb, and nothing in that one to the rest of the stack. Every variable, and what

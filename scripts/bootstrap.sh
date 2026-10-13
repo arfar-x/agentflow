@@ -29,7 +29,7 @@ fi
 
 # The knowledge base's env file and source configuration must exist before the
 # `docker compose up` below: the root compose file includes kb/compose.yaml with
-# kb/.env.kb as its interpolation source, and kb-scheduler bind-mounts
+# kb/.env as its interpolation source, and kb-scheduler bind-mounts
 # kb/config/sources.yaml (Docker would create the mountpoint as an empty
 # directory). Seeds them from an older root .env on an upgrade.
 kb/scripts/prepare.sh

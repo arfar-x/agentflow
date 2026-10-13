@@ -37,7 +37,7 @@ HEADER = """\
 # the switch for an incident, not for adding a space.
 #
 # ${VAR} and ${VAR:-default} work anywhere. Credentials are named, never
-# written here: token_env: GITLAB_TOKEN, with the value in kb/.env.kb.
+# written here: token_env: GITLAB_TOKEN, with the value in kb/.env.
 
 approved: true
 

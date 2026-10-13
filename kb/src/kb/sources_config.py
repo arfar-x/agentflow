@@ -11,7 +11,7 @@ turns into a source pointed at nowhere. Values are then coerced by the model, so
 
 **Credentials are referenced by variable name, never written here** (`token_env:
 GITLAB_TOKEN`). The file is meant to be readable and reviewable; the secret
-stays in `kb/.env.kb`.
+stays in `kb/.env`.
 
 Sync runs only against **approved** configuration. `approved` defaults to true,
 because the real gate is per source: discovery writes every candidate

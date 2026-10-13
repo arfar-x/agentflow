@@ -28,7 +28,7 @@ echo "MONGO_APP_PASSWORD=$(openssl rand -hex 24)"
 echo "MEILI_MASTER_KEY=$(openssl rand -hex 32)"
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 # Not the knowledge base's: it is a module with its own env file, and
-# kb/scripts/prepare.sh generates its two database passwords into kb/.env.kb.
+# kb/scripts/prepare.sh generates its two database passwords into kb/.env.
 echo "OPENID_SESSION_SECRET=$(openssl rand -hex 32)  # only needed if using Keycloak"
 echo "ADMIN_PASSWORD=$(openssl rand -hex 12)"
 echo "ADMIN_PANEL_SESSION_SECRET=$(openssl rand -hex 32)"

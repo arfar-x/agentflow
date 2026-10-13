@@ -2,14 +2,14 @@
 # Creates what the knowledge base needs on disk before any `docker compose`
 # command can run: its env file and its source configuration.
 #
-# The root compose file `include:`s kb/compose.yaml with kb/.env.kb as that
+# The root compose file `include:`s kb/compose.yaml with kb/.env as that
 # module's only interpolation source, and bind-mounts kb/config/sources.yaml --
 # so both must exist first, or compose fails (or Docker creates the mountpoint
 # as an empty directory). Callers: scripts/bootstrap.sh and `make kb-setup`.
 #
 # Idempotent. It creates what is missing and never overwrites what exists.
 #
-# On first creation of kb/.env.kb it also:
+# On first creation of kb/.env it also:
 #   - carries over any knowledge-base values from an older root .env, so an
 #     existing deployment keeps its database password (the volume was
 #     initialised with it) and its credentials;
@@ -20,7 +20,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 # shellcheck disable=SC1091
 source scripts/lib/env.sh
 
-KB_ENV=kb/.env.kb
+KB_ENV=kb/.env
 KB_SOURCES=kb/config/sources.yaml
 LEGACY_ENV="${KB_LEGACY_ENV:-.env}"
 
