@@ -4,13 +4,23 @@ on:
   pull_request:
     paths:
       - "kb/**"
-      - "docs/spec/knowledge-base.md"
+      # Checked by kb/tests/test_deployment.py: the root files that include the
+      # module and must not leak its variables.
+      - "docker-compose.yml"
+      - ".env.example"
+      - "Makefile"
+      - "scripts/**"
       - ".github/workflows/kb-tests.yml"
   push:
     branches: [main]
     paths:
       - "kb/**"
-      - "docs/spec/knowledge-base.md"
+      # Checked by kb/tests/test_deployment.py: the root files that include the
+      # module and must not leak its variables.
+      - "docker-compose.yml"
+      - ".env.example"
+      - "Makefile"
+      - "scripts/**"
       - ".github/workflows/kb-tests.yml"
 
 permissions:
@@ -21,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    # Same image as the kb-db service and scripts/kb-test.sh, so the
+    # Same image as the kb-db service and kb/scripts/test.sh, so the
     # Postgres-backed tests run here too instead of being skipped.
     services:
       postgres:
@@ -58,3 +68,8 @@ jobs:
       - run: pip install -e '.[dev,store,sources,mcp]'
 
       - run: python -m pytest
+
+      # The script that creates kb/.env and carries an older deployment's
+      # values across. Needs no services.
+      - run: bash kb/scripts/prepare.test.sh
+        working-directory: .

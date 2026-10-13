@@ -126,7 +126,7 @@ around.
 
 ## The knowledge base
 
-Full guide: [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md). The failure modes that
+Full guide: [`kb/docs/OPERATOR_GUIDE.md`](../kb/docs/OPERATOR_GUIDE.md). The failure modes that
 actually come up:
 
 **`kb_search` returns nothing, and the agent says the catalog is empty.** It
@@ -135,7 +135,7 @@ any source is `enabled: true` and whether `approved` is on. A fresh install has
 every source disabled on purpose.
 
 **`{"error": {"type": "not_approved"}}`.** Syncing is switched off. The message
-says which switch did it -- `approved: false` in `config/kb-sources.yaml`, or
+says which switch did it -- `approved: false` in `kb/config/sources.yaml`, or
 `KB_SOURCES_APPROVED=false` in the environment, which wins over the file.
 
 **`{"error": {"type": "missing_credential"}}` naming `KB_CONFLUENCE_*` or

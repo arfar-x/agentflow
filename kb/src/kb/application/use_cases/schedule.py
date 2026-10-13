@@ -28,7 +28,7 @@ from kb.sources_config import (
 )
 
 #: Fallbacks when the config says a mechanism is on but not how often. They
-#: match the shipped defaults in kb-sources.yaml.example, so an operator who
+#: match the shipped defaults in sources.yaml.example, so an operator who
 #: deletes `every:` gets the documented behavior rather than silence.
 DEFAULT_INCREMENTAL_SECONDS = 15 * 60
 DEFAULT_FULL_SCRAPE_AT = (3, 0)

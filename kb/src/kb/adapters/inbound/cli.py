@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     gaps.add_argument("--limit", type=int, default=20)
 
     sync = sub.add_parser("sync", help="Bring the catalog in line with one configured source.")
-    sync.add_argument("--source", required=True, metavar="ID", help="A source id from kb-sources.yaml.")
+    sync.add_argument("--source", required=True, metavar="ID", help="A source id from sources.yaml.")
     sync.add_argument("--mode", choices=["full", "incremental"], default="full",
                       help="full lists everything (and detects deletions); incremental asks only "
                            "for what changed since the stored checkpoint.")
@@ -90,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         "discover", help="Propose sources from what the connected systems contain."
     )
     discover.add_argument("--write", action="store_true",
-                          help="Append the candidates to kb-sources.yaml (disabled, for review). "
+                          help="Append the candidates to sources.yaml (disabled, for review). "
                                "Without it, they are only printed.")
 
     sub.add_parser(
@@ -297,15 +297,15 @@ def _check(container: Any) -> dict[str, Any]:
 
 
 def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]:
-    import os
     from pathlib import Path
 
     from kb.adapters.outbound import discovery
+    from kb.config import process_environment
     from kb.adapters.outbound.source_factory import MissingCredential, build_source
     from kb.sources_config import ConfigError, NotApproved, load
 
     if args.command == "discover":
-        candidates = discovery.discover_all(os.environ)
+        candidates = discovery.discover_all(process_environment())
         payload: dict[str, Any] = {
             "candidates": [
                 {"id": c.id, "kind": c.kind, "found": c.size} for c in candidates

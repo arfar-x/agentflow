@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS sync_run_source_idx ON sync_run (source_id, started_a
 
 -- The query path runs as a least-privilege role (NFR-DEP-05): it may read
 -- everything and append to the gap log, and nothing else. The role is created by
--- scripts/kb-init.sh; when it does not exist -- a test database, a developer's
+-- kb/scripts/init.sh; when it does not exist -- a test database, a developer's
 -- laptop -- these grants are skipped rather than failing the migration.
 DO $$
 BEGIN

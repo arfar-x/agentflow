@@ -9,7 +9,7 @@ soon Confluence) exposed as tools via the `agent-skills` MCP server. It's
 mostly an infrastructure repo -- a pinned `docker-compose.yml` plus
 config/scripts -- with **one application module of its own, `kb/`**: the
 knowledge catalog, built to a written spec
-([`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) and served to
+([`kb/docs/SPEC.md`](kb/docs/SPEC.md)) and served to
 LibreChat as its own MCP server. Everything else here is configuration.
 Nothing here names a specific model or organization; every such detail
 lives in your own `.env`/`config/librechat.yaml`, not in this doc.
@@ -31,6 +31,26 @@ renders `config/librechat.yaml` from `config/librechat.yaml.example` +
 builds and starts every service, waits for `api` to report healthy, and
 creates the admin account if none exists yet. Safe to rerun. Full variable
 reference: [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+
+### Modules own their configuration
+
+A module is a directory that carries everything about itself, so deleting it
+removes it and adding one touches the root in exactly three lines. Today that is
+`kb/`; the shape to copy:
+
+| Piece | Where | How the root reaches it |
+|---|---|---|
+| Services, volumes | `<module>/compose.yaml` | `include:` in `docker-compose.yml`, with `env_file: <module>/.env.<name>` -- the module's only interpolation source |
+| Variables | `<module>/.env.example` (tracked) -> `<module>/.env.<name>` (gitignored) | Never `env_file: .env`. A module's variables are not in the root `.env.example`, and the root `.env` is not visible to the module |
+| Make targets | `<module>/module.mk` | `include <module>/module.mk` in the `Makefile` |
+| Scripts, config template, docs, spec | `<module>/scripts`, `config`, `docs` | Linked from this file |
+
+A role that doesn't need a secret doesn't get the env file (`mcp-kb` is given an
+explicit list; only the syncing services get `env_file:`). Shared infrastructure
+-- the `backend` network, published ports -- stays declared by the root.
+`make backup` copies each module's env file next to `.env`: they are one unit
+with the volumes. Not yet converted: `agent-skills` and the LibreChat
+side. They still read the root `.env`.
 
 ### Configuration is generated
 
@@ -63,6 +83,9 @@ A script that needs a value from `.env` sources `scripts/lib/env.sh` and calls
 `env_get NAME` / `env_fill NAME...` rather than parsing the file itself (a
 `grep | cut` keeps an inline `# comment` in the value). Scripts that need the
 whole file keep using `source .env`. `bash scripts/lib/env.test.sh` tests it.
+A module's scripts do the same against the module's own env file
+(`env_get NAME kb/.env`); `bash kb/scripts/prepare.test.sh` tests the one that
+creates it.
 
 User account management also goes through `make user-*` targets (create,
 list, ban, invite, delete, reset-password) -- see README.md "Managing
@@ -72,12 +95,17 @@ the Admin Panel UI, not the CLI -- see README.md and
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) "Admin panel".
 
 The knowledge base comes up with the stack: `make up` runs
-`scripts/kb-bootstrap.sh`, which creates its schema and read-only role, drops a
-`config/kb-sources.yaml` in place if there isn't one, and prints whatever is
-still missing before the catalog can fill itself. `make kb-setup` does the same
+`kb/scripts/prepare.sh` (creates `kb/.env` -- generating the database
+passwords, or carrying `KB_*` values over from an older root `.env` -- and
+`kb/config/sources.yaml` if they are missing) and then `kb/scripts/bootstrap.sh`,
+which creates its schema and read-only role and prints whatever is still
+missing before the catalog can fill itself. Every `docker compose` command needs
+`kb/.env` to exist, so on a fresh checkout `make up` is the first thing to
+run. `make kb-setup` does the same
 on its own. Day to day it is `make kb-status`, `make kb-sources`,
 `make kb-sync SOURCE=…` -- see
-[`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md).
+[`kb/docs/OPERATOR_GUIDE.md`](kb/docs/OPERATOR_GUIDE.md); its variables are in
+[`kb/docs/CONFIGURATION.md`](kb/docs/CONFIGURATION.md).
 
 Agents are managed declaratively: `make agent-export` writes every
 admin-owned agent (definition, handoff/subagent links, sharing) from the database to
@@ -115,7 +143,8 @@ make test
 
 `docker-compose.yml` is the architecture -- read it directly for exact
 service wiring, networks, and healthchecks; this is a summary, not a
-substitute.
+substitute. A module's own services are in its `compose.yaml`
+(`kb/compose.yaml`), included from there.
 
 - `api` (LibreChat) is the only service with a published port and the
   only thing end users talk to. It calls `mongodb` (users/conversations/
@@ -215,11 +244,11 @@ it.
   switch to/from local email/password auth.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) -- specific known
   failure modes (e.g. MCP tools missing from the tool picker).
-- `docs/spec/` -- the spec of record for anything in this repo big enough to
-  design before building. A change to one of these is a reviewed diff, not a
-  decision made in a chat window; the code follows the spec, and when they
-  disagree one of them is wrong and gets fixed. Requirements carry ids and a
-  status, and the owning module's tests enforce that pairing.
+- A module's spec of record lives in the module (`kb/docs/SPEC.md`): anything
+  big enough to design before building gets one. A change to it is a reviewed
+  diff, not a decision made in a chat window; the code follows the spec, and
+  when they disagree one of them is wrong and gets fixed. Requirements carry ids
+  and a status, and the module's tests enforce that pairing.
 - `specs/`, `.specify/`, `.claude/skills/speckit-*` --
   [GitHub Spec Kit](https://github.com/github/spec-kit), the workflow for
   designing a change before building it: `/speckit-specify` ->
@@ -227,15 +256,15 @@ it.
   `specs/NNN-<feature>/` directory per change, governed by
   `.specify/memory/constitution.md`. Those are working documents for one
   change; whatever a change decides about `kb/` still lands in
-  `docs/spec/knowledge-base.md`, which stays the spec of record.
-- [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md) -- the operator guide for
+  `kb/docs/SPEC.md`, which stays the spec of record.
+- [`kb/docs/OPERATOR_GUIDE.md`](kb/docs/OPERATOR_GUIDE.md) -- the operator guide for
   the catalog: credentials, choosing sources, the four freshness mechanisms and
   their switches, overrides, the gap log, backup, and what to check when it
   looks wrong.
 - `kb/` -- the knowledge catalog: what knowledge exists in the organization
   and where it lives, searchable by agents. Hexagonal (`domain/` ->
   `application/` -> `adapters/`), specified by
-  [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md); see
+  [`kb/docs/SPEC.md`](kb/docs/SPEC.md); see
   [`kb/README.md`](kb/README.md) to run it.
 - `agent-skills/` -- git submodule, pinned to a tag (see Architecture
   above); has its own `AGENTS.md` and `AUTHENTICATION.md` governing that

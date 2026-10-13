@@ -6,8 +6,8 @@ never document bodies: an agent finds the right document here, then reads it
 live through the Jira/Confluence tools with the asking user's own credentials.
 
 This is the operator's guide. The design and its requirements are
-[`docs/spec/knowledge-base.md`](spec/knowledge-base.md); the module's own
-internals are [`kb/README.md`](../kb/README.md).
+[`SPEC.md`](SPEC.md); the module's own
+internals are [`kb/README.md`](../README.md).
 
 ## What runs
 
@@ -19,8 +19,8 @@ internals are [`kb/README.md`](../kb/README.md).
 | `kb-cli` | One command and exits (`make kb-*`). Connects as the database owner | not running |
 | `kb-webhook` | GitLab push events. Opt-in (`--profile webhook`) | loopback only |
 
-`make up` starts the first three and runs `scripts/kb-bootstrap.sh`, which
-creates the schema, the least-privilege query role, and `config/kb-sources.yaml`
+`make up` starts the first three and runs `kb/scripts/bootstrap.sh`, which
+creates the schema, the least-privilege query role, and `kb/config/sources.yaml`
 if it is missing — then prints whatever is still needed.
 
 ## Getting it filling
@@ -32,7 +32,7 @@ catalog it. This is *not* the per-user credential an agent reads a page with —
 that check still happens at the source, as the user.
 
 ```bash
-# .env
+# kb/.env -- every variable: CONFIGURATION.md
 KB_CONFLUENCE_BASE_URL=https://wiki.internal
 KB_CONFLUENCE_USERNAME=kb-bot
 KB_CONFLUENCE_PASSWORD=...                     # or KB_CONFLUENCE_PAT
@@ -41,9 +41,9 @@ KB_JIRA_PAT=...
 GITLAB_BASE_URL=https://gitlab.internal
 GITLAB_TOKEN=...                               # read_api scope is enough
 
-KB_SUMMARIZER_URL=${VLLM_BASE_URL}             # the BASE url, ending in /v1
+KB_SUMMARIZER_URL=https://your-endpoint/v1     # the BASE url, ending in /v1
 KB_SUMMARIZER_MODEL=<the model it serves>      # see its GET /v1/models
-KB_SUMMARIZER_API_KEY=${VLLM_API_KEY}          # optional -- omit it if there is no key
+KB_SUMMARIZER_API_KEY=...                       # optional -- omit it if there is no key
 KB_SUMMARY_LANGUAGES=en,fa                     # what makes cross-language search work
 KB_TIMEZONE=Asia/Tehran                        # `at: "03:00"` means 03:00 here
 ```
@@ -71,12 +71,12 @@ accepted and trimmed; something that is not a URL fails at startup.
 
 ```bash
 make kb-sources-discover          # what Confluence, Jira and GitLab actually contain
-make kb-sources-discover WRITE=1  # append them to config/kb-sources.yaml, disabled
+make kb-sources-discover WRITE=1  # append them to kb/config/sources.yaml, disabled
 ```
 
 Discovery reports sizes (`412 pages -- Engineering`, `docs/ADRs: 14 files`) so
 the decision is "yes, catalog this one" rather than "what exists?". Then edit
-`config/kb-sources.yaml`: delete what does not belong, set `enabled: true` on
+`kb/config/sources.yaml`: delete what does not belong, set `enabled: true` on
 what does. Re-running discovery later **never rewrites a line you edited** — it
 only appends sources it has not seen, which makes it also the answer to "what is
 new that the catalog isn't watching?".
@@ -95,7 +95,7 @@ Useful knobs, all optional:
 ```
 
 `spec-draft` and `spec-approved` are the product-spec lifecycle labels
-([`PRODUCT_FLOW.md`](PRODUCT_FLOW.md)). Map both to `spec`, and don't exclude
+([`PRODUCT_FLOW.md`](../../docs/PRODUCT_FLOW.md)). Map both to `spec`, and don't exclude
 either: a draft spec is meant to be found and discussed. Labels also become the
 entry's tags, so agents can tell the draft from the approved version. Add the
 space your team writes specs in to `spaces`.
@@ -115,8 +115,8 @@ one `SOURCE=` at a time:
 make kb-sync-all           # FORCE=1 to bypass the content-hash gate
 ```
 
-It reads every `enabled: true` id straight from `config/kb-sources.yaml`
-and syncs each in turn, same live per-document progress. `scripts/kb-bootstrap.sh`
+It reads every `enabled: true` id straight from `kb/config/sources.yaml`
+and syncs each in turn, same live per-document progress. `kb/scripts/bootstrap.sh`
 (run by `make up`/`make kb-setup`) already calls this once on its own, the
 first time everything is configured and the catalog is still empty — this
 is for every time after that.
@@ -184,7 +184,7 @@ on disk under `raw_content`.
 
 ## How it stays current
 
-Four mechanisms, each switchable per source in `config/kb-sources.yaml`:
+Four mechanisms, each switchable per source in `kb/config/sources.yaml`:
 
 | Mechanism | Default | What it is for |
 |---|---|---|
@@ -205,7 +205,7 @@ Two properties hold everywhere, and are worth knowing before tuning anything:
 ### The GitLab webhook (optional)
 
 ```bash
-# .env
+# kb/.env
 KB_WEBHOOK_SECRET=<long random string>
 ```
 
@@ -242,7 +242,7 @@ retires an entry from search without touching anything upstream.
 ### Switching syncing off
 
 ```bash
-# in config/kb-sources.yaml
+# in kb/config/sources.yaml
 approved: false
 # or, without editing anything -- and this wins over the file
 KB_SOURCES_APPROVED=false

@@ -68,7 +68,7 @@ class StubContainer:
 def wired(tmp_path, monkeypatch):
     store, clock = FakeEntryStore(), FakeClock(NOON)
     container = StubContainer(store, clock)
-    path = tmp_path / "kb-sources.yaml"
+    path = tmp_path / "sources.yaml"
     path.write_text(CONFIG, encoding="utf-8")
 
     def build_source(config, env=None):

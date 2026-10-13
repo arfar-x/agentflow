@@ -1,7 +1,7 @@
-"""Deployment requirements that live in the stack's config, not in this module.
+"""Deployment requirements that live in the module's compose file and env files.
 
 They are checked here because this is the suite that owns the spec they come
-from: NFR-DEP-01 is a claim about `docker-compose.yml`, and a claim nobody
+from: NFR-DEP-01 is a claim about `kb/compose.yaml`, and a claim nobody
 checks is how a "separate database" quietly becomes another database inside
 LibreChat's during a refactor.
 
@@ -11,18 +11,20 @@ of this module, and these assertions are about a handful of specific lines.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-COMPOSE = REPO_ROOT / "docker-compose.yml"
+KB_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = KB_ROOT.parent
+COMPOSE = KB_ROOT / "compose.yaml"
+ROOT_COMPOSE = REPO_ROOT / "docker-compose.yml"
+SRC = KB_ROOT / "src" / "kb"
 
 
 @pytest.fixture(scope="module")
 def compose() -> str:
-    if not COMPOSE.exists():
-        pytest.skip("docker-compose.yml not found -- kb checked out on its own?")
     return COMPOSE.read_text(encoding="utf-8")
 
 
@@ -64,6 +66,8 @@ def test_the_catalog_volume_is_backed_up(compose):
     # checkpoints do not -- they live in this volume.
     backup = (REPO_ROOT / "scripts" / "backup.sh").read_text(encoding="utf-8")
     assert "kb_data" in backup
+    # ... and so is the env file whose passwords the restored database accepts.
+    assert "*/.env" in backup
 
 
 def test_the_two_database_identities_are_documented(compose):
@@ -71,11 +75,13 @@ def test_the_two_database_identities_are_documented(compose):
     # The owner that sync writes as, and the read-only role the query path
     # connects as. A deployment that only knows about one will hand the query
     # path the owner credential.
-    env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    env_example = (KB_ROOT / ".env.example").read_text(encoding="utf-8")
     assert "KB_POSTGRES_PASSWORD" in env_example
     assert "KB_READER_PASSWORD" in env_example
-    secrets = (REPO_ROOT / "scripts" / "generate-secrets.sh").read_text(encoding="utf-8")
-    assert "KB_POSTGRES_PASSWORD" in secrets and "KB_READER_PASSWORD" in secrets
+    # The module generates its own, on first creation of kb/.env.
+    prepare = (KB_ROOT / "scripts" / "prepare.sh").read_text(encoding="utf-8")
+    assert "KB_POSTGRES_PASSWORD" in prepare and "KB_READER_PASSWORD" in prepare
+    assert "openssl rand" in prepare
 
 
 def test_the_mcp_server_is_internal_only(compose):
@@ -129,7 +135,7 @@ def test_the_webhook_receiver_is_separate_and_off_by_default(compose):
     block = _service_block(compose, "kb-webhook")
     assert 'profiles: ["webhook"]' in block, "opt-in: it is the only inbound port"
     assert '127.0.0.1:' in block, "bound to loopback, not published to the world"
-    assert "KB_WEBHOOK_SECRET" not in block, "the secret comes from .env, never the compose file"
+    assert "KB_WEBHOOK_SECRET" not in block, "the secret comes from kb/.env, never the compose file"
 
     mcp = _service_block(compose, "mcp-kb")
     assert "webhook" not in mcp, "mcp-kb keeps its no-published-port rule"
@@ -183,3 +189,109 @@ def test_the_catalog_tools_need_no_approval_gate():
     text = template.read_text(encoding="utf-8")
     ask_list = text.split("ask:")[1].split("reason:")[0] if "ask:" in text else ""
     assert "kb_search" not in ask_list and "kb_get" not in ask_list
+
+
+# --- Configuration and environment (NFR-CFG) ---------------------------------
+
+#: Variables the code accepts that are deliberately not operator-facing: they
+#: only restate a default, and nothing in the stack sets them. Adding a name
+#: here is a decision that it should stay that way -- otherwise document it in
+#: kb/.env.example.
+UNDOCUMENTED_TUNABLES = {"KB_SEARCH_DEFAULT_LIMIT", "KB_STALE_AFTER_HOURS", "KB_TEST_DATABASE_URL"}
+
+
+def _variables_the_code_reads() -> set[str]:
+    names: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        names |= set(re.findall(r'"((?:KB|GITLAB)_[A-Z0-9_]+)"', path.read_text(encoding="utf-8")))
+    return names
+
+
+def _assigned_or_commented(text: str) -> set[str]:
+    """Names appearing as `NAME=` in an env template, commented out or not."""
+    return set(re.findall(r"^(?:#\s?)?([A-Z][A-Z0-9_]*)=", text, re.MULTILINE))
+
+
+def test_the_module_documents_every_variable_it_reads():
+    # Covers: NFR-CFG-02
+    documented = _assigned_or_commented((KB_ROOT / ".env.example").read_text(encoding="utf-8"))
+    # Set by compose or the image, so an operator never supplies them.
+    provided = set(re.findall(r"\b(KB_[A-Z0-9_]+):", COMPOSE.read_text(encoding="utf-8")))
+    provided |= set(re.findall(r"\b(KB_[A-Z0-9_]+)=", (KB_ROOT / "Dockerfile").read_text(encoding="utf-8")))
+    # Only names the code spells in full are checked, so an alias must be listed
+    # in the template too (KB_GITLAB_TOKEN beside GITLAB_TOKEN).
+    missing = _variables_the_code_reads() - documented - provided - UNDOCUMENTED_TUNABLES
+    assert not missing, f"read by the code but not documented in kb/.env.example: {sorted(missing)}"
+
+
+def test_the_stack_env_template_holds_none_of_the_modules_variables():
+    # Covers: NFR-CFG-02
+    root = (REPO_ROOT / ".env.example")
+    if not root.exists():
+        pytest.skip("stack .env.example not present -- kb checked out on its own?")
+    leaked = sorted(name for name in _assigned_or_commented(root.read_text(encoding="utf-8")) if name.startswith("KB_"))
+    assert not leaked, f"module-owned variables in the stack's .env.example: {leaked}"
+
+
+def test_the_query_path_gets_a_short_explicit_list_and_no_env_file():
+    # Covers: NFR-CFG-03
+    block = _service_block(compose_text(), "mcp-kb")
+    assert "env_file" not in block, "an env file would hand the query path the owner and source credentials"
+    environment = block.split("environment:", 1)[1].split("networks:", 1)[0]
+    names = set(re.findall(r"^\s+([A-Z][A-Z0-9_]*):", environment, re.MULTILINE))
+    assert names == {"KB_DATABASE_URL", "KB_MCP_HOST", "KB_MCP_PORT"}
+
+
+def test_the_syncing_services_read_the_modules_env_file_only():
+    # Covers: NFR-CFG-04
+    text = compose_text()
+    for service in ("kb-cli", "kb-scheduler", "kb-webhook"):
+        assert re.search(r"^\s+env_file: \.env$", _service_block(text, service), re.MULTILINE), service
+    # `.env` here is relative to kb/ -- the module's own. Nothing in this file may
+    # reach up to the stack's.
+    assert "../.env" not in text
+
+
+def test_the_stack_includes_the_module_with_its_own_env_file_alone():
+    # Covers: NFR-CFG-04
+    if not ROOT_COMPOSE.exists():
+        pytest.skip("docker-compose.yml not present -- kb checked out on its own?")
+    text = ROOT_COMPOSE.read_text(encoding="utf-8")
+    include = re.search(r"^include:\n((?:[ \t]+.*\n)+)", text, re.MULTILINE)
+    assert include, "the root compose file must include the module"
+    entry = include.group(1)
+    assert "path: kb/compose.yaml" in entry
+    assert re.search(r"env_file: kb/\.env\s*$", entry, re.MULTILINE), (
+        "the module interpolates from its own env file only, not the stack's .env"
+    )
+    assert "kb-db:" not in re.sub(r"^include:\n(?:[ \t]+.*\n)+", "", text, flags=re.MULTILINE), (
+        "the module's services belong in kb/compose.yaml"
+    )
+
+
+def test_the_module_is_self_contained_on_disk():
+    # Covers: NFR-CFG-05
+    for relative in (
+        "compose.yaml",
+        "module.mk",
+        ".env.example",
+        "config/sources.yaml.example",
+        "scripts/prepare.sh",
+        "scripts/init.sh",
+        "scripts/bootstrap.sh",
+        "docs/SPEC.md",
+        "docs/OPERATOR_GUIDE.md",
+        "README.md",
+        "AGENTS.md",
+    ):
+        assert (KB_ROOT / relative).exists(), f"kb/{relative} is missing"
+    # The root files only reference the module; none of its pieces live there.
+    for stray in ("config/kb-sources.yaml.example", "scripts/kb-init.sh", "docs/KNOWLEDGE_BASE.md"):
+        assert not (REPO_ROOT / stray).exists(), f"{stray} should live under kb/"
+    makefile = REPO_ROOT / "Makefile"
+    if makefile.exists():
+        assert "include kb/module.mk" in makefile.read_text(encoding="utf-8")
+
+
+def compose_text() -> str:
+    return COMPOSE.read_text(encoding="utf-8")

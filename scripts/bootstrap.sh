@@ -27,14 +27,12 @@ if [ ! -f searxng/settings.yml ]; then
   sed -i "s/REPLACE_ME_SEARXNG_SECRET_KEY/$(openssl rand -hex 32)/" searxng/settings.yml
 fi
 
-# kb-scheduler bind-mounts this path -- create it before the `docker compose
-# up` below, or Docker creates the mountpoint as an empty directory when the
-# file doesn't exist yet (a fresh checkout), and scripts/kb-bootstrap.sh's own
-# template copy fails trying to write into that directory further down.
-if [ ! -f config/kb-sources.yaml ]; then
-  echo "==> Generating config/kb-sources.yaml (gitignored) from its template..."
-  cp config/kb-sources.yaml.example config/kb-sources.yaml
-fi
+# The knowledge base's env file and source configuration must exist before the
+# `docker compose up` below: the root compose file includes kb/compose.yaml with
+# kb/.env as its interpolation source, and kb-scheduler bind-mounts
+# kb/config/sources.yaml (Docker would create the mountpoint as an empty
+# directory). Seeds them from an older root .env on an upgrade.
+kb/scripts/prepare.sh
 
 scripts/render-librechat-config.sh
 
@@ -75,7 +73,7 @@ fi
 
 # The knowledge base: schema, its read-only role, and a report of whatever is
 # still missing before it can fill itself. Idempotent, like everything above.
-scripts/kb-bootstrap.sh
+kb/scripts/bootstrap.sh
 
 echo "==> Done. docker compose ps:"
 docker compose ps

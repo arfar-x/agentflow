@@ -6,7 +6,7 @@
 # random free port, and removed when the run ends (including on failure), so
 # this is safe to run against a live deployment.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 IMAGE="pgvector/pgvector:0.8.0-pg15-trixie"   # same image as the kb-db service
 CONTAINER="kb-test-db-$$"

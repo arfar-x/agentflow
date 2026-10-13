@@ -1,4 +1,4 @@
-# Contract: `config/kb-sources.yaml` additions
+# Contract: `kb/config/sources.yaml` additions
 
 ```yaml
 defaults:

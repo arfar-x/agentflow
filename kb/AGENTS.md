@@ -5,7 +5,7 @@ lives. This file governs work inside `kb/`; repo-wide rules are in the root
 [`AGENTS.md`](../AGENTS.md), and [`README.md`](README.md) here covers running it
 and a REPL walkthrough.
 
-**[`docs/spec/knowledge-base.md`](../docs/spec/knowledge-base.md) is the source
+**[`docs/SPEC.md`](docs/SPEC.md) is the source
 of truth for behavior.** Read it before changing anything. It is not background
 reading: requirements carry ids, tests claim them, and the suite fails when the
 two disagree.
@@ -57,6 +57,9 @@ src/kb/
     └── outbound/  postgres_store.py (the only adapter so far)
 migrations/        SQL applied by `make kb-init`; append-only -- a shipped file
                    is never edited, a change is a new numbered file
+compose.yaml  module.mk  .env.example  config/  scripts/  docs/
+                   the module's deployment, env, config, make targets and docs --
+                   see README.md "What is in this directory"
 ```
 
 Dependencies point inward only: `adapters → application → domain`.
@@ -68,6 +71,24 @@ Dependencies point inward only: `adapters → application → domain`.
 - `domain/` must not import from `application/`.
 - Everything that talks to the outside world is a port implementation in
   `adapters/`, constructed only in the composition root.
+
+## Configuration
+
+- **`config.py` is the only module that reads the environment**
+  (`tests/test_boundaries.py`). Everything else takes a value, or a mapping from
+  `process_environment()`, as an argument. One settings class per kind of
+  process (`Settings`, `WebhookSettings`), so each states what it needs.
+- **A new variable is five places, and a test fails if you skip the second:**
+  `config.py`, [`.env.example`](.env.example) (commented, with what breaks if
+  it's wrong), [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md), `compose.yaml`
+  if only some roles should see it, and a test.
+- **The module's variables live in `.env`, never the stack's `.env`.** The
+  query path (`mcp-kb`) gets an explicit list and no env file; only the roles
+  that sync get `env_file: .env`. Keep it that way -- a source credential
+  reachable from the query path is the failure this layout prevents.
+- **`sources.yaml` says *what* to catalog; `.env` holds *how to get in*.**
+  The file names a credential (`token_env:`), never contains one.
+- Scripts here read `.env` (`env_get NAME kb/.env`), never `.env`.
 
 ## Conventions
 
@@ -96,7 +117,7 @@ Dependencies point inward only: `adapters → application → domain`.
 ## Adding things
 
 - **A source** is one file in `adapters/outbound/` implementing
-  `KnowledgeSource`, plus one entry in `config/kb-sources.yaml`. If `domain/` or
+  `KnowledgeSource`, plus one entry in `kb/config/sources.yaml`. If `domain/` or
   `application/` needs to change, the port is wrong — fix the port, not the
   layer.
 - **A use case** depends on ports only, and gets tested against the in-memory
@@ -128,7 +149,7 @@ Dependencies point inward only: `adapters → application → domain`.
 - **A bad document is skipped and reported, never fatal.** One page without an
   id must not end a run over a 900-page space.
 - **Credentials are a read-only service account's, read from the environment
-  by `source_factory`** -- never from `kb-sources.yaml`, which carries only the
+  by `source_factory`** -- never from `sources.yaml`, which carries only the
   *name* of the variable. Sync's account is not a user's: an agent reading the
   real page later does so as the user, through agent-skills.
 - **The summarizer's output is data.** The document went into a prompt; what

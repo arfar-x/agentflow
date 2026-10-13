@@ -3,7 +3,7 @@
 An entry describes a document; it never contains one. That is the point of the
 design: `location` tells an agent where the real content lives so it can go and
 read it, rather than answering from a summary (see
-`docs/spec/knowledge-base.md`, Part 2).
+`docs/SPEC.md`, Part 2).
 
 Modelled with pydantic so **an invalid entry cannot exist**: every path that
 builds one -- a source adapter, a database row, a JSON payload -- goes through

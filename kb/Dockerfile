@@ -15,7 +15,7 @@ COPY src/ src/
 RUN pip install --no-cache-dir '.[store,mcp,sources]'
 
 # Migrations ship beside the code but outside the package, because psql applies
-# them too (scripts/kb-init.sh). The path is explicit rather than derived: once
+# them too (kb/scripts/init.sh). The path is explicit rather than derived: once
 # the package is installed into site-packages, nothing relative to it leads back
 # here.
 COPY migrations/ migrations/

@@ -1,12 +1,14 @@
 .env
+# (also matches module env files such as kb/.env; each module's tracked
+# template is its .env.example)
 backups/
 *.env.bak
 # real secret_key generated from searxng/settings.yml.example -- see
 # scripts/bootstrap.sh and docs/OPERATIONS.md
 searxng/settings.yml
 # real source configuration -- space keys, repo paths, project keys. The
-# tracked template is config/kb-sources.yaml.example
-config/kb-sources.yaml
+# tracked template is kb/config/sources.yaml.example
+kb/config/sources.yaml
 
 # rendered from config/librechat.yaml.example + .env by
 # scripts/render-librechat-config.sh (make up / make render-config) --

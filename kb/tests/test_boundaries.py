@@ -105,3 +105,28 @@ def test_the_fetch_hint_map_is_the_only_place_a_source_kind_is_named_inwardly():
         "adding a kind here is adding a tool an agent can call, which is a "
         "deliberate decision -- not a side effect of adding a source"
     )
+
+
+#: The only module allowed to read the process environment. Every other module
+#: takes a value, or a mapping from `kb.config.process_environment()`, as an
+#: argument -- which is what makes "which variables does this process need"
+#: answerable by reading one file, and a use case testable without any.
+ENV_READER = "config.py"
+ENV_ACCESSORS = {"environ", "getenv", "putenv", "environb"}
+
+
+def test_only_config_reads_the_process_environment():
+    # Covers: NFR-CFG-01
+    offenders: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        if path.name == ENV_READER and path.parent == SRC:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr in ENV_ACCESSORS:
+                offenders.append(f"{path.relative_to(SRC.parent)}:{node.lineno} reads os.{node.attr}")
+            elif isinstance(node, ast.ImportFrom) and node.module == "os":
+                bad = [a.name for a in node.names if a.name in ENV_ACCESSORS]
+                if bad:
+                    offenders.append(f"{path.relative_to(SRC.parent)}:{node.lineno} imports {bad}")
+    assert offenders == [], "read the environment through kb.config only: " + "; ".join(offenders)

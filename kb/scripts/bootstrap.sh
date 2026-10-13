@@ -14,38 +14,26 @@
 # image is a service quietly running last week's code -- which looks exactly
 # like "the catalog stopped syncing".
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-
-# shellcheck disable=SC1091
-[ -f .env ] && source .env
-
-: "${KB_POSTGRES_DB:=agentflow_kb}"
-: "${KB_POSTGRES_USER:=kb}"
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 say() { printf '    %s\n' "$*"; }
 
 echo "==> Knowledge base..."
 
-# 1. The source configuration, from its template if this is a first run.
-# Callers (scripts/bootstrap.sh, `make kb-setup`) create this before their own
-# `docker compose up`, so kb-scheduler's bind mount never sees a missing file
-# -- but if this script is ever run standalone before that guard exists (or
-# before either was fixed), Docker will have created the mountpoint as an
-# empty directory instead. Recover rather than fail opaquely inside `cp`.
-if [ -d config/kb-sources.yaml ]; then
-  rmdir config/kb-sources.yaml 2>/dev/null || {
-    echo "config/kb-sources.yaml is a directory (not empty) instead of the" >&2
-    echo "expected file -- remove it manually and rerun." >&2
-    exit 1
-  }
-fi
-if [ ! -f config/kb-sources.yaml ]; then
-  cp config/kb-sources.yaml.example config/kb-sources.yaml
-  say "created config/kb-sources.yaml from the template (every source disabled)"
-fi
+# 1. The env file and the source configuration, from their templates on a first
+# run (or moved/seeded from where they lived before this module owned them).
+# First, because everything below reads the env file it creates.
+kb/scripts/prepare.sh
+
+# The module's own env file -- not the stack's .env.
+# shellcheck disable=SC1091
+source kb/.env
+
+: "${KB_POSTGRES_DB:=agentflow_kb}"
+: "${KB_POSTGRES_USER:=kb}"
 
 # 2. Schema and the least-privilege query role.
-scripts/kb-init.sh | sed 's/^/    /'
+kb/scripts/init.sh | sed 's/^/    /'
 
 # 3. What is still missing, in the order it matters.
 missing=()
@@ -56,7 +44,7 @@ if [ -n "${KB_SUMMARIZER_URL:-}" ] && [ -n "${KB_SUMMARIZER_MODEL:-}" ]; then
     missing+=("a reachable OpenAI-compatible summarizer -- KB_SUMMARIZER_URL is set but the endpoint did not answer GET \${KB_SUMMARIZER_URL}/models; run 'make kb-check' for the error")
   fi
 else
-  missing+=("KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL (+ KB_SUMMARIZER_API_KEY if it needs one) -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work")
+  missing+=("KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL (+ KB_SUMMARIZER_API_KEY if it needs one) in kb/.env -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work")
 fi
 
 has_source_creds=false
@@ -64,11 +52,11 @@ has_source_creds=false
 [ -n "${KB_JIRA_BASE_URL:-${JIRA_BASE_URL:-}}" ] && has_source_creds=true
 [ -n "${GITLAB_BASE_URL:-}" ] && has_source_creds=true
 $has_source_creds || \
-  missing+=("a read-only service account: KB_CONFLUENCE_* / KB_JIRA_* / GITLAB_TOKEN -- sync has to see a space in order to catalog it")
+  missing+=("a read-only service account: KB_CONFLUENCE_* / KB_JIRA_* / GITLAB_TOKEN (in kb/.env) -- sync has to see a space in order to catalog it")
 
-enabled="$(grep -cE '^\s*enabled:\s*true' config/kb-sources.yaml || true)"
+enabled="$(grep -cE '^\s*enabled:\s*true' kb/config/sources.yaml || true)"
 if [ "${enabled}" = "0" ]; then
-  missing+=("at least one source enabled in config/kb-sources.yaml -- run 'make kb-sources-discover WRITE=1' to see what is there")
+  missing+=("at least one source enabled in kb/config/sources.yaml -- run 'make kb-sources-discover WRITE=1' to see what is there")
 fi
 
 if [ ${#missing[@]} -eq 0 ]; then
@@ -80,7 +68,7 @@ if [ ${#missing[@]} -eq 0 ]; then
   live="$(docker compose run --rm -T kb-cli status 2>/dev/null | grep -oE '"live": [0-9]+' | grep -oE '[0-9]+' || echo 0)"
   if [ "${live:-0}" = "0" ]; then
     say "catalog is empty -- running the initial sync now (can take a while for large spaces)"
-    scripts/kb-sync-all.sh || say "initial sync hit an error above -- fix it and rerun 'make kb-sync-all'"
+    kb/scripts/sync-all.sh || say "initial sync hit an error above -- fix it and rerun 'make kb-sync-all'"
   fi
   say "the scheduler keeps it fresh from here; 'make kb-status' shows what the catalog holds"
 else
@@ -88,5 +76,5 @@ else
   for item in "${missing[@]}"; do
     printf '      - %s\n' "${item}"
   done
-  say "then: make kb-sources-discover WRITE=1  ->  edit config/kb-sources.yaml  ->  make kb-sync SOURCE=<id>"
+  say "then: make kb-sources-discover WRITE=1  ->  edit kb/config/sources.yaml  ->  make kb-sync SOURCE=<id>"
 fi

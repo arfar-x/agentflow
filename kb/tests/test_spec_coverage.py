@@ -1,6 +1,6 @@
 """The spec is executable: this test is what makes it so.
 
-`docs/spec/knowledge-base.md` defines every requirement with a stable id and a
+`docs/SPEC.md` defines every requirement with a stable id and a
 status. A test claims one with a `Covers: FR-ENT-02, FR-REC-05` line. This test
 fails when:
 
@@ -19,8 +19,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SPEC = REPO_ROOT / "docs" / "spec" / "knowledge-base.md"
+KB_ROOT = Path(__file__).resolve().parent.parent
+SPEC = KB_ROOT / "docs" / "SPEC.md"
 TESTS = Path(__file__).resolve().parent
 
 #: A requirement row: `| FR-ENT-01 | The entry MUST ... | done |`
@@ -59,7 +59,7 @@ def test_every_implemented_requirement_has_a_test_claiming_it():
     implemented = {rid for rid, status in spec_requirements().items() if status == "done"}
     unclaimed = sorted(implemented - set(claims()))
     assert not unclaimed, (
-        "marked done in docs/spec/knowledge-base.md but no test claims them: "
+        "marked done in docs/SPEC.md but no test claims them: "
         + ", ".join(unclaimed)
     )
 

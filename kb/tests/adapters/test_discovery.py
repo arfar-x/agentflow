@@ -59,7 +59,7 @@ def test_jira_projects_are_proposed_with_an_epics_only_query():
 
 def test_a_new_file_is_written_with_everything_disabled_and_unreviewed(tmp_path):
     # Covers: FR-CFG-06, FR-CFG-05, AS-07
-    path = tmp_path / "kb-sources.yaml"
+    path = tmp_path / "sources.yaml"
     added, skipped = merge_into(path, [
         Candidate(id="confluence-eng", kind="confluence", size="1 page",
                   body="  - id: confluence-eng\n    kind: confluence\n    enabled: false\n    spaces: [ENG]\n"),
@@ -76,7 +76,7 @@ def test_re_running_adds_only_what_is_new_and_never_rewrites_a_line(tmp_path):
     # Covers: FR-CFG-06
     # An operator's edits, comments and decisions have to survive, or discovery
     # becomes something you run once and never dare run again.
-    path = tmp_path / "kb-sources.yaml"
+    path = tmp_path / "sources.yaml"
     edited = (
         "approved: true\n"
         "sources:\n"
@@ -105,7 +105,7 @@ def test_re_running_adds_only_what_is_new_and_never_rewrites_a_line(tmp_path):
 
 
 def test_discovered_sizes_are_written_as_comments_not_config(tmp_path):
-    path = tmp_path / "kb-sources.yaml"
+    path = tmp_path / "sources.yaml"
     merge_into(path, [
         Candidate(id="jira-pay", kind="jira", size="project PAY -- Payments",
                   body="  - id: jira-pay\n    kind: jira\n    enabled: false\n    jql: 'project = PAY'\n"),

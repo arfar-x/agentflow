@@ -41,5 +41,7 @@ echo "Volumes restored. If this backup's .env differs from your current one"
 echo "(especially CREDS_KEY/CREDS_IV/JWT_SECRET/JWT_REFRESH_SECRET), copy"
 echo "${BACKUP_DIR}/.env into place BEFORE starting the stack, or Mongo's"
 echo "stored credentials will not decrypt."
+echo "Do the same for each module env file in the backup (e.g. kb/.env):"
+echo "the restored catalog database only accepts the passwords it was made with."
 echo
 echo "Then: docker compose up -d"
