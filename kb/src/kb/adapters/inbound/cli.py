@@ -297,15 +297,15 @@ def _check(container: Any) -> dict[str, Any]:
 
 
 def _sources_command(args: argparse.Namespace, container: Any) -> dict[str, Any]:
-    import os
     from pathlib import Path
 
     from kb.adapters.outbound import discovery
+    from kb.config import process_environment
     from kb.adapters.outbound.source_factory import MissingCredential, build_source
     from kb.sources_config import ConfigError, NotApproved, load
 
     if args.command == "discover":
-        candidates = discovery.discover_all(os.environ)
+        candidates = discovery.discover_all(process_environment())
         payload: dict[str, Any] = {
             "candidates": [
                 {"id": c.id, "kind": c.kind, "found": c.size} for c in candidates

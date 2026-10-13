@@ -293,6 +293,12 @@ stated in C6.
 | NFR-PRF-02 | A search MUST complete without waiting on any external system other than the catalog database. | done |
 | NFR-PRF-03 | A full reconciliation of a steady-state catalog SHOULD make no model calls. | done |
 
+### 7.4 Configuration and environment — `NFR-CFG`
+
+| id | Requirement | Status |
+|---|---|---|
+| NFR-CFG-01 | Only `kb/config.py` may read the process environment. Every other module receives a value, or a mapping obtained from it, as an argument. | done |
+
 ## 8. Interfaces
 
 ### 8.1 MCP tools (read-only)
@@ -452,6 +458,7 @@ which a flat catalog cannot answer.
 
 | Version | Date | Change |
 |---|---|---|
+| 2.8.0 | 2026-10-13 | Added §7.4 (NFR-CFG-01): `kb/config.py` is the only module that reads the process environment. The webhook receiver, the migrations directory and the source-config loader had each read variables directly, so "which variables does this process need" had no single answer. |
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
 | 2.7.0 | 2026-10-11 | Added FR-REC-13: a label-only change re-classifies the entry without re-summarizing. Adding or swapping a wiki label changes neither the page's text nor its version, so the content-hash gate treated it as unchanged and the entry kept its old type and tags until the text next changed. |
 | 2.6.0 | 2026-10-11 | FR-AGT-02 narrowed: the front door searches the catalog before answering itself, not before delegating. Found in a live trial of the product-spec flow: the front door searched, then handed off to a specialist that searched the same question again, before doing everything itself. The front door is now a router with no write tools; the specialist it hands to grounds the work (FR-AGT-03). |

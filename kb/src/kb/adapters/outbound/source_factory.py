@@ -14,10 +14,10 @@ does not configure it twice.
 
 from __future__ import annotations
 
-import os
 from typing import Mapping
 
 from kb.application.ports.knowledge_source import KnowledgeSource
+from kb.config import process_environment
 from kb.sources_config import (
     AnySource,
     ConfluenceSource,
@@ -50,7 +50,7 @@ def _first(env: Mapping[str, str], *names: str) -> str | None:
 
 
 def build_source(config: AnySource, env: Mapping[str, str] | None = None) -> KnowledgeSource:
-    environment = os.environ if env is None else env
+    environment = process_environment() if env is None else env
 
     if isinstance(config, ConfluenceSource):
         from kb.adapters.outbound.confluence_source import ConfluenceKnowledgeSource

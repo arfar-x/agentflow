@@ -106,18 +106,18 @@ def build_app(
 
 def main() -> None:  # pragma: no cover -- the container's entrypoint
     import logging as _logging
-    import os
 
     import uvicorn
 
-    from kb.config import Settings
+    from kb.config import MissingSetting, Settings, WebhookSettings
     from kb.container import build
     from kb.sources_config import GitLabSource, load
 
     _logging.basicConfig(level=_logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    secret = os.environ.get("KB_WEBHOOK_SECRET", "")
-    if not secret:
-        raise SystemExit("KB_WEBHOOK_SECRET is not set -- refusing to accept unauthenticated webhooks")
+    try:
+        webhook = WebhookSettings.from_env()
+    except MissingSetting as exc:
+        raise SystemExit(f"{exc} -- refusing to accept unauthenticated webhooks") from exc
 
     settings = Settings.from_env()
     container = build(settings)
@@ -142,12 +142,8 @@ def main() -> None:  # pragma: no cover -- the container's entrypoint
         container.store.queue_refresh(entry_id, at=container.clock.now())
         return True
 
-    app = build_app(secret=secret, enqueue=enqueue, source_ids_for_project=sources_for)
-    uvicorn.run(
-        app,
-        host=os.environ.get("KB_WEBHOOK_HOST", "127.0.0.1"),
-        port=int(os.environ.get("KB_WEBHOOK_PORT", "8323")),
-    )
+    app = build_app(secret=webhook.secret, enqueue=enqueue, source_ids_for_project=sources_for)
+    uvicorn.run(app, host=webhook.host, port=webhook.port)
 
 
 if __name__ == "__main__":  # pragma: no cover

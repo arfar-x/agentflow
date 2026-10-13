@@ -23,7 +23,6 @@ later sync (FR-OVR-06) without sync knowing overrides exist.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -32,30 +31,14 @@ import psycopg
 from psycopg.rows import dict_row
 
 from kb.application.ports.entry_store import ContentSlice
+from kb.config import migrations_dir
 from kb.domain.content import RawContent
 from kb.domain.entry import Entry, EntryType
 from kb.domain.merge import Override, apply_override
 from kb.domain.policies import is_indexable
 from kb.domain.text import normalize_all
 
-def _default_migrations_dir() -> Path:
-    """Where the .sql files live.
-
-    `KB_MIGRATIONS_DIR` wins (the image sets it, since once this package is
-    installed into site-packages nothing relative to it leads back to them).
-    Otherwise walk up from this file, which finds `kb/migrations/` in a checkout.
-    """
-    configured = os.environ.get("KB_MIGRATIONS_DIR")
-    if configured:
-        return Path(configured)
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "migrations"
-        if candidate.is_dir():
-            return candidate
-    return Path("migrations")
-
-
-MIGRATIONS_DIR = _default_migrations_dir()
+MIGRATIONS_DIR = migrations_dir()
 
 #: Trigram indexes cannot help with a fragment shorter than three characters,
 #: and a one- or two-letter term matches almost everything. Dropped unless it is

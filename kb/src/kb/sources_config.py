@@ -23,7 +23,6 @@ without editing every source.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -31,6 +30,7 @@ from typing import Annotated, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from kb.config import process_environment
 from kb.domain.content import (
     DEFAULT_RAW_CONTENT_MAX_BYTES,
     MIN_RAW_CONTENT_MAX_BYTES,
@@ -99,7 +99,7 @@ def interpolate(text: str, env: dict[str, str] | None = None, *, path: Path | No
     document -- a value, a list item, or a whole block -- as Compose behaves.
     Comments are left alone: they are documentation, not configuration.
     """
-    source = os.environ if env is None else env
+    source = process_environment() if env is None else env
     offset = 0  # characters consumed so far, for reporting the right line
 
     def replace(match: re.Match[str]) -> str:
@@ -323,11 +323,11 @@ def _with_environment_approval(document: dict, env) -> dict:
 
 def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> SourcesConfig:
     """Read, interpolate, parse and validate the source configuration."""
-    location = path or Path(os.environ.get("KB_SOURCES_FILE", DEFAULT_PATH))
+    location = path or Path(process_environment().get("KB_SOURCES_FILE", DEFAULT_PATH))
     if not location.exists():
         raise ConfigError("file not found -- copy config/kb-sources.yaml.example to it", path=location)
 
-    environment = os.environ if env is None else env
+    environment = process_environment() if env is None else env
     raw = interpolate(location.read_text(encoding="utf-8"), env, path=location)
     try:
         document: Any = yaml.safe_load(raw) or {}
