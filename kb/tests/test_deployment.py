@@ -11,6 +11,7 @@ of this module, and these assertions are about a handful of specific lines.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -105,7 +106,10 @@ def test_librechat_is_told_about_the_catalog_and_asks_it_for_no_credentials():
     assert "'mcp-kb:8322'" in template, "SSRF allowlist entry is required for an internal address"
 
     kb_block = template[template.index("  kb:\n    type: streamable-http") :]
-    kb_block = kb_block[: kb_block.index("\nwebSearch:")]
+    # Up to the next line indented only two spaces (the next server entry or its
+    # leading comment) or none, so another server's per-user headers can't be
+    # mistaken for the catalog's.
+    kb_block = re.split(r"\n(?=  \S|\S)", kb_block, maxsplit=1)[0]
     # The catalog is shared: nothing per-user to inject, so nothing to spoof.
     assert "customUserVars" not in kb_block and "headers" not in kb_block
     # Both tools are read-only, so neither belongs in the approval list.

@@ -173,6 +173,15 @@ listed in `docker-compose.yml`, reach it, so the stack's own secrets in `.env`
 are never on its disk or in its environment. A new server-level setting for
 it must be added there too.
 
+## MCP: Figma
+
+No `.env` variables. The `mcp-figma` service holds no credential: each user
+saves their own Figma personal access token in LibreChat's MCP settings form
+(`customUserVars` in `config/librechat.yaml.example`), and it is sent per
+request as an `X-Figma-Token` header. See [`FIGMA.md`](FIGMA.md) for setup,
+Figma's seat-based rate limits, and why this isn't Figma's own hosted MCP
+server.
+
 ## Summarization (auto-compact)
 
 Mostly static config -- see `config/librechat.yaml.example`'s top-level
