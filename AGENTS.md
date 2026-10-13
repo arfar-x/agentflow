@@ -60,6 +60,11 @@ Run `make help` for the full target list -- `Makefile` is a thin wrapper
 over `docker compose`/`scripts/`, nothing in it isn't documented in
 [`README.md`](README.md) or [`docs/OPERATIONS.md`](docs/OPERATIONS.md) too.
 
+A script that needs a value from `.env` sources `scripts/lib/env.sh` and calls
+`env_get NAME` / `env_fill NAME...` rather than parsing the file itself (a
+`grep | cut` keeps an inline `# comment` in the value). Scripts that need the
+whole file keep using `source .env`. `bash scripts/lib/env.test.sh` tests it.
+
 User account management also goes through `make user-*` targets (create,
 list, ban, invite, delete, reset-password) -- see README.md "Managing
 users" for the full list and what each wraps. Role/permission management
@@ -75,8 +80,8 @@ on its own. Day to day it is `make kb-status`, `make kb-sources`,
 `make kb-sync SOURCE=…` -- see
 [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md).
 
-Agents are managed declaratively: `make agent-export` writes every agent
-(definition, handoff/subagent links, sharing) from the database to
+Agents are managed declaratively: `make agent-export` writes every
+admin-owned agent (definition, handoff/subagent links, sharing) from the database to
 `agents/*.yaml`, and `make agent-import` (preview with `DRY_RUN=1`) applies
 those files back. The files are the source of truth for the agents they list --
 see [`docs/AGENT_SYNC.md`](docs/AGENT_SYNC.md).
@@ -117,13 +122,20 @@ substitute.
   only thing end users talk to. It calls `mongodb` (users/conversations/
   agent defs), `meilisearch` (search), `rag_api` + `vectordb` (per-
   conversation file RAG), `mcp-agent-skills` (Jira, Confluence, and other
-  tools, over MCP), and `searxng` (native web search).
+  tools, over MCP), and `searxng` + `crw` (native web search: search, then
+  page scraping).
 - `mcp-agent-skills`, `mcp-kb`, `mcp-figma` and `searxng` are
-  **internal-only, no published port, `backend` network only** --
-  reachability from `api` is their only access control (MCP's HTTP
-  transport has no auth of its own). Never add a `ports:` entry to any of
-  them. `mcp-kb` goes further and takes no credentials at all: the catalog
-  is shared, so there is nothing per-user for a caller to supply.
+  **internal-only, no published port** -- reachability from `api` is their
+  only access control (MCP's HTTP transport has no auth of its own). Never add a `ports:` entry
+  to any of them. `mcp-agent-skills` is on its **own `agent-tools` network**,
+  which only `api` joins: it honors per-request headers naming the caller's
+  credentials and whose uploads they may read, so no other container may be
+  able to reach it. Never put it back on `backend`. `crw` is internal-only too, but
+  on its **own `scraper` network**, which only `api` joins: it fetches URLs
+  that search results choose, so it must never be able to reach `backend`.
+  Never put it back on `backend`. `mcp-kb` goes further and takes
+  no credentials at all: the catalog is shared, so there is nothing per-user
+  for a caller to supply.
 - `kb-db` is the knowledge catalog's **own Postgres instance**, not another
   database inside `vectordb` -- so restoring LibreChat's RAG store can't touch
   the catalog, and `kb` never holds a credential to LibreChat's data. Schema and
@@ -146,7 +158,7 @@ substitute.
 - **Tool approval is two-layered, deliberately**: LibreChat's own
   `toolApproval` (`config/librechat.yaml`) prompts before any tool call
   matching its `ask` list; independently, each write-capable toolset
-  inside `agent-skills` (Jira and Confluence today) refuses to execute
+  inside `agent-skills` (Jira, Confluence and GitLab) refuses to execute
   without its own `--confirm`, enforced in that repo's own code. Neither
   layer is a substitute for the other -- see that same file's inline comment for why
   the `ask` list uses LibreChat's real `<toolset>_<action>_mcp_<server>`
@@ -176,14 +188,23 @@ substitute.
 - Per-user Jira credentials (LibreChat's `customUserVars`) are injected
   per-request into `mcp-agent-skills` via `X-Agent-Skills-Env-<VAR>`
   headers, trusted only because `MCP_TRUST_REQUEST_CREDENTIALS=1` is safe
-  specifically *here* (no published port, `api` is the only caller on the
-  `backend` network) -- see `agent-skills/AUTHENTICATION.md` before
+  specifically *here* (no published port, `api` is the only container on the
+  `agent-tools` network) -- see `agent-skills/AUTHENTICATION.md` before
   changing anything in that trust chain.
 - `CREDS_KEY`/`CREDS_IV`/`JWT_SECRET`/`JWT_REFRESH_SECRET` encrypt
   everything LibreChat stores in Mongo. Restoring `mongodb_data` next to
   a *different* set of these makes stored credentials permanently
   undecryptable -- see [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
   "Secrets" before touching backup/restore.
+
+## Commit messages
+
+Always follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:`, `fix:`, `docs:`, `chore:`, ...). Don't add scopes excessively:
+scope at the level of the project's main parts, and keep the subject a
+high-level overview of the change. The body says **what** changed, not how,
+and carries nothing specific to the session or conversation that produced
+it.
 
 ## Project map
 
@@ -199,6 +220,11 @@ substitute.
   start from `agents/base-agent-template.yaml.example`.
 - [`docs/FIGMA.md`](docs/FIGMA.md) -- the Figma tool: per-user tokens,
   Figma's seat-based rate limits, why not Figma's own MCP server, upgrades.
+- [`docs/PRODUCT_FLOW.md`](docs/PRODUCT_FLOW.md) -- the product flow the
+  agents run: idea -> product spec (Spec Kit `spec.md` shape, in Confluence,
+  `spec-draft`/`spec-approved` labels) -> Jira. agentflow stops at the ticket;
+  the team's conventions live in `agents/*.yaml`, the generic spec skills in
+  `agent-skills`.
 - [`docs/KEYCLOAK.md`](docs/KEYCLOAK.md) -- optional SSO, and how to
   switch to/from local email/password auth.
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) -- specific known
@@ -208,6 +234,14 @@ substitute.
   decision made in a chat window; the code follows the spec, and when they
   disagree one of them is wrong and gets fixed. Requirements carry ids and a
   status, and the owning module's tests enforce that pairing.
+- `specs/`, `.specify/`, `.claude/skills/speckit-*` --
+  [GitHub Spec Kit](https://github.com/github/spec-kit), the workflow for
+  designing a change before building it: `/speckit-specify` ->
+  `/speckit-plan` -> `/speckit-tasks` -> `/speckit-implement`, one
+  `specs/NNN-<feature>/` directory per change, governed by
+  `.specify/memory/constitution.md`. Those are working documents for one
+  change; whatever a change decides about `kb/` still lands in
+  `docs/spec/knowledge-base.md`, which stays the spec of record.
 - [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md) -- the operator guide for
   the catalog: credentials, choosing sources, the four freshness mechanisms and
   their switches, overrides, the gap log, backup, and what to check when it

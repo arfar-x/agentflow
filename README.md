@@ -6,10 +6,14 @@ to your own self-hosted, OpenAI-compatible LLM endpoint (vLLM), with Jira
 and Confluence exposed as tools via the
 [`agent-skills`](https://github.com/arfar-x/agent-skills) MCP server.
 
-The first flow this stack supports end-to-end: a PM discusses a feature in
-chat, pulls context from Jira, asks for a PRD, reviews and revises it in
-conversation, and on approval publishes it -- with LibreChat's own tool
-approval gate sitting in front of every write.
+The flow this stack supports end-to-end: a product member describes a
+feature in chat; agents gather the current behavior from the knowledge
+catalog, draft a product spec in GitHub Spec Kit's `spec.md` shape, clarify
+it with the requester (and engineering, through wiki comments), check it is
+ready, and on approval publish it to Confluence and turn it into Jira
+tickets developers can start from -- with LibreChat's own tool approval gate
+sitting in front of every write. See
+[`docs/PRODUCT_FLOW.md`](docs/PRODUCT_FLOW.md).
 
 ## What's running
 
@@ -17,6 +21,7 @@ approval gate sitting in front of every write.
 |---|---|
 | `api` | LibreChat itself -- the chat UI and backend |
 | `mongodb` | users, conversations, agent definitions |
+| `redis` | in-flight generation state and caches (needed for scheduled runs of agents that can pause); holds nothing worth backing up |
 | `meilisearch` | conversation search |
 | `vectordb` (pgvector) | embeddings for per-conversation file uploads |
 | `rag_api` | LibreChat's RAG sidecar, backed by `vectordb` |
@@ -26,6 +31,7 @@ approval gate sitting in front of every write.
 | `mcp-figma` | Figma design data for agents (`get_figma_data`), via a community MCP server on Figma's REST API, each user with their own token -- **internal only, no published port**; see [`docs/FIGMA.md`](docs/FIGMA.md) |
 | `kb-db` | the knowledge catalog's own Postgres (`kb/`, see [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) -- **internal only, no published port** |
 | `searxng` | self-hosted search backing LibreChat's native Web Search tool -- **internal only, no published port** |
+| `crw` | [fastcrw/crw](https://github.com/fastcrw/crw), a Firecrawl-compatible page scraper: fetches the pages web search found and returns them as markdown -- **internal only, no published port** |
 
 Everything durable lives in named Docker volumes; every service config is a
 mounted file. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for what each
@@ -37,7 +43,8 @@ volume holds and how backup/restore works.
 - A running, OpenAI-compatible vLLM endpoint (base URL + API key)
 - Jira and/or Confluence credentials, if you want those tools live from
   the start (each user supplies their own via LibreChat's MCP Settings
-  form -- see "Managing users" below)
+  form -- see "Managing users" below). GitLab is optional per user: someone
+  without it enters `-` in the two GitLab fields
 - (Optional) A Figma personal access token per user, for the Figma tool --
   each user adds their own in the same form; see [`docs/FIGMA.md`](docs/FIGMA.md)
 - (Optional) An existing Keycloak instance, if you want SSO from day one --
@@ -126,7 +133,7 @@ Agents (instructions, tools, handoffs/delegation and who they're shared with)
 live in LibreChat's database. Mirror them to files, and back, with:
 
 ```bash
-make agent-export              # database -> agents/*.yaml
+make agent-export              # database -> agents/*.yaml (admin-owned agents only)
 make agent-import DRY_RUN=1    # preview
 make agent-import              # agents/*.yaml -> database (OWNER_EMAIL=a@b.com forces the owner)
 ```
@@ -148,6 +155,7 @@ agentflow/
 ├── scripts/                 # bootstrap, secret generation, backup, restore, agent sync
 └── docs/
     ├── WALKTHROUGH.md       # first run, step by step, with the expected output of each command
+    ├── PRODUCT_FLOW.md      # idea -> product spec -> Jira: stages, labels, what developers receive
     ├── AGENT_SYNC.md        # agent export/import: file format and semantics
     ├── KNOWLEDGE_BASE.md    # the kb catalog: sources, freshness, overrides, troubleshooting
     ├── FIGMA.md             # the Figma tool: per-user setup, rate limits, why not Figma's own MCP server
@@ -176,7 +184,7 @@ agentflow/
   `docs/CONFIGURATION.md` for how that's configured explicitly instead.
 - **Approval is two-layered, deliberately.** LibreChat's own
   `toolApproval` (in `config/librechat.yaml`) prompts before any tool call;
-  each write-capable toolset in `agent-skills` (Jira and Confluence today)
+  each write-capable toolset in `agent-skills` (Jira, Confluence and GitLab)
   additionally refuses to execute without its own `--confirm`, enforced in
   code, not just in a prompt. Neither layer alone is a substitute for the
   other.
@@ -195,3 +203,20 @@ agentflow/
   right now the only visibility into any of that is `make kb-status`
   after the fact and `make logs SERVICE=kb-scheduler`, neither of which
   shows a source or the summarizer degrading before it actually fails.
+- **Cron schedules for knowledge base sources** -- each source can already
+  override the default cadence in `config/kb-sources.yaml`, but only as an
+  incremental interval (`every: 15m`) and one daily full-scrape time
+  (`at: "03:00"`). A cron expression per source and mechanism would allow
+  any pattern: every 5 minutes for a Jira project, weekly for a GitLab
+  repository, weekdays only, and so on.
+- **A custom summarizer prompt per knowledge base source** -- every source
+  is summarized with the same fixed prompt (`SYSTEM_PROMPT` in
+  `kb/src/kb/adapters/outbound/llm_summarizer.py`). A per-source prompt in
+  `config/kb-sources.yaml` would let each source describe its documents in
+  its own terms (e.g. ADRs vs. Jira tickets vs. wiki pages).
+- **GitLab entries in the catalog's fetch hints** -- `agent-skills` has a
+  per-user GitLab toolset (`glab`), but the catalog's `fetch_hint`
+  (`FETCH_TOOLS` in `kb/src/kb/domain/entry.py`) maps only Confluence and
+  Jira entries to a read tool, so a GitLab entry still stops at its summary.
+  Mapping it to `glab_get_file` would let users read any catalogued file
+  with their own token, with GitLab enforcing its own permissions.

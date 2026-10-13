@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config librechat-migrate kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -37,6 +37,9 @@ secrets: ## Generate the secrets .env needs (refuses to run on a live deployment
 
 render-config: ## Re-render config/librechat.yaml from its template + .env (e.g. after changing AGENTS_RECURSION_LIMIT) -- run `make restart SERVICE=api` after
 	scripts/render-librechat-config.sh
+
+librechat-migrate: ## LibreChat's one-off DB migration for an upgrade (dry run; APPLY=1 stops api, applies, restarts) -- see docs/OPERATIONS.md "Upgrades"
+	scripts/librechat-migrate.sh $(if $(APPLY),--apply,)
 
 backup: ## Snapshot every named volume + .env into backups/<timestamp>/
 	scripts/backup.sh
@@ -113,11 +116,11 @@ user-invite: ## Email an invite link instead of setting a password yourself -- n
 	docker compose exec -T api node config/invite-user.js "$(EMAIL)"
 
 user-delete: ## Delete a user and ALL their data -- interactive, asks you to confirm (irreversible)
-	# This deployment has no Redis, so LibreChat can't coordinate a live
-	# generation abort across processes -- delete-user.js additionally
-	# asks you to confirm every LibreChat process (this `api` included)
-	# is stopped before it'll proceed. Only answer y there if that's true;
-	# otherwise stop `api` first (`make down`), then run this.
+	# delete-user.js reaches the stack's Redis (the `redis` service) to abort
+	# the user's live generations. If it can't, it asks you to confirm every
+	# LibreChat process (this `api` included) is stopped before it'll proceed.
+	# Only answer y there if that's true; otherwise stop `api` first
+	# (`make down`), then run this.
 	docker compose exec api node config/delete-user.js $(EMAIL)
 
 user-reset-password: ## Reset a user's password -- interactive (email + new password prompts)
@@ -128,7 +131,7 @@ user-reset-password: ## Reset a user's password -- interactive (email + new pass
 # targets mirror them (definition + handoffs/subagents + sharing) to and
 # from agents/*.yaml -- see docs/AGENT_SYNC.md.
 
-agent-export: ## Export every agent + its sharing from the database to agents/*.yaml (replaces those files)
+agent-export: ## Export every admin-owned agent + its sharing from the database to agents/*.yaml (replaces those files)
 	scripts/agents.sh export
 
 agent-import: ## Sync agents/*.yaml into the database; options: DRY_RUN=1 OWNER_EMAIL= MODEL_PROVIDER= MODEL_NAME= ALLOW_RENAME=1

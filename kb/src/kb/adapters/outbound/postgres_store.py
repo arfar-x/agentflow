@@ -31,6 +31,8 @@ from typing import Iterable, Sequence
 import psycopg
 from psycopg.rows import dict_row
 
+from kb.application.ports.entry_store import ContentSlice
+from kb.domain.content import RawContent
 from kb.domain.entry import Entry, EntryType
 from kb.domain.merge import Override, apply_override
 from kb.domain.policies import is_indexable
@@ -287,6 +289,8 @@ class PostgresEntryStore:
             cursor.execute(
                 "UPDATE entry_search SET indexable = FALSE WHERE entry_id = ANY(%s)", (ids,)
             )
+            # The text does not stay: the source removed the document (FR-CNT-06).
+            cursor.execute("DELETE FROM entry_content WHERE entry_id = ANY(%s)", (ids,))
         return changed
 
     def revive(self, entry_id: str) -> None:
@@ -301,6 +305,88 @@ class PostgresEntryStore:
                 (entry_id,),
             )
             self._rebuild_search(cursor, entry_id)
+
+    # -- raw content -------------------------------------------------------
+    def put_content(self, entry_id: str, content: RawContent, *, source_version: str | None) -> bool:
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO entry_content (entry_id, source_version, body, truncated, original_bytes)
+                VALUES (%(id)s, %(version)s, %(body)s, %(truncated)s, %(original_bytes)s)
+                ON CONFLICT (entry_id) DO UPDATE SET
+                    source_version = EXCLUDED.source_version,
+                    body = EXCLUDED.body,
+                    truncated = EXCLUDED.truncated,
+                    original_bytes = EXCLUDED.original_bytes,
+                    stored_at = now()
+                -- Identical text is left alone, so the nightly full pass over an
+                -- unchanged source writes nothing (and reports nothing stored).
+                WHERE (entry_content.source_version, entry_content.body,
+                       entry_content.truncated, entry_content.original_bytes)
+                      IS DISTINCT FROM
+                      (EXCLUDED.source_version, EXCLUDED.body,
+                       EXCLUDED.truncated, EXCLUDED.original_bytes)
+                """,
+                {
+                    "id": entry_id,
+                    "version": source_version,
+                    "body": content.text,
+                    "truncated": content.truncated,
+                    "original_bytes": content.original_bytes,
+                },
+            )
+            return cursor.rowcount > 0
+
+    def delete_content(self, entry_id: str) -> None:
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute("DELETE FROM entry_content WHERE entry_id = %s", (entry_id,))
+
+    def purge_content(self, source_id: str) -> int:
+        with self._connection.transaction(), self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM entry_content AS c
+                 USING entry AS e
+                 WHERE e.id = c.entry_id AND e.source_id = %s
+                """,
+                (source_id,),
+            )
+            return cursor.rowcount
+
+    def read_content(self, entry_id: str, *, offset: int, limit: int) -> ContentSlice | None:
+        # substr() counts characters, as Python's slicing does, and runs here so
+        # only one page ever leaves the database. It is 1-based.
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT substr(body, %(start)s, %(limit)s) AS text,
+                       char_length(body)                 AS total_chars,
+                       truncated, original_bytes, source_version
+                  FROM entry_content
+                 WHERE entry_id = %(id)s
+                """,
+                {"id": entry_id, "start": offset + 1, "limit": limit},
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        return ContentSlice(
+            text=row["text"] or "",
+            offset=offset,
+            total_chars=row["total_chars"],
+            truncated=row["truncated"],
+            original_bytes=row["original_bytes"],
+            source_version=row["source_version"],
+        )
+
+    def content_ids(self, entry_ids: Sequence[str]) -> set[str]:
+        if not entry_ids:
+            return set()
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT entry_id FROM entry_content WHERE entry_id = ANY(%s)", (list(entry_ids),)
+            )
+            return {row["entry_id"] for row in cursor.fetchall()}
 
     def log_miss(self, query: str, *, at: datetime) -> None:
         with self._connection.transaction(), self._connection.cursor() as cursor:
@@ -388,6 +474,18 @@ class PostgresEntryStore:
             indexed = cursor.fetchone()["indexed"]
             cursor.execute("SELECT count(*) AS gaps FROM search_miss")
             gaps = cursor.fetchone()["gaps"]
+            # What sharing full text costs, so it is visible before it is a
+            # surprise: documents kept, their text size, and the table on disk.
+            cursor.execute(
+                """
+                SELECT count(*)                                AS documents,
+                       count(*) FILTER (WHERE truncated)       AS truncated,
+                       coalesce(sum(octet_length(body)), 0)    AS text_bytes,
+                       pg_total_relation_size('entry_content') AS disk_bytes
+                  FROM entry_content
+                """
+            )
+            raw_content = dict(cursor.fetchone())
             cursor.execute("SELECT name FROM schema_migration ORDER BY name")
             migrations = [row["name"] for row in cursor.fetchall()]
             cursor.execute("SELECT source_id, cursor, updated_at FROM source_checkpoint ORDER BY source_id")
@@ -398,6 +496,7 @@ class PostgresEntryStore:
             "by_type": by_type,
             "overrides": overrides,
             "gaps": gaps,
+            "raw_content": raw_content,
             "migrations": migrations,
             "checkpoints": checkpoints,
         }

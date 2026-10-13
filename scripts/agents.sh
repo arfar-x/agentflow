@@ -39,16 +39,10 @@ host_dir="${AGENTS_DIR:-agents}"
 
 # Fill a variable from .env only when it wasn't given (or is empty) for this
 # run. .env is gitignored, so this is where per-deployment choices belong.
-env_file="${ENV_FILE:-.env}"
-from_env_file() {
-  local name="$1" value
-  if [ -z "${!name:-}" ] && [ -f "${env_file}" ]; then
-    value="$(grep -E "^${name}=" "${env_file}" | tail -1 | cut -d= -f2- || true)"
-    value="${value%\"}"; value="${value#\"}"; value="${value%\'}"; value="${value#\'}"
-    export "${name}=${value}"
-  fi
-}
-for v in OWNER_EMAIL MODEL_PROVIDER MODEL_NAME VLLM_DEFAULT_MODEL; do from_env_file "${v}"; done
+# env_fill (scripts/lib/env.sh) reads values the way a shell does, so an
+# inline `# comment` in .env doesn't end up in the value.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/env.sh"
+env_fill OWNER_EMAIL MODEL_PROVIDER MODEL_NAME VLLM_DEFAULT_MODEL
 # No explicit MODEL_NAME (command line or .env): use the model the rest of
 # this stack already treats as the default (VLLM_DEFAULT_MODEL), instead of
 # whatever an agent's file happens to have hardcoded.
@@ -69,10 +63,13 @@ trap cleanup EXIT
 docker compose exec -T api rm -rf "${remote_dir}"
 
 run_sync() {
-  docker compose exec -T -w /app \
+  # `node -` reads its program from stdin, which `docker compose exec` only
+  # forwards with -i; a bare `< file` redirect is not forwarded by every docker
+  # build even with -i, so pipe it in.
+  cat scripts/agent-sync.js | docker compose exec -i -T -w /app \
     -e AGENTS_MODE="${mode}" -e AGENTS_DIR="${remote_dir}" -e DRY_RUN="${DRY_RUN:-0}" -e OWNER_EMAIL="${OWNER_EMAIL:-}" \
     -e MODEL_PROVIDER="${MODEL_PROVIDER:-}" -e MODEL_NAME="${MODEL_NAME:-}" -e ALLOW_RENAME="${ALLOW_RENAME:-0}" \
-    api node - <scripts/agent-sync.js
+    api node -
 }
 
 if [ "${mode}" = "export" ]; then

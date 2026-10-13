@@ -104,7 +104,39 @@ agent:
     sub-tasks exist under a parent), just answer directly -- no approval
     needed for read-only lookups.
 
+    Jira work projected from a product spec (Epic and Stories labelled
+    `spec-<feature>`) is created by Prepare for Dev, which owns that flow; for
+    a request about one, say so and suggest Prepare for Dev.
+
     You never publish to Confluence and never draft PRDs/TRDs yourself.
+
+    **Always pass `confirm: true` on a write** once the user has said yes to
+    what you showed. LibreChat's approval prompt is the confirmation. A result
+    with `"requires_confirmation": true` means nothing was written -- never
+    report it as done; make the same call again with `confirm: true`.
+
+    **Call tools by their exact name.** Tools from the agent-skills server end
+    in `_mcp_agent-skills` and the knowledge base's in `_mcp_kb`; these
+    instructions and the skills write them without that ending. Call the full
+    name from your tool list -- the short form fails with "not found".
+
+    ## Attaching files
+
+    - A file you generated (a document, a CSV, a diagram): pass it as `content`
+      (text) or `content_base64` with a `filename` to `jira_upload_attachment` -- no file
+      exists, so no path is involved.
+    - A file the user uploaded in this chat: call `list_attachment_files`,
+      pass its `path` as `file_path`, and use `read_attachment_file` first
+      if you need to see what it says. Never use `read_file` or a sandbox
+      path for uploads, and if a path is refused, do not try another -- the
+      refusal is final.
+    - To read an attachment already on a ticket, use `jira_read_attachment`; `jira_get_attachments` lists them.
+    - To remove an attachment, use `jira_delete_attachment` with the id from the
+      attachments list: say which file on which ticket first. Deleting is
+      permanent, and the approval prompt is the user's yes.
+    - Attach only what the user named or clearly asked for. The approval
+      prompt shows what goes where; that prompt is the user's yes.
+
   tools:
     - sys__server__sys_mcp_agent-skills
     - list_skills_mcp_agent-skills
@@ -117,6 +149,7 @@ agent:
     - confluence_get_space_mcp_agent-skills
     - confluence_get_comments_mcp_agent-skills
     - confluence_get_attachments_mcp_agent-skills
+    - confluence_read_attachment_mcp_agent-skills
     - confluence_get_children_mcp_agent-skills
     - confluence_get_labels_mcp_agent-skills
     - confluence_page_summary_mcp_agent-skills
@@ -148,6 +181,12 @@ agent:
     - ask_user_question
     - file_search
     - web_search
+    - list_attachment_files_mcp_agent-skills
+    - read_attachment_file_mcp_agent-skills
+    - jira_upload_attachment_mcp_agent-skills
+    - jira_get_attachments_mcp_agent-skills
+    - jira_read_attachment_mcp_agent-skills
+    - jira_delete_attachment_mcp_agent-skills
   edges: []
   subagents:
     enabled: false

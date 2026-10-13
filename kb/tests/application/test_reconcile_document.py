@@ -201,3 +201,35 @@ def test_documents_from_different_sources_never_collide(wired):
     a = reconcile.execute(make_document(source_id="confluence-eng")).entry_id
     b = reconcile.execute(make_document(source_id="confluence-biz")).entry_id
     assert a != b
+
+
+def test_a_label_only_change_reclassifies_without_a_model_call(wired):
+    # Covers: FR-REC-13
+    # A wiki label decides type and tags but changes neither the text nor the
+    # version, so the content-hash gate alone would never see it.
+    store, summarizer, clock, reconcile = wired
+    reconcile.execute(make_document())
+
+    clock.advance(timedelta(hours=1))
+    result = reconcile.execute(make_document(type=EntryType.SPEC, tags=("spec-draft",)))
+
+    assert result.action is Action.UPDATED
+    assert result.summarized is False
+    entry = store.get(result.entry_id)
+    assert entry.type is EntryType.SPEC
+    assert entry.tags == ("spec-draft",)
+    assert summarizer.calls == ["123456"], "the summary is kept, not redone"
+
+
+def test_a_reclassified_entry_keeps_its_summary(wired):
+    # Covers: FR-REC-13
+    store, _, clock, reconcile = wired
+    first = store.get(reconcile.execute(make_document()).entry_id)
+
+    clock.advance(timedelta(hours=1))
+    entry = store.get(reconcile.execute(make_document(tags=("spec-approved",))).entry_id)
+
+    assert entry.summary == first.summary
+    assert entry.content_hash == first.content_hash
+    assert entry.created_at == first.created_at
+    assert entry.updated_at == NOW + timedelta(hours=1)

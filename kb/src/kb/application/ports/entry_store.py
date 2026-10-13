@@ -12,8 +12,29 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable, Protocol, Sequence, runtime_checkable
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from kb.domain.content import RawContent
 from kb.domain.entry import Entry, EntryType
 from kb.domain.merge import Override
+
+
+class ContentSlice(BaseModel):
+    """One stretch of an entry's stored text, as the store hands it back.
+
+    A slice rather than the whole text so the query path never moves a 10 MB
+    document to return one page of it; where the next page starts is the
+    domain's arithmetic (`domain.content.next_offset`), not the store's.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    text: str
+    offset: int = Field(ge=0)
+    total_chars: int = Field(ge=0)
+    truncated: bool = False
+    original_bytes: int = Field(ge=0)
+    source_version: str | None = None
 
 
 @runtime_checkable
@@ -38,7 +59,9 @@ class EntryStore(Protocol):
 
     def mark_missing(self, entry_ids: Iterable[str], *, at: datetime) -> int:
         """Soft-delete: the source no longer lists these. Returns how many
-        rows changed."""
+        rows changed. Their stored text goes too (FR-CNT-06): the entry stays
+        for history, but the catalog has no business keeping a copy of a
+        document its source has removed."""
         ...
 
     def revive(self, entry_id: str) -> None:
@@ -48,6 +71,32 @@ class EntryStore(Protocol):
     def ids_for_source(self, source_id: str, *, include_deleted: bool = False) -> set[str]:
         """Every entry this source produced -- what reconciliation compares
         against to find deletions."""
+        ...
+
+    # -- raw content (spec §6.10) -----------------------------------------
+    def put_content(self, entry_id: str, content: RawContent, *, source_version: str | None) -> bool:
+        """Keep this text for the entry, read at `source_version`. Returns
+        whether anything was written: re-storing identical text is a no-op, so
+        a nightly full pass over an unchanged source rewrites nothing."""
+        ...
+
+    def delete_content(self, entry_id: str) -> None:
+        """Drop one entry's text, if it has any."""
+        ...
+
+    def purge_content(self, source_id: str) -> int:
+        """Drop every text kept for this source's entries -- what turning
+        `store_raw_content` off means (FR-CNT-05). Returns how many."""
+        ...
+
+    def read_content(self, entry_id: str, *, offset: int, limit: int) -> ContentSlice | None:
+        """Up to `limit` characters of the entry's text from `offset`, or None
+        when it has none. An offset past the end is an empty slice, not None."""
+        ...
+
+    def content_ids(self, entry_ids: Sequence[str]) -> set[str]:
+        """Which of these entries have text kept -- one question for a whole
+        page of search hits, not one per hit."""
         ...
 
     def search(

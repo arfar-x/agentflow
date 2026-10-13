@@ -19,11 +19,16 @@ from kb.application.ports.clock import Clock
 from kb.application.ports.entry_store import EntryStore
 from kb.application.ports.knowledge_source import KnowledgeSource
 from kb.application.use_cases.reconcile_document import Action, ReconcileDocument
+from kb.domain.content import ContentPolicy
 
 #: source id -> a live source, built only when one is actually needed. A
 #: catalog with ten sources must not construct ten HTTP clients to refresh one
 #: page.
 SourceResolver = Callable[[str], KnowledgeSource | None]
+
+#: source id -> whether that source keeps its documents' text. A refreshed
+#: document must leave the same text behind that a sync would (FR-CNT-02).
+ContentPolicyResolver = Callable[[str], ContentPolicy]
 
 
 class RefreshReport(BaseModel):
@@ -45,11 +50,13 @@ class RefreshEntries:
         reconcile: ReconcileDocument,
         resolve_source: SourceResolver,
         clock: Clock,
+        resolve_content: ContentPolicyResolver | None = None,
     ) -> None:
         self._store = store
         self._reconcile = reconcile
         self._resolve_source = resolve_source
         self._clock = clock
+        self._resolve_content = resolve_content or (lambda _source_id: ContentPolicy.off())
 
     def execute(self, *, limit: int = 20) -> RefreshReport:
         entry_ids = self._store.take_refresh_batch(limit=limit)
@@ -105,4 +112,5 @@ class RefreshEntries:
         document = source.fetch(entry.external_id)
         if document is None:
             return None
-        return self._reconcile.execute(document).action
+        policy = self._resolve_content(entry.source_id)
+        return self._reconcile.execute(document, content=policy).action

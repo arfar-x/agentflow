@@ -128,19 +128,50 @@ doesn't have a matching `tokenConfig` entry yet, add one in
 `config/librechat.yaml.example` (then `make render-config`) before that
 model shows up as safe to use.
 
+**Thinking and effort level.** The endpoint's `customParams` in
+`config/librechat.yaml.example` turn on two things:
+
+- *Thinking in the UI.* The gateway returns the model's reasoning in a
+  `reasoning` field (both in full responses and stream deltas). LibreChat reads
+  `reasoning_content` from custom endpoints unless told otherwise, so
+  `reasoningKey: reasoning` is what makes the thinking block appear at all.
+- *Effort selector.* The model settings panel (and the Agent Builder's model
+  parameters) show a reasoning-effort slider limited to what the gateway
+  accepts: Auto (send nothing, the gateway default `xhigh` applies), None
+  (thinking off), Low, Medium, XHigh. `minimal`, `high` and `max` are left out
+  because the gateway rejects them with a 400.
+
+Both were established by probing the endpoint, not from documentation:
+
+```bash
+curl -s -H "Authorization: Bearer $VLLM_API_KEY" -H 'Content-Type: application/json' \
+  "$VLLM_BASE_URL/chat/completions" \
+  -d '{"model":"<id>","max_tokens":64,"reasoning_effort":"high","messages":[{"role":"user","content":"hi"}]}'
+```
+
+An unsupported level answers with the supported list in the error. Rerun this
+when the gateway or its models change. The effort list is per endpoint, not per
+model, so a model that accepts a different set needs its own endpoint entry.
+
 ## MCP: agent-skills
 
 | Variable | Required | Notes |
 |---|---|---|
 | `MCP_TOOLSETS` | no | Default `jira`. **Quote it** if it lists more than one (`MCP_TOOLSETS="jira confluence"`) -- `.env` is also `source`d directly by `scripts/bootstrap.sh`/`make up`, and an unquoted space-separated value breaks that (bash tries to run the second word as a command). Space-separated toolset names, each needing `skills/<name>/requirements.txt` to exist in the `agent-skills` submodule. Changing this requires `docker compose up -d --build mcp-agent-skills`. |
-| `JIRA_BASE_URL` / `JIRA_USERNAME` / `JIRA_PASSWORD` | no (server-level) | Left blank in this deployment by design -- every Jira tool call's base URL and credential comes per-user instead, via LibreChat's `customUserVars` (`config/librechat.yaml`, injected as `X-Agent-Skills-Env-*` headers). Set these here only if you want a shared fallback identity instead of per-user. |
+| Jira/Confluence base URL, username, password, default project/space | -- | Not `.env` variables. Each user enters their own in the chat UI (MCP Settings); LibreChat's `customUserVars` (`config/librechat.yaml.example`) sends them to mcp-agent-skills as `X-Agent-Skills-Env-*` headers on every call. There's no shared fallback identity. |
+| GitLab base URL, token | -- | Same mechanism as Jira's, for the `glab` toolset (needs `glab` in `MCP_TOOLSETS`). The token is a **personal access token** from the user's own GitLab profile (`read_api`, or `api` to comment on merge requests); it reaches every project that user can, so there is no default-project field and requests name their project. **Optional by convention, not by LibreChat:** v0.8.8 has no optional `customUserVars` field, and a user with any field blank gets none of agent-skills' tools. A user without GitLab enters `-` in both fields, which mcp-agent-skills reads as "not set" (`MCP_UNSET_HEADER_VALUE`, below): Jira and Confluence work, and `glab_*` calls report the variables as not set. `-` works the same way in any other per-user field. |
+| `MCP_UNSET_HEADER_VALUE` | -- | Set to `-` in `docker-compose.yml`, not `.env`. A per-user header carrying exactly this value means "not set" for that call: the variable is removed, never filled from the server's own environment, so a user who enters `-` never runs as the server's identity. Needs agent-skills v0.17.1 or later. Empty disables it, and `-` is then sent as a literal value. |
+| `GITLAB_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. Server-level, not per-user. |
 | `JIRA_AUTO_CONFIRM_WRITES` | no | Leave `false` in production. LibreChat's own `toolApproval` gate (in `config/librechat.yaml`) is the intended approval surface; this variable existing at all is an escape hatch for automation you explicitly trust, not something to flip for convenience. |
-| `JIRA_DEFAULT_PROJECT` | no | Only used by `jira_triage`, and (in this deployment) supplied per-user via `customUserVars` like the credential -- see above. |
 | `JIRA_DEPLOYMENT_TYPE` | no | Only required the first time `create_issue`/`edit_issue` sets an assignee. |
-| `CONFLUENCE_BASE_URL` / `CONFLUENCE_USERNAME` / `CONFLUENCE_PASSWORD` | no (server-level) | Same per-user pattern as Jira above -- left blank here, supplied per-user via `customUserVars`. |
 | `CONFLUENCE_AUTO_CONFIRM_WRITES` | no | Same reasoning as `JIRA_AUTO_CONFIRM_WRITES` -- leave `false`. |
-| `CONFLUENCE_DEFAULT_SPACE` | no | Used by `my_pages`/`get_page_by_title` when no `--space_key` is given; supplied per-user via `customUserVars` in this deployment. |
 | `CONFLUENCE_DEPLOYMENT_TYPE` | yes, if `confluence` is in `MCP_TOOLSETS` | `cloud` or `server` -- unlike Jira, this one is required: Confluence's REST API is mounted at a different path per deployment (Cloud: `/wiki/rest/api`, Server/DC: `/rest/api`). Server-level, not per-user -- the whole org's Confluence instance is one deployment type. |
+| `AGENT_SKILLS_ATTACHMENT_DIR`, `MCP_ATTACHMENT_DIR_PER_USER` | -- | Set in `docker-compose.yml`, not `.env`. Files users upload in chat can be attached to Jira issues and Confluence pages: LibreChat's upload volume is mounted read-only at `/attachments`, and each request may read only the signed-in user's own folder, named by the `X-Agent-Skills-User: '{{LIBRECHAT_USER_ID}}'` header in `config/librechat.yaml.example`. agent-skills refuses any path outside that folder, and hidden or secret-looking files inside it. Content an agent generates is attached by value, with no file at all. |
+
+mcp-agent-skills deliberately gets no `env_file`: only the variables above,
+listed in `docker-compose.yml`, reach it, so the stack's own secrets in `.env`
+are never on its disk or in its environment. A new server-level setting for
+it must be added there too.
 
 ## MCP: Figma
 
@@ -174,6 +205,153 @@ automatically raises this too, on the next `make render-config` +
 | `AGENTS_RECURSION_LIMIT` | no | `50` | How many tool-call steps a single agent run starts with before LibreChat raises `GraphRecursionError` and aborts it. Rendered into `config/librechat.yaml`'s `endpoints.agents.recursionLimit` -- see the note at the top of this doc. |
 | `AGENTS_MAX_RECURSION_LIMIT` | no | `100` | The ceiling a user can raise `recursionLimit` to from the UI; rendered into `endpoints.agents.maxRecursionLimit`. Changing either variable needs `make render-config` (or a full `make up`) plus `make restart SERVICE=api` to take effect -- it's read once at container start, not live. |
 
+### What's on by default (LibreChat v0.8.8+)
+
+`config/librechat.yaml.example` sets no `endpoints.agents.capabilities` list,
+so every capability in LibreChat's default set is available -- add a
+`capabilities:` list only to take some away, and remember it replaces the
+default rather than adding to it. That default set includes:
+
+- **`ask_user_question`** -- an agent can pause and ask the user a question
+  (with optional choices) instead of guessing. Like any tool, an agent only
+  has it if `ask_user_question` is in its `tools` list (`agents/*.yaml`, or the
+  Agent Builder). Answers are carried forward in the run's context even after
+  the turn that held them is compacted; tune or disable that with
+  `endpoints.agents.askUserQuestion.retainedAnswers` (`enabled`, `maxTokens`,
+  default 4096).
+- **Agent control in chat** -- interrupt, steer, and queue messages while a
+  run is going, plus the tool-approval prompts our `toolApproval.ask` list
+  triggers. No configuration.
+- **Background tasks, live activity/tool timing, the context-usage gauge, and
+  manual compaction** -- UI features, no configuration.
+- **Memories** -- the `memory:` block in `config/librechat.yaml.example` is what
+  makes saved memories reach the model. LibreChat treats a *missing* block as
+  "disabled": the Memories panel still lets users add entries, but none is ever
+  put into a conversation. With the block, a user's memories go into every run
+  of theirs (plain chats, and agents per their `memory_scope`) unless they opt
+  out under Settings > Personalization. Automatic extraction from chat stays
+  off (no `memory.agent`) -- it costs an extra LLM call per turn.
+- **Agents and missing MCP credentials** -- since v0.8.8 an agent whose tools
+  come from an MCP server refuses to run ("The agent is configured to use MCP
+  tools, but none are available") when that server gives the user no tools.
+  For agent-skills that means a user who hasn't entered their Jira/Confluence
+  details under MCP Settings can't use any agent that lists those tools. The
+  same applies to the optional GitLab fields left blank rather than set to `-`.
+
+- **Scheduled Chats (beta)** -- upstream ships it off; this stack turns it on
+  with `interface.schedules: true` in `config/librechat.yaml.example` plus
+  `SCHEDULES_SINGLE_PROCESS=true` in `.env` (below). A scheduled run has nobody
+  to answer it, so schedule read-only work (reports, summaries). An agent that
+  can pause -- it has `ask_user_question` or any tool on `toolApproval`'s `ask`
+  list -- is refused outright on a schedule without `USE_REDIS_STREAMS` and the
+  `redis` service ("Scheduled agent runs that can pause require a shared
+  generation store"); this stack has both, so it starts, but nobody is there to
+  answer the pause. Set
+  `SCHEDULES_DISABLED=true` and restart `api` to stop every scheduled run at once.
+
+Off by default, and deliberately not enabled here because each needs a service
+or identity setup this stack doesn't have: Code
+workspaces / `execute_code` (needs a LibreChat Code API), Programmatic Tool
+Calling (`programmatic_tools`, same), the Agents / Agent Management API
+(`endpoints.agents.managementApi`, needs OIDC), Agent Plugins
+(`DEPLOYMENT_PLUGINS_DIR`), Langfuse tracing and the trace viewer, and the
+`/api/docs` OpenAPI routes (`openapi.enabled`). See upstream's
+`librechat.example.yaml` and its config changelogs (v1.3.15-v1.3.17) before
+turning any of these on.
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `SCHEDULES_SINGLE_PROCESS` | for Scheduled Chats | `true` in `.env.example` | Tells LibreChat this is its only process, which it requires before arming the scheduler without Redis. Missing, `api` logs `[schedules] scheduler NOT started ... Schedule writes are refused (503)` on every start and Scheduled Chats doesn't work. Must go back to `false` before ever running a second `api` replica (the `redis` service and `USE_REDIS_STREAMS` are already here, so a second replica is the only thing left to change). Changing it needs `docker compose up -d api` (a recreate, not a restart). |
+| `USE_REDIS_STREAMS` | for scheduled runs of agents that can pause | `true` (compose default; `.env.example` sets it) | Puts LibreChat's in-flight generation state in the `redis` service (internal only, no auth, no volume, nothing to back up). Without it a scheduled run of an agent with `ask_user_question` or an `ask`-list tool fails with `Scheduled agent runs that can pause require a shared generation store`. Compose also sets `USE_REDIS=true` and `REDIS_URI=redis://redis:6379` (LibreChat builds no Redis client otherwise), so its caches live in Redis too -- all rebuildable. Changing it needs `docker compose up -d api`. |
+
+One startup log line is expected, not a fault:
+
+- `[credentials] Existing database has no credential fingerprint record`, a
+  warning on every start for a database created before v0.8.8. LibreChat only
+  records key fingerprints on a brand-new database and ships no command to
+  add them later. It's harmless as long as `CREDS_KEY`/`CREDS_IV`/
+  `JWT_SECRET`/`JWT_REFRESH_SECRET` never change -- see
+  [`OPERATIONS.md`](OPERATIONS.md) "Secrets".
+
+### Web search
+
+Every user gets web search with no keys of their own. LibreChat's web search
+runs three steps, each configured once for the whole deployment in
+`config/librechat.yaml.example`'s `webSearch:` block:
+
+| Step | Service | Notes |
+|---|---|---|
+| Search | `searxng` | Finds result links. `SEARXNG_INSTANCE_URL`. |
+| Scrape | `crw` ([fastcrw/crw](https://github.com/fastcrw/crw)) | Fetches the top pages and returns them as markdown. LibreChat calls it as a self-hosted Firecrawl (`scraperProvider: firecrawl`); crw implements Firecrawl's `/v1` and `/v2` scrape API. `FIRECRAWL_API_URL=http://crw:3000`; `FIRECRAWL_API_KEY` is a placeholder (crw has no auth, but LibreChat won't scrape with an empty key). |
+| Rerank | none | `rerankerType: none`. The rerankers LibreChat supports (Jina, Cohere) are paid APIs. |
+
+LibreChat won't enable web search without a scraper, so `crw` is required, not
+optional.
+
+**crw has its own network.** It fetches whatever URLs search results contain,
+so it runs on a `scraper` network that only `api` joins, never on `backend`. A
+link in a search result to an internal name (`http://mongodb:27017`,
+`http://mcp-agent-skills:8321/...`) resolves to nothing from inside crw.
+Anything you add for crw to talk to, such as a renderer sidecar, goes on
+`scraper` too.
+
+**JavaScript-only pages.** `crw` runs with `CRW_RENDERER__MODE=none`: plain HTTP
+plus its built-in browser-impersonation fallback, no headless browser. Pages
+that only render their content in JavaScript come back empty or fail;
+LibreChat then logs `[web_search] scrape ... failed=N` and answers from the
+pages that worked. If that happens often, add crw's LightPanda sidecar (a
+lightweight headless browser):
+
+```yaml
+# docker-compose.yml
+  lightpanda:
+    image: lightpanda/browser:<pinned tag>   # pin a tag, as for every image here
+    restart: unless-stopped
+    networks: [scraper]                      # crw's network, never backend
+  crw:
+    environment:
+      CRW_RENDERER__MODE: auto               # was: none
+      CRW_RENDERER__LIGHTPANDA__WS_URL: ws://lightpanda:9222/
+    depends_on: [lightpanda]
+```
+
+then `docker compose up -d crw lightpanda`. LightPanda can still fail on heavy
+single-page apps; crw's next tier is headless Chrome (`chromedp/headless-shell`,
+`CRW_RENDERER__CHROME__WS_URL`), at a few hundred MB of RAM more. See crw's own
+`docker-compose.yml` and `config.default.toml` for the full renderer settings.
+
+### Who can create and see agents
+
+`interface.agents.create: true` in `config/librechat.yaml.example` lets every
+role, USER included, open the Agent Builder. LibreChat writes it into the role
+permissions at `api` startup, so it overrides an Admin Panel change to
+`AGENTS.CREATE` on the next restart. A config change here needs
+`make restart SERVICE=api`: LibreChat reloads `librechat.yaml` live, but role
+permissions are only written at startup.
+
+| Who | Sees | Edits / deletes |
+|---|---|---|
+| ADMIN | every agent (the `manage:agents` system grant bypasses per-agent ACLs, including in lists) | every agent |
+| USER | their own agents, plus the admin agents shared with them | only their own |
+
+- A user's agent is private to them and admins: USER has no `AGENTS.SHARE`, so
+  there is no Share button for them.
+- An admin agent reaches users only when shared -- the Share dialog, or
+  `sharing:` in `agents/*.yaml` (e.g. the USER role as `agent_viewer`, use
+  only).
+- The Tool Library offers the native tools, the MCP servers, and from
+  LibreChat's built-in tool manifest only what `includedTools` lists (Ask User,
+  Calculator). The rest of the manifest (Google, DALL-E, Wolfram, Tavily, ...)
+  needs each user's own third-party key and sends their data to that service,
+  so it's hidden. To offer one again, add its key to `includedTools` and
+  `make render-config && make restart SERVICE=api`. Run Code is off because
+  it needs a LibreChat Code API: `endpoints.agents.capabilities` lists every
+  default capability except `execute_code`.
+- In the Tool Library a user can add the native tools and the MCP servers.
+  agent-skills' tools only appear once that user has entered their own
+  Jira/Confluence details and its GitLab details, or `-` for each field it doesn't use
+  (MCP Settings); `kb` needs nothing.
+
 ## Auth
 
 Two mutually exclusive modes -- see `docs/KEYCLOAK.md` for the full Keycloak
@@ -182,6 +360,9 @@ walkthrough and how to switch between them.
 | Variable | Notes |
 |---|---|
 | `ALLOW_EMAIL_LOGIN` | `true` for local auth (default, simplest to start with). |
+| `REFRESH_TOKEN_EXPIRY` | How long a login lasts, in ms: `604800000`, one week. Write plain numbers, not LibreChat's `1000 * 60 ...` arithmetic form -- `scripts/` `source .env` in bash, where that form breaks. Absolute, not sliding -- token refreshes keep the original expiry, so every user logs in again 7 days after their last login. Applies to local email/password logins; under Keycloak with `OPENID_REUSE_TOKENS=true` the IdP's own session lifetime takes over. Logins issued before a change keep their old expiry. |
+| `SESSION_EXPIRY` | The access token, in ms: `900000` (15 minutes). Renewed silently from the refresh token, so it doesn't make anyone log in more often -- it bounds how long a revoked or banned user's current token keeps working. Keep it short. |
+| `SESSION_COOKIE_SECURE` | Read from `.env`; `false` when it isn't there (set in `docker-compose.yml`, so an older `.env` is still correct), because this deployment is plain HTTP on the LAN. LibreChat's `api` image runs node with `NODE_ENV=production`, which makes it mark the httpOnly `refreshToken` cookie `Secure`; browsers drop `Secure` cookies received over HTTP, the UI then loses its 15-minute access token and redirects to `/login` ~15 minutes after every sign-in. `false` is only correct while there is no TLS in front of `api` -- if a reverse proxy with TLS is ever added, set it to `true` in `.env` (same switch `admin-panel` already uses). Takes effect on the next `api` restart; browsers just log in once more. |
 | `ALLOW_REGISTRATION` | Keep `false` even under local auth unless you specifically want open self-registration. New accounts normally come from `make user-create` instead -- see README.md "Managing users". |
 | `ADMIN_EMAIL` / `ADMIN_NAME` / `ADMIN_USERNAME` / `ADMIN_PASSWORD` | The one account `make up`/`scripts/bootstrap.sh` creates automatically on a fresh deployment (skipped once any user exists). Auto-promoted to LibreChat's `ADMIN` role because it's the first user registered in this unscoped, single-tenant deployment -- see [Access Control](https://www.librechat.ai/docs/features/access_control#built-in-system-roles). Promoting anyone else to `ADMIN` afterwards is done from the Admin Panel (below), not by editing `.env`. |
 | `OPENID_*` (commented out by default) | The whole Keycloak OIDC block. Uncommenting it and setting `ALLOW_EMAIL_LOGIN=false` switches auth modes on the next `api` restart -- no rebuild. |

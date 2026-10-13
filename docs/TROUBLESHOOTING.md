@@ -24,6 +24,16 @@ than expected:
    the problem is in LibreChat's `mcpServers` config or its own connection
    to it, not in `agent-skills`.
 
+## "MCP server 'agent-skills' requires variables [GITLAB_BASE_URL, GITLAB_TOKEN] which are not set"
+
+Shown when a user presses **Initialize** in the agent-skills MCP settings with
+a field left empty. LibreChat (v0.8.8) has no optional field: every
+`customUserVars` entry must be filled before the server will start. For a user
+without GitLab, type a single `-` in both GitLab fields and save; the tool
+server reads `-` as "not set", so Jira and Confluence work and `glab_*` calls
+report the variables as missing. The same goes for any other field a user
+doesn't use.
+
 ## `{"error": {"type": "missing_environment_variables", ...}}`
 
 A `jira_*` (or other toolset) call returns this instead of doing anything.

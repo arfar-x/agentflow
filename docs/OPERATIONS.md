@@ -116,12 +116,46 @@ next one runs.
 
 ## Upgrades
 
-1. Pick the new `LIBRECHAT_IMAGE_TAG` / `RAG_API_IMAGE_TAG`.
-2. `scripts/backup.sh` first, always.
-3. Update `.env`, then `docker compose pull && docker compose up -d`.
-4. Watch `docker compose logs -f api` through startup; confirm the chat UI
-   loads and an existing conversation is still visible before considering
-   the upgrade done.
+1. Pick the new `LIBRECHAT_IMAGE_TAG` / `RAG_API_IMAGE_TAG`, and read that
+   release's notes and `UPGRADING.md` in
+   [LibreChat-AI/LibreChat](https://github.com/LibreChat-AI/LibreChat) -- a
+   release can need a one-off migration (v0.8.8 does, below).
+2. `make backup` first, always.
+3. Update `.env`, then `docker compose pull api rag_api`.
+4. Run any migration the release calls for, with the stack's `api` stopped
+   (see below).
+5. `make up` -- it also re-renders `config/librechat.yaml` from the template.
+6. Watch `make logs SERVICE=api` through startup; confirm the chat UI loads
+   and an existing conversation is still visible before considering the
+   upgrade done. `make agent-import DRY_RUN=1` should report nothing to change.
+
+To roll back: put the old tag back in `.env` and `make up`. If a migration
+already ran, restore the pre-upgrade backup instead (`make restore`) -- an
+older LibreChat isn't guaranteed to run against a migrated database.
+
+### v0.8.7 -> v0.8.8
+
+- **Registry.** Images now come from `registry.librechat.ai/librechat-ai/...`
+  (the project moved to the LibreChat-AI org); `docker-compose.yml` already
+  points there. The old `ghcr.io/danny-avila/...` images stop at v0.8.7.
+- **Tenant-index migration.** A database created on v0.8.7 or earlier has
+  legacy unique indexes that conflict with v0.8.8's, and `api` logs
+  `Index build failed` on every start until they're replaced. LibreChat never
+  does this at startup; `make librechat-migrate` wraps its own command:
+
+  ```bash
+  make librechat-migrate             # dry run: lists what it would replace
+  make librechat-migrate APPLY=1     # stops api, migrates, starts api again
+  ```
+
+  Run both after step 3 (the migration lives in the new image). The dry run
+  only lists indexes; it doesn't check for duplicate data, so an `APPLY=1`
+  can still fail -- then `api` is left stopped, nothing old has been dropped,
+  and rerunning after fixing the reported problem completes it. A database
+  that has already run v0.8.8 shows `0 planned`, and `APPLY=1` is a no-op.
+- **Config.** `config/librechat.yaml.example` is at schema `version: 1.3.17`;
+  nothing in it changed meaning. What v0.8.8 turns on by default (including
+  `ask_user_question`) is in [`CONFIGURATION.md`](CONFIGURATION.md) "Agents".
 
 ## Updating the `agent-skills` submodule
 

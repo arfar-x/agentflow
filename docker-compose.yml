@@ -12,6 +12,21 @@
 networks:
   frontend:
   backend:
+  # crw's own network, and the only one it is on. crw fetches whatever URLs
+  # search results contain -- addresses chosen by the internet, not by us --
+  # so it must not share a network with anything that trusts its callers by
+  # reachability, which is every service on `backend` (mongodb, the MCP
+  # servers, kb-webhook, ...). A link to http://mongodb:27017 in a search
+  # result must resolve to nothing. `api` joins this network to call crw; a
+  # container on two networks doesn't route between them, so that gives api
+  # crw, never crw backend.
+  scraper:
+  # mcp-agent-skills' own network. It trusts per-request headers (Jira and
+  # Confluence credentials, and which user's upload folder a request may
+  # read) because only `api` can reach it -- so nothing else may share a
+  # network with it. On `backend` any of a dozen containers (searxng, rag_api,
+  # ...) could send those headers and read any user's uploads.
+  agent-tools:
 
 volumes:
   mongodb_data:
@@ -24,7 +39,10 @@ volumes:
 
 services:
   api:
-    image: ghcr.io/danny-avila/librechat:${LIBRECHAT_IMAGE_TAG:?set LIBRECHAT_IMAGE_TAG in .env}
+    # registry.librechat.ai is the registry upstream's own compose files pull
+    # from since v0.8.8 (the project moved to the LibreChat-AI org). The old
+    # ghcr.io/danny-avila mirror stops at v0.8.7 -- don't point back at it.
+    image: registry.librechat.ai/librechat-ai/librechat:${LIBRECHAT_IMAGE_TAG:?set LIBRECHAT_IMAGE_TAG in .env}
     restart: unless-stopped
     ports:
       # Bound to all interfaces (0.0.0.0) so clients on the LAN can reach the
@@ -41,19 +59,42 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       meilisearch:
         condition: service_healthy
       rag_api:
         condition: service_started
       mcp-agent-skills:
         condition: service_healthy
+      crw:
+        condition: service_started
     env_file: .env
     environment:
       HOST: 0.0.0.0
       MONGO_URI: mongodb://${MONGO_APP_USERNAME}:${MONGO_APP_PASSWORD}@mongodb:27017/LibreChat?authSource=admin
       MEILI_HOST: http://meilisearch:7700
       RAG_API_URL: http://rag_api:8000
+      # Shared generation store: a scheduled run of an agent that can pause
+      # (ask_user_question, or a tool on toolApproval's `ask` list) is
+      # refused without it. LibreChat only builds its Redis client when
+      # USE_REDIS is on, so streams can't be had without it; that also moves
+      # its caches into Redis, which are all rebuildable.
+      USE_REDIS: "true"
+      REDIS_URI: redis://redis:6379
+      USE_REDIS_STREAMS: ${USE_REDIS_STREAMS:-true}
       ADMIN_PANEL_URL: http://localhost:${ADMIN_PANEL_PORT:-3000}
+      # The image runs node with NODE_ENV=production, so LibreChat marks the
+      # httpOnly `refreshToken` cookie `Secure` (see shouldUseSecureCookie in
+      # packages/api) -- and browsers DROP Secure cookies set over plain
+      # HTTP. With no refresh cookie the UI can only renew its 15-minute
+      # access token until it can't, at which point it redirects to /login:
+      # users were force-logged-out ~15 min after every sign-in. This stack
+      # is HTTP on the LAN (no TLS in front), so the cookie must not be
+      # Secure -- same setting admin-panel already uses. Read from .env, and
+      # false when it isn't there, so an older .env is still correct. If a TLS
+      # reverse proxy is ever put in front, set it to true in .env.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     volumes:
       # Generated (gitignored) from config/librechat.yaml.example by
       # scripts/render-librechat-config.sh -- `make up` runs this before
@@ -66,7 +107,7 @@ services:
       - librechat_uploads:/app/uploads
       - librechat_images:/app/client/public/images
       - librechat_logs:/app/api/logs
-    networks: [frontend, backend]
+    networks: [frontend, backend, scraper, agent-tools]
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -136,6 +177,26 @@ services:
       start_period: 20s
     mem_limit: 1g
 
+  # In-flight generation state and caches for LibreChat (USE_REDIS /
+  # USE_REDIS_STREAMS). No auth and no published port: reachable only from
+  # `api` on `backend`, like mongodb. Nothing here is worth keeping across a
+  # restart (a lost job just fails that run, a lost cache is rebuilt), so no
+  # volume and no persistence -- and nothing to back up.
+  redis:
+    image: redis:7.4.7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [backend]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 256m
+
   meilisearch:
     image: getmeili/meilisearch:v1.35.1
     restart: unless-stopped
@@ -178,7 +239,7 @@ services:
     mem_limit: 1g
 
   rag_api:
-    image: ghcr.io/danny-avila/librechat-rag-api-dev-lite:${RAG_API_IMAGE_TAG:?set RAG_API_IMAGE_TAG in .env}
+    image: registry.librechat.ai/librechat-ai/librechat-rag-api-dev-lite:${RAG_API_IMAGE_TAG:?set RAG_API_IMAGE_TAG in .env}
     restart: unless-stopped
     # Same model-host pin as `api` -- rag_api also calls VLLM_BASE_URL (for
     # embeddings). See the api.extra_hosts comment above.
@@ -209,8 +270,23 @@ services:
       args:
         TOOLSETS: ${MCP_TOOLSETS:-jira}
     restart: unless-stopped
-    env_file: .env
+    # Deliberately no `env_file: .env`: that file holds the whole stack's
+    # secrets, and every user credential this service needs arrives per
+    # request in headers. It gets only the settings below.
     environment:
+      JIRA_AUTO_CONFIRM_WRITES: ${JIRA_AUTO_CONFIRM_WRITES:-false}
+      JIRA_DEPLOYMENT_TYPE: ${JIRA_DEPLOYMENT_TYPE:-}
+      CONFLUENCE_AUTO_CONFIRM_WRITES: ${CONFLUENCE_AUTO_CONFIRM_WRITES:-false}
+      CONFLUENCE_DEPLOYMENT_TYPE: ${CONFLUENCE_DEPLOYMENT_TYPE:-}
+      GITLAB_AUTO_CONFIRM_WRITES: ${GITLAB_AUTO_CONFIRM_WRITES:-false}
+      # Files users upload in chat, attachable to Jira/Confluence. LibreChat
+      # keeps one folder per user in this volume, mounted read-only below;
+      # per-user mode limits each request to the folder of the user named
+      # in its X-Agent-Skills-User header (config/librechat.yaml.example),
+      # and agent-skills refuses anything outside it, hidden, or
+      # secret-looking.
+      AGENT_SKILLS_ATTACHMENT_DIR: /attachments
+      MCP_ATTACHMENT_DIR_PER_USER: "1"
       # Honors X-Agent-Skills-Env-<VAR> per-request headers (e.g. a
       # different Jira credential per LibreChat user) instead of only this
       # server process's own env. Safe to enable *here* specifically
@@ -220,7 +296,14 @@ services:
       # exception server.py's own startup warning calls out. See
       # agent-skills/AUTHENTICATION.md, Part 3.
       MCP_TRUST_REQUEST_CREDENTIALS: "1"
-    networks: [backend]
+      # A per-user field LibreChat can't leave empty is entered as `-`; this
+      # makes such a header mean "not set" for that call rather than a
+      # literal value (agent-skills >= v0.17.1). The comment above
+      # config/librechat.yaml.example's agent-skills headers explains why.
+      MCP_UNSET_HEADER_VALUE: "-"
+    volumes:
+      - librechat_uploads:/attachments:ro
+    networks: [agent-tools]
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
@@ -433,3 +516,27 @@ services:
       retries: 5
       start_period: 15s
     mem_limit: 512m
+
+  # Page scraper for LibreChat's web search: SearXNG finds the links, crw
+  # fetches the pages and returns them as markdown. LibreChat talks to it as
+  # a self-hosted Firecrawl (webSearch.scraperProvider: firecrawl) -- crw
+  # implements Firecrawl's /v1 and /v2 scrape API. No published port, and
+  # NOT on `backend`: only on `scraper`, which only `api` joins (see the
+  # networks comment at the top). It has no auth of its own (no [auth]
+  # api_keys configured), which is why it must never get a `ports:` entry --
+  # and it fetches attacker-chosen URLs, which is why it must never join
+  # `backend`. CRW_RENDERER__MODE=none: plain HTTP plus crw's built-in
+  # browser-impersonation fallback, no headless-browser sidecar -- see
+  # docs/CONFIGURATION.md "Web search" for adding LightPanda when JS-only
+  # pages come back empty. The image ships no curl/wget, so there is no
+  # healthcheck; it serves GET /health on port 3000.
+  crw:
+    image: ghcr.io/fastcrw/crw:0.37.2
+    restart: unless-stopped
+    environment:
+      CRW_RENDERER__MODE: none
+    networks: [scraper]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    mem_limit: 256m

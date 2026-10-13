@@ -69,6 +69,27 @@ FETCH_TOOLS: Mapping[str, tuple[str, str]] = {
 }
 
 
+#: The catalog's own read tool, named the same unsuffixed way as FETCH_TOOLS.
+CATALOG_READ_TOOL = "kb_get"
+
+
+def fetch_hint_for(
+    entry_id: str, location: Location, *, has_content: bool
+) -> dict[str, Any] | None:
+    """The fetch hint, falling back to the catalog itself for a document whose
+    text it keeps and no tool in this stack can read live (FR-CNT-12).
+
+    A live tool wins when there is one: it reads the current document with the
+    user's own credentials, so the source still decides what they may see. The
+    fallback is what makes a kept text reachable by every agent that already
+    follows `fetch`, with no change to their instructions.
+    """
+    live = fetch_hint(location)
+    if live is not None or not has_content:
+        return live
+    return {"tool": CATALOG_READ_TOOL, "args": {"id": entry_id}}
+
+
 def fetch_hint(location: Location) -> dict[str, Any] | None:
     """The ready-made next call for reading this document, or None when the
     source has no tool in this stack and the agent should use `url` instead.
