@@ -7,7 +7,7 @@
 | **Version** | 2.7.0 |
 | **Last updated** | 2026-10-11 |
 | **Implements** | `kb/` module, `mcp-kb` service |
-| **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
+| **Related** | [`AGENTS.md`](../../AGENTS.md), [`CONFIGURATION.md`](CONFIGURATION.md), [`OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md), [`kb/README.md`](../README.md) |
 
 Requirement keywords (**MUST**, **MUST NOT**, **SHOULD**, **MAY**) are used as
 defined in RFC 2119.
@@ -298,6 +298,10 @@ stated in C6.
 | id | Requirement | Status |
 |---|---|---|
 | NFR-CFG-01 | Only `kb/config.py` may read the process environment. Every other module receives a value, or a mapping obtained from it, as an argument. | done |
+| NFR-CFG-02 | The module owns its variables: `kb/.env.example` MUST document every variable the code reads that compose and the Dockerfile do not set themselves, and the stack's root `.env.example` MUST contain none of them. | done |
+| NFR-CFG-03 | The query path (`mcp-kb`) MUST receive an explicit, short list of variables and no env file, so it can see neither the owner database credential nor any source credential. | done |
+| NFR-CFG-04 | The module's services MUST interpolate from, and read their environment from, `kb/.env.kb` alone. Nothing in the stack's own `.env` is visible to them, and nothing in `kb/.env.kb` to the rest of the stack. | done |
+| NFR-CFG-05 | The module MUST be self-contained on disk: its compose services, make targets, scripts, configuration template, operator guide and spec live under `kb/`, and the root files only include them. | done |
 
 ## 8. Interfaces
 
@@ -317,7 +321,7 @@ and `export` with their phases.
 
 ### 8.3 Source configuration
 
-`config/kb-sources.yaml`, gitignored with a tracked `.example`, following the
+`kb/config/sources.yaml`, gitignored with a tracked `.example`, following the
 same pattern as `config/librechat.yaml` and `searxng/settings.yml`:
 
 ```yaml
@@ -444,7 +448,7 @@ which a flat catalog cannot answer.
 | 6 | Sources: Confluence, Jira and GitLab, plus discovery. The HTTP API and local files are deferred (§6.8) | done |
 | 7 | The four freshness mechanisms, the scheduler, the webhook receiver | done |
 | 8 | Agent tools and instructions | done |
-| 9 | Operator documentation (`docs/KNOWLEDGE_BASE.md`) and setup automation | done |
+| 9 | Operator documentation (`docs/OPERATOR_GUIDE.md`) and setup automation | done |
 | 10 | Opt-in raw content (§6.10), via [`specs/001-kb-raw-content/`](../../specs/001-kb-raw-content/) | done |
 
 ## 14. Open questions
@@ -458,7 +462,7 @@ which a flat catalog cannot answer.
 
 | Version | Date | Change |
 |---|---|---|
-| 2.8.0 | 2026-10-13 | Added §7.4 (NFR-CFG-01): `kb/config.py` is the only module that reads the process environment. The webhook receiver, the migrations directory and the source-config loader had each read variables directly, so "which variables does this process need" had no single answer. |
+| 2.8.0 | 2026-10-13 | Added §7.4 (NFR-CFG-01..05). The module is now self-contained: its services (`kb/compose.yaml`, included by the root file), variables (`kb/.env.example` -> `kb/.env.kb`), source configuration (`kb/config/sources.yaml`), scripts, make targets, operator guide and this spec all live under `kb/`. The sync services no longer receive the stack's whole `.env`, and the query path still receives no env file. `kb/config.py` is the only module that reads the process environment: `kb/config.py` is the only module that reads the process environment. The webhook receiver, the migrations directory and the source-config loader had each read variables directly, so "which variables does this process need" had no single answer. |
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
 | 2.7.0 | 2026-10-11 | Added FR-REC-13: a label-only change re-classifies the entry without re-summarizing. Adding or swapping a wiki label changes neither the page's text nor its version, so the content-hash gate treated it as unchanged and the entry kept its old type and tags until the text next changed. |
 | 2.6.0 | 2026-10-11 | FR-AGT-02 narrowed: the front door searches the catalog before answering itself, not before delegating. Found in a live trial of the product-spec flow: the front door searched, then handed off to a specialist that searched the same question again, before doing everything itself. The front door is now a router with no write tools; the specialist it hands to grounds the work (FR-AGT-03). |
@@ -467,7 +471,7 @@ which a flat catalog cannot answer.
 | 2.3.0 | 2026-09-28 | Added FR-CFG-09: `check()` now proves structured output actually works with a real completions round-trip (a fixed probe: `system` + `response_format: json_object`, verified against the exact reply expected), not just that `/models` answers and lists the right id. `sync` refuses to run at all against a summarizer that fails it. Prompted by the same experimental backend as 2.2.0 below -- it turned out to not merely mis-format JSON sometimes, but to silently ignore the `system` role entirely, every time, while still answering 200 with a normal chat reply. An earlier fix folded the instruction into the `user` message to route around that one backend; reverted -- the request this module sends stays the plain OpenAI standard for every endpoint, and an endpoint that cannot honor it is something to report and refuse, not something to accommodate. |
 | 2.2.0 | 2026-09-28 | Added FR-REC-12: `kb sync --force` bypasses the content-hash gate to recover entries a since-fixed summarizer defect left undescribed -- an unchanged run stops being free only when explicitly asked to. Prompted by an experimental OpenAI-compatible backend that didn't enforce the `response_format` it was sent, degrading ~38% of one sync; the summarizer itself gained a same-request retry with a sharper instruction (no spec change -- an internal robustness detail of FR-REC-06, not new externally-visible behavior), but that only helps content summarized *after* the fix, hence this flag for what came before it. |
 | 2.1.0 | 2026-09-24 | Added FR-CFG-08 and FR-CLI-05: the summarizer URL is normalized and its compatibility is checkable against the live endpoint, and `kb check` reports which dependency is not ready. |
-| 2.0.0 | 2026-09-24 | All nine phases delivered. `make up` now brings the catalog up with the stack and reports what is still needed; `docs/KNOWLEDGE_BASE.md` is the operator guide. Two source kinds remain deferred by choice. |
+| 2.0.0 | 2026-09-24 | All nine phases delivered. `make up` now brings the catalog up with the stack and reports what is still needed; `docs/OPERATOR_GUIDE.md` is the operator guide. Two source kinds remain deferred by choice. |
 | 1.10.0 | 2026-09-24 | Added FR-SCH-06: times of day are read in `KB_TIMEZONE`. A nightly job written as `at: "03:00"` by people in Tehran was firing at 06:30 their time, because the clock reported UTC. |
 | 1.9.0 | 2026-09-24 | `reviewed` became `approved`, defaulting to on and overridable by `KB_SOURCES_APPROVED`. The rename says what the flag is (a decision about syncing) rather than what somebody did (read the file), and the safety it was carrying was always really per source: discovery writes candidates `enabled: false`, and that is what keeps a newly found space out of the catalog. What is left is a coarse switch for an incident, which is more useful in the environment than in a file. |
 | 1.8.0 | 2026-09-24 | Phase 8: the catalog tools are attached to the front-door agent and to the four document-producing agents, with the instruction that matters most -- search before assuming, answer in the user's language, read the real document, name it. |

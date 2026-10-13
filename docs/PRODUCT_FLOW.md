@@ -86,7 +86,7 @@ same way.
 
 For this to work, the operator maps both labels to `spec` in the wiki
 source's `type_from_labels`, and makes sure the space where specs are written
-is a source ([`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md)). A new or changed
+is a source ([`kb/docs/OPERATOR_GUIDE.md`](../kb/docs/OPERATOR_GUIDE.md)). A new or changed
 page reaches the catalog on its next sync. Agents read the live page when
 they need the latest text.
 

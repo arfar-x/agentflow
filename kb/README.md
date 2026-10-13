@@ -5,7 +5,7 @@ where it lives**. It stores pointers and multilingual summaries, never document
 bodies: an agent searches the catalog, then reads the real document live through
 the tools it already has, with the calling user's own credentials.
 
-The specification is [`docs/spec/knowledge-base.md`](../docs/spec/knowledge-base.md)
+The specification is [`docs/SPEC.md`](docs/SPEC.md)
 and it governs this module. Every requirement there has an id; every
 implemented one has a test claiming it, and the suite fails if that stops being
 true. Change the spec first, then the code.
@@ -36,9 +36,25 @@ deliberately unbuilt. The config shape is settled, so adding one later is an
 adapter and a config entry; building either now would mean guessing at a mapping
 and then maintaining the guess.
 
-Operators want [`docs/KNOWLEDGE_BASE.md`](../docs/KNOWLEDGE_BASE.md): credentials,
+Operators want [`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md): credentials,
 choosing sources, the freshness switches, overrides, the gap log, and what to
 check when it looks wrong. What follows is for working *on* the module.
+
+## What is in this directory
+
+The module carries everything about itself; the repository root only includes it.
+
+```
+src/kb/          the code (hexagonal -- see AGENTS.md)       tests/       its suite
+migrations/      SQL, applied by `make kb-init`
+compose.yaml     kb-db, mcp-kb, kb-scheduler, kb-cli, kb-webhook (included by the root docker-compose.yml)
+module.mk        the `make kb-*` targets (included by the root Makefile)
+.env.example     every variable the module reads  ->  copy to .env.kb (gitignored; `make up` creates it)
+config/          sources.yaml.example  ->  sources.yaml (gitignored): which spaces and repos to catalog
+scripts/         prepare (env + config files), init (schema), bootstrap, sync-all, test
+docs/            SPEC.md (requirements), OPERATOR_GUIDE.md, CONFIGURATION.md (variables)
+Dockerfile       one image, four roles (MCP server, scheduler, webhook, CLI)
+```
 
 ## Getting it running
 
@@ -60,7 +76,7 @@ Run the whole suite **including the Postgres-backed tests**, against a
 throwaway database container that is removed afterwards:
 
 ```bash
-cd .. && make kb-test          # or: scripts/kb-test.sh -k override -v
+cd .. && make kb-test          # or: kb/scripts/test.sh -k override -v
 ```
 
 Those tests skip in a bare `pytest` run. To point them at a database you
@@ -112,9 +128,9 @@ Every command prints one JSON document and exits 0, errors included:
 
 ```bash
 make kb-sources-discover            # what Confluence and Jira actually contain
-make kb-sources-discover WRITE=1    # append them to config/kb-sources.yaml, disabled
+make kb-sources-discover WRITE=1    # append them to kb/config/sources.yaml, disabled
 
-# then edit config/kb-sources.yaml: set `enabled: true` on what belongs
+# then edit kb/config/sources.yaml: set `enabled: true` on what belongs
 
 make kb-sources                     # what is configured, and what each mechanism is set to
 make kb-sync SOURCE=confluence-eng DRY_RUN=1   # what would change; writes nothing
@@ -131,7 +147,7 @@ version, so an unchanged file costs no model call, and incremental runs compare
 commits and read only what changed.
 
 Sync needs a **read-only service account** (`KB_CONFLUENCE_*` / `KB_JIRA_*` in
-`.env`, falling back to the stack's existing `CONFLUENCE_*`/`JIRA_*`): it has to
+`kb/.env.kb`): it has to
 see a space in order to catalog it. That is a different thing from the per-user
 credential an agent uses to read a page later — that check still happens at the
 source, as the user.
@@ -162,7 +178,7 @@ Two switches, at different grains:
 ### Keeping it fresh
 
 `kb-scheduler` runs with the stack and needs no cron entry: the cadences come
-from `config/kb-sources.yaml`, per source.
+from `kb/config/sources.yaml`, per source.
 
 | Mechanism | Default | What it is for |
 |---|---|---|
@@ -178,7 +194,7 @@ rotation.
 The webhook is the one inbound port, so it is opt-in and separate:
 
 ```bash
-# .env: KB_WEBHOOK_SECRET=<a long random string>
+# kb/.env.kb: KB_WEBHOOK_SECRET=<a long random string>
 docker compose --profile webhook up -d kb-webhook
 # GitLab: Settings > Webhooks > URL http://<host>:8323/gitlab, same secret token
 ```
@@ -291,7 +307,7 @@ fails `tests/test_spec_coverage.py`, which is deliberate: it keeps
 "implemented" from drifting into a claim nobody checked.
 
 **Adding a source** (phase 6 onward) means one file in `adapters/outbound/`
-implementing `KnowledgeSource`, and one entry in `config/kb-sources.yaml`.
+implementing `KnowledgeSource`, and one entry in `kb/config/sources.yaml`.
 Nothing in `domain/` or `application/` should change; if it does, the port is
 wrong.
 

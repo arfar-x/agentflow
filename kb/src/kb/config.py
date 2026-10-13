@@ -13,7 +13,7 @@ so each states exactly which variables it needs:
   scheduler and operator CLI.
 - `WebhookSettings` -- the push-event receiver.
 
-`kb-sources.yaml` (the per-source configuration, with its own `${VAR}`
+`sources.yaml` (the per-source configuration, with its own `${VAR}`
 interpolation) is loaded by `kb.sources_config`, which takes its environment
 from `process_environment()` as well.
 """
@@ -60,7 +60,7 @@ class Settings(BaseModel):
 
     #: Postgres DSN for the catalog. The query path should be given the
     #: least-privilege role's credential (kb_reader), not the owner's -- see
-    #: scripts/kb-init.sh.
+    #: kb/scripts/init.sh.
     database_url: str = Field(min_length=1)
     #: How many hits `kb_search` returns when the caller doesn't say.
     default_limit: int = Field(default=8, ge=1, le=50)
@@ -73,9 +73,9 @@ class Settings(BaseModel):
     mcp_host: str = "127.0.0.1"
     mcp_port: int = Field(default=8322, ge=1, le=65535)
 
-    #: Where kb-sources.yaml lives. Only sync and discovery read it; the MCP
+    #: Where sources.yaml lives. Only sync and discovery read it; the MCP
     #: server never does, so a malformed source config cannot break search.
-    sources_file: str = "/opt/kb/config/kb-sources.yaml"
+    sources_file: str = "/opt/kb/config/sources.yaml"
     #: The summarizer: any OpenAI-compatible endpoint. Unset means sync still
     #: runs and catalogs documents under their real titles, undescribed --
     #: degraded rather than blocked.

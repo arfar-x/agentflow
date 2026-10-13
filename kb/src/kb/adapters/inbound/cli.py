@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     gaps.add_argument("--limit", type=int, default=20)
 
     sync = sub.add_parser("sync", help="Bring the catalog in line with one configured source.")
-    sync.add_argument("--source", required=True, metavar="ID", help="A source id from kb-sources.yaml.")
+    sync.add_argument("--source", required=True, metavar="ID", help="A source id from sources.yaml.")
     sync.add_argument("--mode", choices=["full", "incremental"], default="full",
                       help="full lists everything (and detects deletions); incremental asks only "
                            "for what changed since the stored checkpoint.")
@@ -90,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         "discover", help="Propose sources from what the connected systems contain."
     )
     discover.add_argument("--write", action="store_true",
-                          help="Append the candidates to kb-sources.yaml (disabled, for review). "
+                          help="Append the candidates to sources.yaml (disabled, for review). "
                                "Without it, they are only printed.")
 
     sub.add_parser(

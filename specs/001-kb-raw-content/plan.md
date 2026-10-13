@@ -61,8 +61,8 @@ to roughly 20 MB before TOAST compression. The 10 MB cap is per document.
 
 | Principle | Check | Result |
 |---|---|---|
-| I. Configuration over code | A setting in `config/kb-sources.yaml`. No upstream component is patched. | Pass |
-| II. Spec of record leads | `docs/spec/knowledge-base.md` is amended in the first implementation commit: N1/FR-ENT-01 narrowed, C6 added, `FR-CNT-*` added with status `planned`. Each status flips to `done` with the commit that tests it. | Pass |
+| I. Configuration over code | A setting in `kb/config/sources.yaml`. No upstream component is patched. | Pass |
+| II. Spec of record leads | `kb/docs/SPEC.md` is amended in the first implementation commit: N1/FR-ENT-01 narrowed, C6 added, `FR-CNT-*` added with status `planned`. Each status flips to `done` with the commit that tests it. | Pass |
 | III. Hexagonal, provable core | Truncation and paging are pure domain functions. Use cases get the content policy as an argument and use new port methods, proven against fakes. SQL stays in the adapter. | Pass |
 | IV. Secrets / internal services | No new secret, service or port. | Pass |
 | V. Least privilege | `mcp-kb` only SELECTs the new table: no write grant, no source credentials. Storing is an explicit per-source opt-in in tracked config, never a default (FR-001/002). | Pass |
@@ -92,9 +92,9 @@ specs/001-kb-raw-content/
 ### Source Code (repository root)
 
 ```text
-docs/spec/knowledge-base.md                 # spec of record: N1, FR-ENT-01, C6, FR-CNT-*, §8, change log
-docs/KNOWLEDGE_BASE.md                      # operator guide: the switch, exposure, size, revoke
-config/kb-sources.yaml.example              # commented store_raw_content on the GitLab source
+kb/docs/SPEC.md                 # spec of record: N1, FR-ENT-01, C6, FR-CNT-*, §8, change log
+kb/docs/OPERATOR_GUIDE.md                      # operator guide: the switch, exposure, size, revoke
+kb/config/sources.yaml.example              # commented store_raw_content on the GitLab source
 kb/
 ├── migrations/003_entry_content.sql        # new table + kb_reader SELECT grant
 ├── src/kb/

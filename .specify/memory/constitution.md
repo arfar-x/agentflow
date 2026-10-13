@@ -28,7 +28,7 @@ building.
 - A requirement marked `done` MUST have a test that claims it (`# Covers: <id>`).
   `kb/tests/test_spec_coverage.py` enforces this pairing and MUST stay green.
 - Spec Kit feature directories (`specs/NNN-*/`) are working documents for one change. Whatever
-  they decide about `kb/` MUST also be written into `docs/spec/knowledge-base.md` before the
+  they decide about `kb/` MUST also be written into `kb/docs/SPEC.md` before the
   change is complete.
 
 Rationale: the code follows the spec. When the two disagree, one of them is wrong, and only a
@@ -90,7 +90,7 @@ written in tracked configuration is reviewable.
   - `agent-skills` is a submodule pinned to a released tag.
   - Upgrades are reviewable, one-purpose commits with the runbook in `docs/OPERATIONS.md`.
 - **Declarative state.** Agents (`agents/*.yaml`), knowledge base sources
-  (`config/kb-sources.yaml`) and configuration templates are the source of truth for what they
+  (`kb/config/sources.yaml`) and configuration templates are the source of truth for what they
   list. Anything derived (the catalog index, generated configs) MUST be rebuildable from them.
 
 ## Development Workflow
@@ -113,7 +113,7 @@ written in tracked configuration is reviewable.
   - config changes rendered and validated against the pinned LibreChat image before they ship.
 - **Docs.** Operator-visible behavior is documented in the same change:
   - `docs/CONFIGURATION.md` for variables;
-  - `docs/KNOWLEDGE_BASE.md` for the catalog;
+  - `kb/docs/OPERATOR_GUIDE.md` for the catalog;
   - `docs/OPERATIONS.md` for runbooks.
 - **Merging.** A pull request is opened, not merged, by whoever wrote it. Merging is a human
   review decision.

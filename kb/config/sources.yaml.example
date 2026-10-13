@@ -1,6 +1,6 @@
 # Which spaces, repositories, projects and endpoints the knowledge catalog reads.
 #
-# Copy to config/kb-sources.yaml (gitignored), or let discovery draft it for you:
+# Copy to kb/config/sources.yaml (gitignored), or let discovery draft it for you:
 #
 #   make kb-sources-discover          # print what it finds
 #   make kb-sources-discover WRITE=1  # append it here, disabled, for review
@@ -10,7 +10,7 @@
 # set it false (or KB_SOURCES_APPROVED=false) to stop all syncing at once.
 #
 # ${VAR} and ${VAR:-default} work anywhere except in comments. Credentials are
-# named, never written here: the value stays in .env.
+# named, never written here: the value stays in kb/.env.kb.
 
 approved: true
 
@@ -50,7 +50,7 @@ sources:
     kind: gitlab
     enabled: false
     base_url: ${GITLAB_BASE_URL:-https://your-gitlab-host}
-    token_env: GITLAB_TOKEN          # the name; the value stays in .env
+    token_env: GITLAB_TOKEN          # the name; the value stays in kb/.env.kb
     # Keep each file's full text in the catalog, so agents can read past the
     # summary (no tool in this stack reads GitLab live). It makes the text
     # readable by EVERY knowledge base user, whatever their GitLab access --
@@ -69,5 +69,5 @@ sources:
             exclude: ["**/CHANGELOG.md"]
 
   # An internal HTTP API (http_api) and local files (local_files) are
-  # specified but deliberately unbuilt -- see docs/spec/knowledge-base.md
+  # specified but deliberately unbuilt -- see docs/SPEC.md
   # §6.8. Ask for one when you have something real to catalog through it.

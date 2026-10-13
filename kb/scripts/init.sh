@@ -9,19 +9,21 @@
 # Runs psql inside the kb-db container, so it needs no client tools on the host
 # and no published port on that service (it has none, by design).
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-if [ ! -f .env ]; then
-  echo "No .env found. Copy .env.example to .env and fill it in first." >&2
+# The module's own env file, never the stack's .env (kb/scripts/prepare.sh
+# creates it).
+if [ ! -f kb/.env.kb ]; then
+  echo "No kb/.env.kb found. Run kb/scripts/prepare.sh (make up does) first." >&2
   exit 1
 fi
 
 # shellcheck disable=SC1091
-source .env
+source kb/.env.kb
 
 : "${KB_POSTGRES_DB:=agentflow_kb}"
 : "${KB_POSTGRES_USER:=kb}"
-: "${KB_READER_PASSWORD:?set KB_READER_PASSWORD in .env -- scripts/generate-secrets.sh generates one}"
+: "${KB_READER_PASSWORD:?set KB_READER_PASSWORD in kb/.env.kb -- kb/scripts/prepare.sh generates one}"
 
 psql_kb() {
   docker compose exec -T kb-db psql -v ON_ERROR_STOP=1 -U "${KB_POSTGRES_USER}" -d "${KB_POSTGRES_DB}" "$@"
@@ -74,4 +76,4 @@ done
 
 echo "==> Done (${applied} migration(s) applied)."
 echo "    The query path connects as kb_reader (read-only, plus the gap log);"
-echo "    sync connects as ${KB_POSTGRES_USER}. See docs/CONFIGURATION.md."
+echo "    sync connects as ${KB_POSTGRES_USER}. See kb/docs/OPERATOR_GUIDE.md."

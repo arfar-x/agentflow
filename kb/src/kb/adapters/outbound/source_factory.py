@@ -1,6 +1,6 @@
 """Build a live `KnowledgeSource` from its configuration entry.
 
-Credentials come from the environment, never from `kb-sources.yaml`, which
+Credentials come from the environment, never from `sources.yaml`, which
 carries only the *name* of the variable to read. They belong to a **read-only
 service account used by sync**, which is a different thing from the per-user
 credentials an agent uses to read a document later: sync needs to see a space to
@@ -37,7 +37,7 @@ class MissingCredential(RuntimeError):
         self.variables = variables
         super().__init__(
             f"source {source_id!r} needs one of: {', '.join(variables)} -- "
-            "sync uses a read-only service account, set it in .env"
+            "sync uses a read-only service account, set it in kb/.env.kb"
         )
 
 
@@ -97,7 +97,7 @@ def build_source(config: AnySource, env: Mapping[str, str] | None = None) -> Kno
 
         token = environment.get(config.token_env)
         if not token:
-            # The config names the variable; the value lives in .env. A
+            # The config names the variable; the value lives in kb/.env.kb. A
             # self-hosted GitLab may allow anonymous reads of public projects,
             # but a catalog built from only what is public is a trap.
             raise MissingCredential(config.id, (config.token_env,))

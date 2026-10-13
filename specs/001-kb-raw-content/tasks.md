@@ -4,7 +4,7 @@
 (spec.md, plan.md, research.md, data-model.md, contracts/)
 
 **Tests**: Required. Constitution III and II require every `FR-CNT-*` that is marked `done` in
-`docs/spec/knowledge-base.md` to have a test carrying `# Covers: FR-CNT-..`.
+`kb/docs/SPEC.md` to have a test carrying `# Covers: FR-CNT-..`.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -32,14 +32,14 @@ The feature-spec ids map to spec-of-record ids as follows.
 | FR-CNT-12 | FR-016 | With no live fetch tool, a hit or entry with text names `kb_get` as its fetch |
 | FR-CNT-13 | FR-014 | `kb_get`'s description tells agents when to answer from `content` and when to fall back |
 
-FR-015 (operator documentation) is delivered in `docs/KNOWLEDGE_BASE.md` (T026) and isn't an
+FR-015 (operator documentation) is delivered in `kb/docs/OPERATOR_GUIDE.md` (T026) and isn't an
 executable requirement.
 
 ---
 
 ## Phase 1: Setup — spec of record (commit: `docs(spec): …`)
 
-- [X] T001 Amend `docs/spec/knowledge-base.md`:
+- [X] T001 Amend `kb/docs/SPEC.md`:
   - narrow N1 and FR-ENT-01 ("the entry never holds a body; a separate content store may, for
     opted-in sources");
   - add C6 (the sharing consequence) and §6.x `FR-CNT-01…13` with status `planned`;
@@ -170,13 +170,13 @@ executable requirement.
 
 ## Phase 6: Polish — operator docs (commit: `docs(kb): …`)
 
-- [X] T026 [P] `docs/KNOWLEDGE_BASE.md`, a "Sharing a source's full text" section:
+- [X] T026 [P] `kb/docs/OPERATOR_GUIDE.md`, a "Sharing a source's full text" section:
   - what `store_raw_content` exposes and to whom;
   - the size cap and truncation;
   - that turning it on needs one full sync to fill unchanged documents;
   - how to revoke (set false, then sync);
   - backup notes (it's rebuildable).
-- [X] T027 [P] `config/kb-sources.yaml.example`: a commented `store_raw_content` and
+- [X] T027 [P] `kb/config/sources.yaml.example`: a commented `store_raw_content` and
   `raw_content_max_bytes` on the GitLab source, with the exposure warning.
 - [ ] T028 Run the quickstart.md validation against the live stack.
 

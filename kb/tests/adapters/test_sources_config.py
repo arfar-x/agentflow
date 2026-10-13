@@ -1,4 +1,4 @@
-"""Loading kb-sources.yaml: interpolation, coercion, the review gate.
+"""Loading sources.yaml: interpolation, coercion, the review gate.
 
 These are the failures an operator hits at 9am with a half-configured file, so
 each one has to say what is wrong and where.
@@ -28,7 +28,7 @@ sources:
 
 
 def write(tmp_path, text: str):
-    path = tmp_path / "kb-sources.yaml"
+    path = tmp_path / "sources.yaml"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -67,7 +67,7 @@ sources:
         load(path, env={})
     message = str(excinfo.value)
     assert "GITLAB_BASE_URL" in message
-    assert "kb-sources.yaml:6" in message, "the line the variable is actually on"
+    assert "sources.yaml:6" in message, "the line the variable is actually on"
 
 
 def test_an_empty_variable_is_treated_as_unset(tmp_path):
@@ -245,13 +245,13 @@ def test_a_typo_in_a_field_name_is_rejected_rather_than_ignored(tmp_path):
 def test_malformed_yaml_reports_where(tmp_path):
     with pytest.raises(ConfigError) as excinfo:
         load(write(tmp_path, "approved: true\nsources: [\n"))
-    assert "kb-sources.yaml" in str(excinfo.value)
+    assert "sources.yaml" in str(excinfo.value)
 
 
 def test_a_missing_file_says_what_to_copy(tmp_path):
     with pytest.raises(ConfigError) as excinfo:
         load(tmp_path / "absent.yaml")
-    assert "kb-sources.yaml.example" in str(excinfo.value)
+    assert "sources.yaml.example" in str(excinfo.value)
 
 
 def test_asking_for_an_unknown_source_lists_the_known_ones(tmp_path):

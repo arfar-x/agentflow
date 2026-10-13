@@ -250,7 +250,7 @@ def test_sync_refuses_to_run_when_the_summarizer_fails_its_check(wired, capsys, 
     # a source-lookup error would mean the gate never ran at all.
     from kb.config import Settings
 
-    sources_file = tmp_path / "kb-sources.yaml"
+    sources_file = tmp_path / "sources.yaml"
     sources_file.write_text("approved: true\nsources: []\n")
     wired.settings = Settings(
         database_url="postgresql://fake/kb",
@@ -278,7 +278,7 @@ def test_a_dry_run_sync_does_not_gate_on_the_summarizer(wired, capsys, monkeypat
     # summarizer was never even asked.
     from kb.config import Settings
 
-    sources_file = tmp_path / "kb-sources.yaml"
+    sources_file = tmp_path / "sources.yaml"
     sources_file.write_text("approved: true\nsources: []\n")
     wired.settings = Settings(
         database_url="postgresql://fake/kb",

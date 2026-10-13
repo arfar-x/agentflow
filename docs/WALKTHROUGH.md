@@ -9,7 +9,7 @@ this once end to end, then come back to a step when you need it again.
 | If you want... | Read |
 |---|---|
 | every `.env` variable, what breaks if it's wrong | [`CONFIGURATION.md`](CONFIGURATION.md) |
-| the knowledge base in depth (sources, freshness, overrides, gaps) | [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md) |
+| the knowledge base in depth (sources, freshness, overrides, gaps) | [`kb/docs/OPERATOR_GUIDE.md`](../kb/docs/OPERATOR_GUIDE.md) |
 | backups, upgrades, the `agent-skills` submodule bump | [`OPERATIONS.md`](OPERATIONS.md) |
 | Keycloak SSO instead of local email/password | [`KEYCLOAK.md`](KEYCLOAK.md) |
 | a symptom you're staring at right now | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
@@ -136,7 +136,7 @@ including after every later `.env` edit in this walkthrough.
 
 ```
 ==> Generating searxng/settings.yml (gitignored) from its template...
-==> Generating config/kb-sources.yaml (gitignored) from its template...
+==> Generating kb/config/sources.yaml (gitignored) from its template...
 ==> Rendering config/librechat.yaml from config/librechat.yaml.example...
     Done (recursionLimit=50, maxRecursionLimit=100, modelContextTokens=262144, summarizationRetainTokens=13107, defaultModel=your-model-id).
 ==> docker compose up -d --build
@@ -154,14 +154,14 @@ including after every later `.env` edit in this walkthrough.
       email:    admin@agentflow.local
       password: <the ADMIN_PASSWORD from your .env>
 ==> Knowledge base...
-    created config/kb-sources.yaml from the template (every source disabled)
+    created kb/config/sources.yaml from the template (every source disabled)
     Applying 001_initial.sql...
     Applying 002_refresh_queue.sql...
     usable, but the catalog will stay empty until:
       - KB_SUMMARIZER_URL + KB_SUMMARIZER_MODEL (+ KB_SUMMARIZER_API_KEY if it needs one) -- without them entries are catalogued under their real titles but undescribed, and cross-language search will not work
       - a read-only service account: KB_CONFLUENCE_* / KB_JIRA_* / GITLAB_TOKEN -- sync has to see a space in order to catalog it
-      - at least one source enabled in config/kb-sources.yaml -- run 'make kb-sources-discover WRITE=1' to see what is there
-    then: make kb-sources-discover WRITE=1  ->  edit config/kb-sources.yaml  ->  make kb-sync SOURCE=<id>
+      - at least one source enabled in kb/config/sources.yaml -- run 'make kb-sources-discover WRITE=1' to see what is there
+    then: make kb-sources-discover WRITE=1  ->  edit kb/config/sources.yaml  ->  make kb-sync SOURCE=<id>
 ==> Done. docker compose ps:
 NAME                          STATUS
 agentflow-api-1               Up (healthy)
@@ -198,7 +198,7 @@ make user-create EMAIL=a@b.com NAME="A B" USERNAME=ab
 
 ## 7. Fill the knowledge base (optional, but this is the part with the most steps)
 
-Full depth: [`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md). Short version:
+Full depth: [`kb/docs/OPERATOR_GUIDE.md`](../kb/docs/OPERATOR_GUIDE.md). Short version:
 
 ### 7a. Credentials
 
@@ -240,7 +240,7 @@ make kb-check
 `ready: false` with only `sources` failing and `enabled: []` is expected
 before step 7c -- nothing is catalogued yet because nothing is enabled.
 `summarizer.ok: false` instead means the endpoint doesn't honor
-`response_format`/the `system` role -- see `KNOWLEDGE_BASE.md` "When
+`response_format`/the `system` role -- see `kb/docs/OPERATOR_GUIDE.md` "When
 something looks wrong" before assuming the model itself is incapable.
 
 ### 7c. Choose sources
@@ -252,10 +252,10 @@ make kb-sources-discover WRITE=1
 **Expected output:**
 
 ```json
-{"candidates": [{"id": "confluence-eng", "kind": "confluence", "found": 412}, {"id": "jira-product", "kind": "jira", "found": 38}], "file": "config/kb-sources.yaml", "added": 2, "already_configured": 0, "next": "edit config/kb-sources.yaml: set `enabled: true` on the sources you want"}
+{"candidates": [{"id": "confluence-eng", "kind": "confluence", "found": 412}, {"id": "jira-product", "kind": "jira", "found": 38}], "file": "kb/config/sources.yaml", "added": 2, "already_configured": 0, "next": "edit kb/config/sources.yaml: set `enabled: true` on the sources you want"}
 ```
 
-Edit `config/kb-sources.yaml`: everything discovery adds is
+Edit `kb/config/sources.yaml`: everything discovery adds is
 `enabled: false` by default. Flip the ones you want to `true`, delete the
 rest.
 
@@ -284,7 +284,7 @@ one `make kb-sync SOURCE=...` at a time:
 make kb-sync-all           # add FORCE=1 to bypass the content-hash gate
 ```
 
-It reads every `enabled: true` id from `config/kb-sources.yaml` and syncs
+It reads every `enabled: true` id from `kb/config/sources.yaml` and syncs
 each one in turn, same live progress per source. (Note: after the very
 first `make up`/`make kb-setup` with sources already enabled and the
 catalog still empty, this now also runs automatically as part of bootstrap
@@ -304,7 +304,7 @@ make kb-status
 ```
 
 From here, leave it: `kb-scheduler` re-syncs on the cadences set in
-`config/kb-sources.yaml` (15-minute incremental by default). No cron, no
+`kb/config/sources.yaml` (15-minute incremental by default). No cron, no
 manual re-running.
 
 ### 7f. Let the agents actually use it

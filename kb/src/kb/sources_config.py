@@ -1,4 +1,4 @@
-"""Loading `kb-sources.yaml`: which spaces, repositories, projects and endpoints
+"""Loading `sources.yaml`: which spaces, repositories, projects and endpoints
 the catalog reads.
 
 Two things here are deliberate and worth keeping:
@@ -11,7 +11,7 @@ turns into a source pointed at nowhere. Values are then coerced by the model, so
 
 **Credentials are referenced by variable name, never written here** (`token_env:
 GITLAB_TOKEN`). The file is meant to be readable and reviewable; the secret
-stays in `.env`.
+stays in `kb/.env.kb`.
 
 Sync runs only against **approved** configuration. `approved` defaults to true,
 because the real gate is per source: discovery writes every candidate
@@ -46,7 +46,7 @@ class ConfigError(RuntimeError):
     guessing: the path, and where in it."""
 
     def __init__(self, message: str, *, path: Path | None = None, line: int | None = None) -> None:
-        location = f"{path}" if path else "kb-sources.yaml"
+        location = f"{path}" if path else "sources.yaml"
         if line is not None:
             location += f":{line}"
         self.path = path
@@ -294,7 +294,7 @@ class Defaults(BaseModel):
 
 SourcesConfig.model_rebuild()
 
-DEFAULT_PATH = Path("/opt/kb/config/kb-sources.yaml")
+DEFAULT_PATH = Path("/opt/kb/config/sources.yaml")
 
 #: Stops every source syncing without editing the file -- the switch you reach
 #: for at 2am, not the one you reach for when adding a space.
@@ -325,7 +325,7 @@ def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> Sour
     """Read, interpolate, parse and validate the source configuration."""
     location = path or Path(process_environment().get("KB_SOURCES_FILE", DEFAULT_PATH))
     if not location.exists():
-        raise ConfigError("file not found -- copy config/kb-sources.yaml.example to it", path=location)
+        raise ConfigError("file not found -- copy kb/config/sources.yaml.example to it", path=location)
 
     environment = process_environment() if env is None else env
     raw = interpolate(location.read_text(encoding="utf-8"), env, path=location)

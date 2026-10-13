@@ -3,7 +3,7 @@
 Prerequisites:
 - the stack is up (`make up`);
 - the migration is applied (`make kb-init`);
-- a GitLab source with ADRs is configured and enabled in `config/kb-sources.yaml`
+- a GitLab source with ADRs is configured and enabled in `kb/config/sources.yaml`
   ([contract](contracts/kb-sources.md)).
 
 1. **Unit and integration suites**: `cd kb && python -m pytest`, then `make kb-test`. Both are

@@ -1,0 +1,9 @@
+# The build context is this directory; none of this belongs in an image.
+.env*
+!.env.example
+.venv
+.pytest_cache
+**/__pycache__
+**/*.egg-info
+config/sources.yaml
+tests

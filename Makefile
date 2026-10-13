@@ -5,12 +5,16 @@
 SHELL := /usr/bin/env bash
 SERVICE ?= api
 
+# Modules contribute their own targets and keep them next to their code; this
+# file keeps the stack's.
+include kb/module.mk
+
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config librechat-migrate kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config librechat-migrate user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 up: ## Start the whole stack -- build, wait healthy, create admin if needed. Safe to rerun.
 	scripts/bootstrap.sh
@@ -46,42 +50,6 @@ backup: ## Snapshot every named volume + .env into backups/<timestamp>/
 
 restore: ## Restore from a backup dir, e.g. `make restore DIR=backups/20260101-000000`
 	scripts/restore.sh $(DIR)
-
-kb-init: ## Create/upgrade the knowledge base schema + its read-only role (idempotent)
-	scripts/kb-init.sh
-
-kb-setup: ## Bring the knowledge base up and report what is still needed (runs inside `make up` too)
-	# kb-scheduler bind-mounts config/kb-sources.yaml -- create it before any
-	# `docker compose up`, or Docker creates the mountpoint as an empty
-	# directory when the file doesn't exist yet, and everything downstream
-	# (including this file's own template copy) breaks on a fresh checkout.
-	@[ -f config/kb-sources.yaml ] || cp config/kb-sources.yaml.example config/kb-sources.yaml
-	# --build, because a kb/ change that isn't in the image is a service quietly
-	# running last week's code -- which looks like "it stopped syncing".
-	docker compose up -d --build kb-db mcp-kb kb-scheduler
-	scripts/kb-bootstrap.sh
-
-kb-sync: ## Sync one source into the catalog, e.g. `make kb-sync SOURCE=confluence-eng [MODE=incremental] [DRY_RUN=1]`
-	@test -n "$(SOURCE)" || { echo "Usage: make kb-sync SOURCE=<id from config/kb-sources.yaml>" >&2; exit 1; }
-	docker compose run --rm kb-cli sync --source $(SOURCE) --mode $(or $(MODE),full) $(if $(DRY_RUN),--dry-run,)
-
-kb-sync-all: ## Full-sync every source enabled in config/kb-sources.yaml, one at a time; FORCE=1 bypasses the content-hash gate
-	scripts/kb-sync-all.sh $(if $(FORCE),--force,)
-
-kb-sources: ## List the configured sources and whether each is enabled
-	docker compose run --rm kb-cli sources
-
-kb-sources-discover: ## Propose sources from what Confluence/Jira actually contain; WRITE=1 appends them (disabled) for review
-	docker compose run --rm kb-cli discover $(if $(WRITE),--write,)
-
-kb-check: ## Is everything the catalog depends on actually usable (database, summarizer, sources)
-	docker compose run --rm kb-cli check
-
-kb-status: ## What the catalog contains right now
-	docker compose run --rm kb-cli status
-
-kb-test: ## Run kb's own suite, including the Postgres-backed tests, against a throwaway database
-	scripts/kb-test.sh
 
 test: ## Run mcp-server's pytest suite inside the built mcp-agent-skills image
 	docker compose run --rm --user root --entrypoint sh mcp-agent-skills -c \
