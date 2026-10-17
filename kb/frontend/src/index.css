@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #020617; /* slate-950 */
+}
+
+/* Persian and other right-to-left text gets a font that has it, and the
+   form editor sets dir="rtl" per field. */
+[dir='rtl'] {
+  font-family: 'Vazirmatn', 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

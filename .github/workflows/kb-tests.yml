@@ -58,3 +58,24 @@ jobs:
       - run: pip install -e '.[dev,store,sources,mcp]'
 
       - run: python -m pytest
+
+  # The admin console's web app (kb/frontend): types, unit tests, and a
+  # production build -- the same `npm run build` the image runs, so a build that
+  # would fail `docker compose build` fails here first.
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: kb/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: kb/frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

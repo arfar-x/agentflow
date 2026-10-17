@@ -1,0 +1,7 @@
+# The image installs its own dependencies and builds the web app itself.
+**/node_modules
+**/dist
+frontend/dist
+.venv
+**/__pycache__
+.pytest_cache
