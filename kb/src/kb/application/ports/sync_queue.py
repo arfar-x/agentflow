@@ -17,6 +17,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class RequestKind(str, Enum):
     SYNC = "sync"
     PURGE_CONTENT = "purge_content"
+    #: Soft-delete everything a source produced. For a source that is gone from
+    #: the configuration: nothing else would ever retire its entries.
+    RETIRE_SOURCE = "retire_source"
 
 
 class RequestStatus(str, Enum):

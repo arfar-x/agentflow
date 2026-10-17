@@ -1,8 +1,8 @@
-import { AlertTriangle, Database, HardDrive, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertTriangle, Database, HardDrive, History, Pause, Pencil, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 
 import { api } from '../../api/api';
-import type { SourceCard } from '../../api/types';
+import type { ChangePreview, SourceCard, SourceChange } from '../../api/types';
 import { useConsole } from '../../components/ConsoleContext';
 import { Badge, StatusDot, runTone } from '../../components/ui/Badge';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -12,6 +12,9 @@ import { useToast } from '../../components/ui/Toast';
 import { formatBytes, relativeTime } from '../../lib/format';
 import { credentialsMissing, describeMechanisms, describeSettings } from '../../lib/sources';
 import { useResource } from '../../lib/useResource';
+import { ApprovalDialog } from './ApprovalDialog';
+import { RevisionsModal } from './RevisionsModal';
+import { SourceEditorModal } from './SourceEditorModal';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -20,7 +23,14 @@ const FILTERS = [
   { id: 'text', label: 'Stores text' },
 ] as const;
 
-export function SourcesView({ onNavigate }: { onNavigate: (name: string, param?: number) => void }) {
+export function SourcesView({
+  onNavigate,
+  focusId,
+}: {
+  onNavigate: (name: string, param?: string | number | null) => void;
+  /** Open this source's editor on arrival (the schedule's "change cadence"). */
+  focusId?: string | null;
+}) {
   const { openTrigger, overview } = useConsole();
   const toast = useToast();
   const sources = useResource(api.sources, [], 15000);
@@ -29,6 +39,22 @@ export function SourcesView({ onNavigate }: { onNavigate: (name: string, param?:
   const [purging, setPurging] = useState<SourceCard | null>(null);
   const [busy, setBusy] = useState(false);
   const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<SourceCard | 'new' | null>(null);
+  const [pending, setPending] = useState<{ change: SourceChange; preview: ChangePreview } | null>(null);
+  const [history, setHistory] = useState(false);
+  const [retiring, setRetiring] = useState<{ source_id: string; entries: number } | null>(null);
+  // Deleting a source leaves its entries searchable; offer to retire them with it.
+  const [alsoRetire, setAlsoRetire] = useState(true);
+  const retireAfter = useRef<{ id: string; entries: number } | null>(null);
+  const { overview: consoleOverview } = useConsole();
+
+  const focused = useRef<string | null>(null);
+  if (focusId && sources.data && focused.current !== focusId) {
+    focused.current = focusId;
+    const target = sources.data.sources.find((s) => s.id === focusId);
+    if (target && sources.data.editable) queueMicrotask(() => setEditing(target));
+    queueMicrotask(() => onNavigate('sources'));
+  }
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -44,6 +70,49 @@ export function SourcesView({ onNavigate }: { onNavigate: (name: string, param?:
       );
     });
   }, [sources.data, filter, search]);
+
+  const startChange = async (change: SourceChange, retire?: { id: string; entries: number }) => {
+    try {
+      const preview = await api.previewSource(change);
+      retireAfter.current = retire ?? null;
+      setAlsoRetire(true);
+      setPending({ change, preview });
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  };
+
+  const applied = async () => {
+    const retire = alsoRetire ? retireAfter.current : null;
+    setPending(null);
+    setEditing(null);
+    toast('Written to kb-sources.yaml. The scheduler reads it on its next tick.');
+    if (retire) {
+      try {
+        await api.retireSource(retire.id);
+        toast(`Removing ${retire.entries} entries of ${retire.id} from the catalog — queued for the scheduler.`);
+      } catch (err) {
+        toast((err as Error).message, 'error');
+      }
+    }
+    sources.reload();
+    consoleOverview.reload();
+  };
+
+  const retire = async () => {
+    if (!retiring) return;
+    setBusy(true);
+    try {
+      await api.retireSource(retiring.source_id);
+      toast(`Removing ${retiring.entries} entries of ${retiring.source_id} — queued for the scheduler.`);
+      setRetiring(null);
+      sources.reload();
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const purge = async () => {
     if (!purging) return;
@@ -74,7 +143,34 @@ export function SourcesView({ onNavigate }: { onNavigate: (name: string, param?:
         </>
       }
       onRefresh={sources.reload}
+      actions={
+        <>
+          {sources.data.approved ? (
+            <button
+              type="button"
+              className={sources.data.approved.value ? button.secondary : button.warning}
+              disabled={!sources.data.editable}
+              onClick={() => startChange({ action: 'approved', value: !sources.data!.approved!.value })}
+              title={sources.data.approved.value ? 'Stop every source syncing' : 'Syncing is off for every source'}
+            >
+              {sources.data.approved.value ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              {sources.data.approved.value ? 'Syncing on' : 'Syncing off — switch on…'}
+            </button>
+          ) : null}
+          <button type="button" className={button.secondary} onClick={() => setHistory(true)}>
+            <History className="h-3.5 w-3.5" /> History
+          </button>
+          <button type="button" className={button.primary} disabled={!sources.data.editable} onClick={() => setEditing('new')}>
+            <Plus className="h-3.5 w-3.5" /> Add a source
+          </button>
+        </>
+      }
     >
+      {!sources.data.editable && !sources.data.config_error ? (
+        <Notice tone="amber">
+          The console cannot write <code>config/kb-sources.yaml</code> (it is mounted read-only, or owned by a user the console does not run as — see <code>KB_ADMIN_USER</code>). Edit the file by hand; this page still shows it.
+        </Notice>
+      ) : null}
       {sources.data.config_error ? <Notice tone="rose">The source configuration cannot be read: {sources.data.config_error}</Notice> : null}
 
       <div className="flex flex-col justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3 sm:flex-row sm:items-center">
@@ -113,13 +209,84 @@ export function SourcesView({ onNavigate }: { onNavigate: (name: string, param?:
               key={source.id}
               source={source}
               now={now}
+              editable={Boolean(sources.data?.editable)}
               onSync={() => openTrigger(source.id)}
               onPurge={() => setPurging(source)}
               onRun={(id) => onNavigate('reports', id)}
+              onEdit={() => setEditing(source)}
+              onDelete={() => startChange({ action: 'delete', id: source.id }, { id: source.id, entries: source.entries })}
             />
           ))}
         </div>
       )}
+
+      {sources.data.orphans.length ? (
+        <div className={`${card} p-5`}>
+          <h2 className="mb-1 text-sm font-semibold text-slate-200">Entries from sources that are no longer configured</h2>
+          <p className="mb-3 text-xs text-slate-400">
+            Nothing syncs these any more, so nothing retires them: they stay searchable and go stale. Retiring hides them from search (it is reversible — they come back if the source does).
+          </p>
+          <ul className="divide-y divide-slate-800/80">
+            {sources.data.orphans.map((orphan) => (
+              <li key={orphan.source_id} className="flex items-center justify-between py-2.5 text-xs">
+                <span>
+                  <span className="font-semibold text-slate-100">{orphan.source_id}</span> <Badge tone="slate">{orphan.entries} entries</Badge>
+                </span>
+                <button type="button" className={button.secondary} onClick={() => setRetiring(orphan)}>
+                  Remove from the catalog…
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {editing ? (
+        <SourceEditorModal
+          source={editing === 'new' ? null : editing}
+          data={sources.data}
+          onClose={() => setEditing(null)}
+          onPreview={(change, preview) => {
+            retireAfter.current = null;
+            setPending({ change, preview });
+          }}
+        />
+      ) : null}
+
+      {pending ? (
+        <ApprovalDialog
+          change={pending.change}
+          preview={pending.preview}
+          onApplied={applied}
+          onClose={() => setPending(null)}
+          extra={
+            pending.change.action === 'delete' && retireAfter.current ? (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-100">
+                <input type="checkbox" checked={alsoRetire} onChange={(e) => setAlsoRetire(e.target.checked)} className="mt-0.5" />
+                <span>
+                  Also remove its {retireAfter.current.entries} entries from search (recommended). Reversible: it hides them, it does not erase them.
+                </span>
+              </label>
+            ) : null
+          }
+        />
+      ) : null}
+
+      {history ? <RevisionsModal onClose={() => setHistory(false)} /> : null}
+
+      {retiring ? (
+        <ConfirmDialog
+          title="Remove these entries from the catalog?"
+          confirmLabel="Remove from search"
+          busy={busy}
+          onConfirm={retire}
+          onCancel={() => setRetiring(null)}
+        >
+          <p>
+            The {retiring.entries} entries from <strong>{retiring.source_id}</strong> stop appearing in search, and any stored text goes with them. They are kept, marked as removed at the source, and come back if a source with this id is synced again.
+          </p>
+        </ConfirmDialog>
+      ) : null}
 
       {purging ? (
         <ConfirmDialog
@@ -147,15 +314,21 @@ export function SourcesView({ onNavigate }: { onNavigate: (name: string, param?:
 function SourceCardView({
   source,
   now,
+  editable,
   onSync,
   onPurge,
   onRun,
+  onEdit,
+  onDelete,
 }: {
   source: SourceCard;
   now: string;
+  editable: boolean;
   onSync: () => void;
   onPurge: () => void;
   onRun: (id: number) => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const missing = credentialsMissing(source);
   const last = source.last_run;
@@ -258,6 +431,12 @@ function SourceCardView({
           ) : null}
           <button type="button" className={button.icon} onClick={onSync} title="Sync this source" aria-label={`Sync ${source.id}`}>
             <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" className={button.icon} onClick={onEdit} disabled={!editable} title="Edit this source" aria-label={`Edit ${source.id}`}>
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" className={`${button.icon} hover:!bg-rose-900/40 hover:!text-rose-400`} onClick={onDelete} disabled={!editable} title="Delete this source" aria-label={`Delete ${source.id}`}>
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

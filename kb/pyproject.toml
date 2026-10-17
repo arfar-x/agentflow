@@ -15,6 +15,9 @@ dependencies = ["pydantic>=2.7,<3"]
 store = ["psycopg[binary]>=3.2,<4"]
 sources = ["requests>=2.31,<3", "PyYAML>=6.0,<7"]
 mcp = ["fastmcp>=3.4,<4"]
+# The admin console edits kb-sources.yaml without losing its comments or its
+# ${VAR} placeholders, which PyYAML cannot do; ruamel.yaml round-trips both.
+admin = ["ruamel.yaml>=0.18,<1"]
 dev = ["pytest>=8.0"]
 
 [build-system]

@@ -137,3 +137,33 @@ def credential_variables(config: AnySource) -> tuple[str, ...]:
 def credential_presence(config: AnySource, env: Mapping[str, str] | None = None) -> dict[str, bool]:
     environment = os.environ if env is None else env
     return {name: bool(environment.get(name)) for name in credential_variables(config)}
+
+
+#: The kinds `build_source` can build -- what the console may add.
+BUILDABLE_KINDS = ("confluence", "jira", "gitlab")
+
+
+def missing_credentials(config: AnySource, seen: Mapping[str, bool]) -> list[str]:
+    """What this source still needs, given which variables the scheduler can see.
+
+    Mirrors `build_source`, which is the authority; this only lets the console
+    warn before a sync fails for want of them. Names only.
+    """
+    def has(*names: str) -> bool:
+        return any(seen.get(name) for name in names)
+
+    if isinstance(config, (ConfluenceSource, JiraSource)):
+        prefix = "CONFLUENCE" if isinstance(config, ConfluenceSource) else "JIRA"
+        missing: list[str] = []
+        if not has(f"KB_{prefix}_BASE_URL", f"{prefix}_BASE_URL"):
+            missing.append(f"KB_{prefix}_BASE_URL")
+        if not (
+            has(f"KB_{prefix}_PAT", f"{prefix}_PAT")
+            or (
+                has(f"KB_{prefix}_USERNAME", f"{prefix}_USERNAME")
+                and has(f"KB_{prefix}_PASSWORD", f"{prefix}_PASSWORD")
+            )
+        ):
+            missing.append(f"KB_{prefix}_PAT (or KB_{prefix}_USERNAME + KB_{prefix}_PASSWORD)")
+        return missing
+    return [name for name, ok in seen.items() if not ok]

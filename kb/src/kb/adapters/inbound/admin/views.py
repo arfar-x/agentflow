@@ -23,6 +23,13 @@ from kb.sources_config import SourcesConfig
 _COMMON_FIELDS = {"id", "kind", "enabled", "mechanisms", "store_raw_content", "raw_content_max_bytes"}
 
 
+def _without_empty(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned = {k: _without_empty(v) for k, v in value.items()}
+        return {k: v for k, v in cleaned.items() if v != {} and v is not None}
+    return value
+
+
 def to_json(value: Any) -> str:
     return json.dumps(value, default=_default, ensure_ascii=False)
 
@@ -96,6 +103,7 @@ def source_card(
     content: Mapping[str, int] | None,
     last_run: RunRecord | None,
     credentials: Mapping[str, bool] | None,
+    origin: str = "yaml",
 ) -> dict[str, Any]:
     policy = config.content_policy_for(source)
     mechanisms = config.mechanisms_for(source).model_dump(exclude_none=True)
@@ -104,10 +112,15 @@ def source_card(
         "kind": source.kind,
         "enabled": source.enabled,
         "mechanisms": mechanisms,
+        # What the source itself says, apart from the defaults it inherits: the
+        # edit form needs it, or saving would copy every default into the file.
+        "own_mechanisms": _without_empty(source.mechanisms.model_dump(exclude_none=True)),
         # Said per source because turning it on shares the full text with every
         # catalog user whatever their access to the original (spec C6).
         "store_raw_content": policy.store,
         "raw_content_max_bytes": policy.max_bytes,
+        # The source's own cap, None when it uses the default.
+        "own_raw_content_max_bytes": source.raw_content_max_bytes,
         "settings": source.model_dump(mode="json", exclude=_COMMON_FIELDS),
         "entries": entries,
         "content": {
@@ -117,5 +130,6 @@ def source_card(
         "last_run": run_summary(last_run),
         # Which credential variables the scheduler can see -- never a value.
         "credentials": dict(credentials or {}),
-        "origin": "yaml",
+        # Where it came from: written in the file, or added from the console.
+        "origin": origin,
     }

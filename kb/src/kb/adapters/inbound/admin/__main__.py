@@ -34,6 +34,7 @@ def main() -> None:  # pragma: no cover -- wiring and uvicorn
         sources_file=Path(settings.sources_file),
         languages=settings.summary_languages,
         summarizer=container.summarizer,
+        sources_editor=container.sources_editor,
         extras=container.extras,
     )
     try:

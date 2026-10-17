@@ -179,3 +179,53 @@ def test_the_heartbeat_is_one_row_that_is_rewritten(heartbeats, store):
     with store.connection.cursor() as cursor:
         cursor.execute("SELECT count(*) AS n FROM scheduler_heartbeat")
         assert cursor.fetchone()["n"] == 1
+
+
+# -- the console's copy of the sources, and their history (FR-CFG-12) ---------------
+
+
+@pytest.fixture()
+def history(store):
+    from kb.adapters.outbound.postgres_sources import PostgresSourceHistory
+
+    return PostgresSourceHistory(store.connection)
+
+
+def _config(*ids, enabled=True):
+    from kb.sources_config import parse
+
+    body = "".join(f"  - {{id: {i}, kind: jira, jql: x, enabled: {str(enabled).lower()}}}\n" for i in ids)
+    return parse("sources:\n" + body, env={}, lenient=True)
+
+
+# Covers: FR-CFG-12
+def test_revisions_are_kept_newest_first_with_what_changed(history):
+    first = history.record(action="file", source_id=None, actor="file", at=T0, before_text="", after_text="a",
+                           diff="+a", after_hash="h1")
+    second = history.record(action="update", source_id="jira", actor="admin (1.2.3.4)", at=T0 + timedelta(minutes=1),
+                            before_text="a", after_text="b", diff="-a\n+b", after_hash="h2")
+    assert history.last_hash() == "h2" and history.last_text() == "b"
+    listed = history.revisions()
+    assert [r.id for r in listed] == [second, first]
+    assert (listed[0].action, listed[0].source_id, listed[0].actor, listed[0].diff) == ("update", "jira", "admin (1.2.3.4)", "-a\n+b")
+
+
+# Covers: FR-CFG-12
+def test_the_copy_follows_the_file_and_remembers_where_a_source_came_from(history):
+    history.mirror(_config("a", "b"), created=["b"], at=T0)
+    assert history.origins() == {"a": "yaml", "b": "ui"}
+
+    history.mirror(_config("a", "b", "c"), created=[], at=T0)
+    assert history.origins() == {"a": "yaml", "b": "ui", "c": "yaml"}, "a source keeps the origin it first had"
+
+    history.mirror(_config("c"), created=[], at=T0)
+    assert history.origins() == {"c": "yaml"}, "a source the file no longer has leaves the copy"
+
+
+# Covers: FR-CFG-12
+def test_the_copy_stores_each_sources_settings_as_data(history, store):
+    history.mirror(_config("a", enabled=False), created=[], at=T0)
+    with store.connection.cursor() as cursor:
+        cursor.execute("SELECT kind, enabled, config FROM kb_source WHERE id = 'a'")
+        row = cursor.fetchone()
+    assert (row["kind"], row["enabled"], row["config"]["jql"]) == ("jira", False, "x")

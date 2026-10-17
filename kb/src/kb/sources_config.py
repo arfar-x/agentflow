@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from kb.domain.content import (
     DEFAULT_RAW_CONTENT_MAX_BYTES,
@@ -92,12 +92,24 @@ def _comment_starts_at(line: str) -> int | None:
     return None
 
 
-def interpolate(text: str, env: dict[str, str] | None = None, *, path: Path | None = None) -> str:
+def interpolate(
+    text: str,
+    env: dict[str, str] | None = None,
+    *,
+    path: Path | None = None,
+    lenient: bool = False,
+) -> str:
     """Resolve every `${VAR}` in `text`, before YAML parsing.
 
     Before parsing, not after, so a variable may supply any part of the
     document -- a value, a list item, or a whole block -- as Compose behaves.
     Comments are left alone: they are documentation, not configuration.
+
+    `lenient` is for a reader that does not hold the source credentials -- the
+    admin console -- and so cannot resolve the variables that carry them: a
+    variable with neither a value nor a default is left as written instead of
+    failing. The scheduler never reads this way; it is the authority on whether
+    the file is complete (FR-CFG-02).
     """
     source = os.environ if env is None else env
     offset = 0  # characters consumed so far, for reporting the right line
@@ -108,6 +120,8 @@ def interpolate(text: str, env: dict[str, str] | None = None, *, path: Path | No
         if value is None or value == "":
             if default is not None:
                 return default
+            if lenient:
+                return match.group(0)
             line = text[: offset + match.start()].count("\n") + 1
             raise ConfigError(
                 f"${{{name}}} is not set and has no default (write ${{{name}:-…}} if it is optional)",
@@ -159,10 +173,26 @@ class Mechanisms(BaseModel):
         return Mechanisms.model_validate(merged)
 
 
+#: The id the built-in manual-records source goes by (spec FR-SRC-07). Reserved,
+#: so a configured source can never collide with it.
+FORM_SOURCE_ID = "form"
+_SOURCE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_ENV_NAME = r"^[A-Za-z_][A-Za-z0-9_]*$"
+
+
 class _BaseSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1)
+
+    @field_validator("id")
+    @classmethod
+    def _id_is_a_usable_slug(cls, value: str) -> str:
+        if value == FORM_SOURCE_ID:
+            raise ValueError(f"{FORM_SOURCE_ID!r} is reserved for the built-in manual records")
+        if not _SOURCE_ID.match(value):
+            raise ValueError("use letters, digits, '.', '_' or '-' (it becomes part of every entry id)")
+        return value
     enabled: bool = False  # discovery writes candidates disabled; opt in by hand
     mechanisms: Mechanisms = Field(default_factory=Mechanisms)
     #: Keep each document's text in the catalog, readable through `kb_get` by
@@ -215,14 +245,17 @@ class GitLabProject(BaseModel):
 class GitLabSource(_BaseSource):
     kind: Literal["gitlab"]
     base_url: str = Field(min_length=1)
-    token_env: str = "GITLAB_TOKEN"
+    #: The NAME of the variable holding the token -- never the token (FR-CFG-04).
+    #: Refusing anything that is not shaped like a variable name stops a pasted
+    #: secret from being saved into a file that is read by people and by git.
+    token_env: str = Field(default="GITLAB_TOKEN", pattern=_ENV_NAME)
     projects: tuple[GitLabProject, ...] = ()
 
 
 class HttpApiSource(_BaseSource):
     kind: Literal["http_api"]
     url: str = Field(min_length=1)
-    token_env: str | None = None
+    token_env: str | None = Field(default=None, pattern=_ENV_NAME)
     mapping: dict[str, str] = Field(default_factory=dict)
 
 
@@ -321,14 +354,31 @@ def _with_environment_approval(document: dict, env) -> dict:
     return document
 
 
-def load(path: Path | None = None, *, env: dict[str, str] | None = None) -> SourcesConfig:
+def load(
+    path: Path | None = None,
+    *,
+    env: dict[str, str] | None = None,
+    lenient: bool = False,
+) -> SourcesConfig:
     """Read, interpolate, parse and validate the source configuration."""
     location = path or Path(os.environ.get("KB_SOURCES_FILE", DEFAULT_PATH))
     if not location.exists():
         raise ConfigError("file not found -- copy config/kb-sources.yaml.example to it", path=location)
+    return parse(location.read_text(encoding="utf-8"), path=location, env=env, lenient=lenient)
 
+
+def parse(
+    text: str,
+    *,
+    path: Path | None = None,
+    env: dict[str, str] | None = None,
+    lenient: bool = False,
+) -> SourcesConfig:
+    """The same reading as `load`, from text -- so a proposed edit can be
+    checked with exactly the rules the scheduler will apply to it."""
+    location = path or Path("kb-sources.yaml")
     environment = os.environ if env is None else env
-    raw = interpolate(location.read_text(encoding="utf-8"), env, path=location)
+    raw = interpolate(text, env, path=location, lenient=lenient)
     try:
         document: Any = yaml.safe_load(raw) or {}
     except yaml.YAMLError as exc:

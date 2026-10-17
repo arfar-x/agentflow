@@ -94,9 +94,14 @@ export interface SourceCard {
   id: string;
   kind: SourceKind | string;
   enabled: boolean;
+  /** Effective: the defaults with this source's own settings on top. */
   mechanisms: Record<string, MechanismSettings>;
+  /** Only what this source itself says. */
+  own_mechanisms: Record<string, MechanismSettings>;
   store_raw_content: boolean;
   raw_content_max_bytes: number;
+  /** The source's own cap; null when it uses the default. */
+  own_raw_content_max_bytes: number | null;
   settings: Record<string, unknown>;
   entries: number;
   content: { documents: number; text_bytes: number };
@@ -107,8 +112,43 @@ export interface SourceCard {
 
 export interface SourcesResponse {
   config_error: string | null;
+  editable: boolean;
   approved?: Approval;
+  defaults?: { mechanisms: Record<string, MechanismSettings>; raw_content_max_bytes: number };
+  /** Entries whose source is no longer configured. */
+  orphans: { source_id: string; entries: number }[];
   sources: SourceCard[];
+}
+
+/** One edit of kb-sources.yaml; mirrors the server's SourceChange. */
+export type SourceChange =
+  | { action: 'create'; config: Record<string, unknown> }
+  | { action: 'update'; id: string; config: Record<string, unknown> }
+  | { action: 'delete'; id: string }
+  | { action: 'approved'; value: boolean };
+
+export interface ChangeWarning {
+  level: 'info' | 'warning' | 'danger';
+  text: string;
+}
+
+export interface ChangePreview {
+  action: string;
+  source_id: string | null;
+  summary: string;
+  diff: string;
+  changed: boolean;
+  warnings: ChangeWarning[];
+  etag: string;
+}
+
+export interface Revision {
+  id: number;
+  action: string;
+  source_id: string | null;
+  actor: string;
+  at: string;
+  diff: string;
 }
 
 export interface ScheduleRow {

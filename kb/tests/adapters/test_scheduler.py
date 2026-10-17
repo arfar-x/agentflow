@@ -583,3 +583,22 @@ def test_the_heartbeat_reports_the_summarizers_last_verdict(wired):
     scheduler.tick(NOON + timedelta(seconds=10))
     beat = container.heartbeats.last_beat()
     assert beat.summarizer == "failing" and "403" in beat.summarizer_error
+
+
+def test_the_entries_of_a_source_that_is_gone_can_be_retired_on_request(wired):
+    # Covers: FR-SCH-11, FR-ADM-16
+    container, store, scheduler, path = wired
+    scheduler.tick(NOON)  # catalogues one entry from confluence-eng
+    assert len(store.entries) == 1
+    # The source is deleted from the file; nothing will sync it again.
+    path.write_text("approved: true\nsources: []\n", encoding="utf-8")
+    container.queue.enqueue(SyncRequest(source_id="confluence-eng", kind=RequestKind.RETIRE_SOURCE), at=NOON)
+
+    scheduler.tick(NOON + timedelta(minutes=1))
+
+    request = container.queue.requests[-1]
+    assert request.status is RequestStatus.DONE
+    [entry] = store.entries.values()
+    assert entry.deleted_at is not None, "soft-deleted, not erased (FR-REC-05)"
+    run = container.runs.get_run(request.run_ids[0])
+    assert (run.mechanism, run.missing, run.triggered_by) == ("retire", 1, Trigger.MANUAL)

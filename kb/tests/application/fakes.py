@@ -435,3 +435,73 @@ class FakeHeartbeats:
 
     def last_beat(self) -> Heartbeat | None:
         return self.beats[-1] if self.beats else None
+
+
+class FakeSourcesFile:
+    """kb-sources.yaml in memory, with the same fingerprinting rule as the real one."""
+
+    def __init__(self, text: str = "", *, writable: bool = True) -> None:
+        self.text = text
+        self._writable = writable
+        self.writes = 0
+
+    @staticmethod
+    def _etag(text: str) -> str:
+        import hashlib
+
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
+
+    def snapshot(self):
+        from kb.application.ports.source_files import FileSnapshot
+
+        return FileSnapshot(text=self.text, etag=self._etag(self.text))
+
+    def writable(self) -> bool:
+        return self._writable
+
+    def write(self, text: str, *, expected_etag: str):
+        from kb.application.ports.source_files import FileChanged, FileNotWritable, FileSnapshot
+
+        if not self._writable:
+            raise FileNotWritable("read-only")
+        if self._etag(self.text) != expected_etag:
+            raise FileChanged("changed")
+        self.text = text
+        self.writes += 1
+        return FileSnapshot(text=text, etag=self._etag(text))
+
+
+class FakeSourceHistory:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+        self._origins: dict[str, str] = {}
+
+    def record(self, *, action, source_id, actor, at, before_text, after_text, diff, after_hash) -> int:
+        self.rows.append(
+            dict(id=len(self.rows) + 1, action=action, source_id=source_id, actor=actor, at=at,
+                 before_text=before_text, after_text=after_text, diff=diff, after_hash=after_hash)
+        )
+        return len(self.rows)
+
+    def last_hash(self):
+        return self.rows[-1]["after_hash"] if self.rows else None
+
+    def last_text(self):
+        return self.rows[-1]["after_text"] if self.rows else None
+
+    def revisions(self, *, limit: int = 50):
+        from kb.application.ports.source_history import Revision
+
+        return [
+            Revision(**{k: r[k] for k in ("id", "action", "source_id", "actor", "at", "diff")})
+            for r in reversed(self.rows)
+        ][:limit]
+
+    def mirror(self, config, *, created, at) -> None:
+        keep = {s.id for s in config.sources}
+        self._origins = {k: v for k, v in self._origins.items() if k in keep}
+        for source in config.sources:
+            self._origins.setdefault(source.id, "ui" if source.id in created else "yaml")
+
+    def origins(self):
+        return dict(self._origins)

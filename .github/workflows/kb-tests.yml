@@ -55,7 +55,7 @@ jobs:
 
       # Every extra: the suite imports the adapters (psycopg, requests/yaml,
       # fastmcp), so collection fails without them.
-      - run: pip install -e '.[dev,store,sources,mcp]'
+      - run: pip install -e '.[dev,store,sources,mcp,admin]'
 
       - run: python -m pytest
 

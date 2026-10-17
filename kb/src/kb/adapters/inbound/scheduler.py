@@ -341,6 +341,15 @@ class Scheduler:
         if mechanism == "purge":
             purged = self._container.store.purge_content(source_id or "")
             return _Result(counts={"content_purged": purged})
+        if mechanism == "retire":
+            # The soft delete a full pass gives a vanished document (FR-REC-05),
+            # for every entry of a source nothing will ever sync again. Kept
+            # text goes with each entry (FR-CNT-06).
+            store = self._container.store
+            retired = store.mark_missing(
+                store.ids_for_source(source_id or ""), at=self._container.clock.now()
+            )
+            return _Result(counts={"missing": retired})
 
         if config is None:
             raise RuntimeError("the source configuration cannot be read (see the heartbeat)")
@@ -435,9 +444,11 @@ class Scheduler:
                 if self._elsewhere_running(target):
                     errors.append(f"{target}: a run is already in progress")
                     continue
-                if request.kind is RequestKind.PURGE_CONTENT:
+                if request.kind in (RequestKind.PURGE_CONTENT, RequestKind.RETIRE_SOURCE):
                     outcome = self._perform(
-                        mechanism="purge", source_id=target, config=config,
+                        mechanism="purge" if request.kind is RequestKind.PURGE_CONTENT else "retire",
+                        source_id=target,
+                        config=config,
                         triggered_by=Trigger.MANUAL,
                     )
                 else:

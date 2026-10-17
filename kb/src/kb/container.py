@@ -132,7 +132,9 @@ class AdminContainer:
     clock: SystemClock
     #: Has `check()`; None when no summarizer is configured.
     summarizer: Any = None
-    #: Room for what later parts of the console add (forms, sources).
+    #: `EditSources`: how the console changes kb-sources.yaml.
+    sources_editor: Any = None
+    #: Room for what later parts of the console add.
     extras: dict[str, Any] = field(default_factory=dict)
 
     def close(self) -> None:
@@ -150,16 +152,39 @@ def build_admin(settings: Settings | None = None) -> AdminContainer:
         PostgresRunLog,
         PostgresSyncQueue,
     )
+    from pathlib import Path
+
+    from kb.adapters.outbound.postgres_sources import PostgresSourceHistory
     from kb.adapters.outbound.postgres_store import PostgresEntryStore
+    from kb.adapters.outbound.source_factory import BUILDABLE_KINDS, missing_credentials
+    from kb.adapters.outbound.sources_editor import RuamelSourceEditor
+    from kb.adapters.outbound.sources_file import FileSourcesFile
+    from kb.application.use_cases.edit_sources import EditSources
 
     settings = settings or Settings.from_env()
     store = PostgresEntryStore.connect(settings.database_url)
+    heartbeats = PostgresHeartbeat(store.connection)
+    clock = SystemClock(settings.tzinfo)
+
+    def scheduler_credentials():
+        beat = heartbeats.last_beat()
+        return beat.credentials if beat else {}
+
     return AdminContainer(
         settings=settings,
         store=store,
         runs=PostgresRunLog(store.connection),
         queue=PostgresSyncQueue(store.connection),
-        heartbeats=PostgresHeartbeat(store.connection),
-        clock=SystemClock(settings.tzinfo),
+        heartbeats=heartbeats,
+        clock=clock,
         summarizer=build_summarizer(settings) if settings.summarizer_configured else None,
+        sources_editor=EditSources(
+            FileSourcesFile(Path(settings.sources_file)),
+            RuamelSourceEditor(),
+            PostgresSourceHistory(store.connection),
+            clock,
+            credentials=scheduler_credentials,
+            buildable_kinds=BUILDABLE_KINDS,
+            missing_credentials=missing_credentials,
+        ),
     )

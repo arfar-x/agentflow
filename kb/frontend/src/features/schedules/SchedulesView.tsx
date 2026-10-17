@@ -19,7 +19,7 @@ function dueText(row: ScheduleRow, now: string): string {
   return delta <= 0 ? 'on the next tick' : relativeTime(row.due_at, now);
 }
 
-export function SchedulesView({ onNavigate }: { onNavigate: (name: string, param?: number) => void }) {
+export function SchedulesView({ onNavigate }: { onNavigate: (name: string, param?: string | number | null) => void }) {
   const { openTrigger } = useConsole();
   const schedules = useResource(api.schedules, [], 10000);
 
@@ -63,6 +63,11 @@ export function SchedulesView({ onNavigate }: { onNavigate: (name: string, param
                 <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950/60 px-4 py-2.5">
                   <Calendar className="h-4 w-4 text-slate-500" />
                   <h2 className="text-sm font-semibold text-slate-100">{source}</h2>
+                  {rows[0]?.source_id ? (
+                    <button type="button" className="ml-auto text-[11px] font-medium text-indigo-400 hover:text-indigo-300" onClick={() => onNavigate('sources', rows[0]!.source_id)}>
+                      Change cadence →
+                    </button>
+                  ) : null}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">

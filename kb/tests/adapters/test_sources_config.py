@@ -367,3 +367,49 @@ sources:
     with pytest.raises(ConfigError) as excinfo:
         load(path)
     assert "raw_content_max_bytes" in str(excinfo.value)
+
+
+# -- parsing from text, leniently, and what a source may be called (§6.11) --------
+
+
+def test_a_proposed_edit_is_read_by_the_same_rules_as_the_file():
+    # Covers: FR-CFG-10
+    from kb.sources_config import ConfigError, parse
+
+    good = "sources:\n  - {id: a, kind: jira, jql: 'project = X'}\n"
+    assert parse(good).sources[0].id == "a"
+    with pytest.raises(ConfigError, match="jql"):
+        parse("sources:\n  - {id: a, kind: jira}\n")
+
+
+def test_a_lenient_read_leaves_a_variable_it_cannot_resolve_as_written():
+    # Covers: FR-CFG-10
+    # The console holds no source credentials, so it cannot resolve the
+    # variables that carry them; it must still be able to read the file.
+    from kb.sources_config import ConfigError, parse
+
+    text = "sources:\n  - {id: g, kind: gitlab, base_url: '${GITLAB_BASE_URL}'}\n"
+    assert parse(text, env={}, lenient=True).sources[0].base_url == "${GITLAB_BASE_URL}"
+    # A default still resolves, and the scheduler's strict reading still refuses.
+    assert parse(text.replace("}'", ":-https://gl}'"), env={}, lenient=True).sources[0].base_url == "https://gl"
+    with pytest.raises(ConfigError, match="GITLAB_BASE_URL"):
+        parse(text, env={})
+
+
+def test_a_token_setting_must_be_the_name_of_a_variable_not_a_secret():
+    # Covers: FR-CFG-04
+    from kb.sources_config import ConfigError, parse
+
+    ok = "sources:\n  - {id: g, kind: gitlab, base_url: https://gl, token_env: MY_GITLAB_TOKEN}\n"
+    assert parse(ok, env={}).sources[0].token_env == "MY_GITLAB_TOKEN"
+    for pasted in ("glpat-abc123XYZ", "ghp_a b", "has space", "1leading"):
+        with pytest.raises(ConfigError, match="token_env"):
+            parse(ok.replace("MY_GITLAB_TOKEN", f"'{pasted}'"), env={})
+
+
+@pytest.mark.parametrize("bad", ["form", "has space", "-leading", "a/b"])
+def test_a_source_id_is_a_slug_and_never_the_reserved_manual_records_id(bad):
+    from kb.sources_config import ConfigError, parse
+
+    with pytest.raises(ConfigError, match="id"):
+        parse(f"sources:\n  - {{id: '{bad}', kind: jira, jql: x}}\n", env={})

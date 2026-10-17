@@ -68,6 +68,18 @@ class RequestSync:
             SyncRequest(kind=RequestKind.PURGE_CONTENT, source_id=source_id, requested_by=requested_by)
         )
 
+    def retire_source(
+        self, *, source_id: str, sources_with_entries: Collection[str], requested_by: str = "admin"
+    ) -> int:
+        """Ask for a source's entries to be soft-deleted. Only a source that has
+        live entries can be retired -- there is nothing to do for one that has
+        none, and saying so beats queueing a no-op."""
+        if source_id not in sources_with_entries:
+            raise InvalidRequest(f"no live entries come from {source_id!r}")
+        return self._enqueue(
+            SyncRequest(kind=RequestKind.RETIRE_SOURCE, source_id=source_id, requested_by=requested_by)
+        )
+
     def cancel(self, request_id: int) -> bool:
         return self._queue.cancel(request_id, at=self._clock.now())
 

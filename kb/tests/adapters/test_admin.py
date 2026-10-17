@@ -16,11 +16,21 @@ from starlette.testclient import TestClient
 
 from kb.adapters.inbound.admin import AdminServices, build_app
 from kb.adapters.inbound.admin.auth import COOKIE, Auth
+from kb.adapters.outbound.source_factory import BUILDABLE_KINDS, missing_credentials
+from kb.adapters.outbound.sources_editor import RuamelSourceEditor
+from kb.adapters.outbound.sources_file import FileSourcesFile
 from kb.application.ports.heartbeat import Heartbeat
+from kb.application.use_cases.edit_sources import EditSources
 from kb.application.ports.sync_queue import RequestStatus, SyncRequest
 from kb.config import AdminSettings, MissingSetting
 from kb.domain.runs import RunStatus, Trigger
-from tests.application.fakes import FakeClock, FakeHeartbeats, FakeRunLog, FakeSyncQueue
+from tests.application.fakes import (
+    FakeClock,
+    FakeHeartbeats,
+    FakeRunLog,
+    FakeSourceHistory,
+    FakeSyncQueue,
+)
 
 NOW = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
 TOKEN = "t" * 40
@@ -55,7 +65,11 @@ class ConsoleStore:
     def status(self):
         return {
             "entries": {"live": 7, "soft_deleted": 1, "searchable": 6},
-            "by_source": [{"source_id": "confluence-eng", "entries": 7}],
+            "by_source": [
+                {"source_id": "confluence-eng", "entries": 7},
+                {"source_id": "retired-wiki", "entries": 3},
+                {"source_id": "form", "entries": 2},
+            ],
             "by_type": [{"type": "doc", "entries": 7}],
             "overrides": 2,
             "gaps": 3,
@@ -95,6 +109,15 @@ def world(tmp_path):
         sources_file=sources,
         languages=("en", "fa"),
         summarizer=Summarizer(),
+    )
+    services.sources_editor = EditSources(
+        FileSourcesFile(sources),
+        RuamelSourceEditor(),
+        FakeSourceHistory(),
+        services.clock,
+        credentials=lambda: services.heartbeats.last_beat().credentials,
+        buildable_kinds=BUILDABLE_KINDS,
+        missing_credentials=missing_credentials,
     )
     services.heartbeats.beat(
         Heartbeat(beat_at=NOW - timedelta(seconds=5),
@@ -247,6 +270,9 @@ def test_every_state_changing_endpoint_needs_the_header(client, world):
         ("post", "/api/sync"),
         ("post", "/api/check"),
         ("post", "/api/sources/confluence-eng/purge-content"),
+        ("post", "/api/sources/retired-wiki/retire"),
+        ("post", "/api/sources/preview"),
+        ("post", "/api/sources/apply"),
         ("delete", f"/api/sync/requests/{request_id}"),
     ):
         assert getattr(client, method)(path).status_code == 403, path
@@ -585,3 +611,168 @@ def test_the_built_app_is_served_with_a_fallback_for_client_side_routes(world, t
     (tmp_path / "secret.txt").write_text("no", encoding="utf-8")
     assert "no" != c.get("/..%2fsecret.txt").text
     assert c.get("/../secret.txt").text.startswith("<html>")
+
+
+# -- changing the source configuration (FR-CFG-10, FR-ADM-11, FR-ADM-16) ----------------------
+
+
+def preview(client, change, **headers):
+    return client.post("/api/sources/preview", headers={**CSRF, **headers}, json={"change": change})
+
+
+def apply(client, change, etag, confirm=True):
+    return client.post("/api/sources/apply", headers=CSRF, json={"change": change, "etag": etag, "confirm": confirm})
+
+
+EDIT_SPACES = {"action": "update", "id": "confluence-eng", "config": {"spaces": ["ENG", "OPS"]}}
+
+
+def test_the_sources_list_says_where_each_came_from_and_whether_it_can_be_edited(client, world):
+    # Covers: FR-ADM-11
+    data = client.get("/api/sources").json()
+    assert data["editable"] is True
+    assert {c["id"]: c["origin"] for c in data["sources"]} == {"confluence-eng": "yaml", "jira-product": "yaml"}
+
+
+def test_a_preview_shows_the_diff_and_the_warnings_and_writes_nothing(client, world):
+    # Covers: FR-ADM-11, FR-CFG-10
+    before = world.sources_file.read_text(encoding="utf-8")
+    body = preview(client, {"action": "update", "id": "confluence-eng", "config": {"store_raw_content": False}}).json()
+    assert world.sources_file.read_text(encoding="utf-8") == before
+    assert body["changed"] is True and "-    store_raw_content: true" in body["diff"]
+    assert any("deletes all the text" in w["text"] for w in body["warnings"])
+    assert body["etag"]
+
+    risky = preview(client, {"action": "update", "id": "jira-product", "config": {"store_raw_content": True}}).json()
+    assert any(w["level"] == "danger" and "every user of the catalog" in w["text"] for w in risky["warnings"])
+
+
+def test_an_apply_changes_the_file_and_the_console_then_shows_it(client, world):
+    # Covers: FR-ADM-11, FR-CFG-10, FR-CFG-12
+    etag = preview(client, EDIT_SPACES).json()["etag"]
+    response = apply(client, EDIT_SPACES, etag)
+    assert response.status_code == 200 and response.json()["changed"] is True
+
+    assert "spaces: [ENG, OPS]" in world.sources_file.read_text(encoding="utf-8")
+    card = next(c for c in client.get("/api/sources").json()["sources"] if c["id"] == "confluence-eng")
+    assert card["settings"]["spaces"] == ["ENG", "OPS"]
+    history = client.get("/api/sources/revisions").json()["revisions"]
+    assert history[0]["action"] == "update"
+    assert history[0]["actor"].startswith("admin (") and "+    spaces: [ENG, OPS]" in history[0]["diff"]
+
+
+def test_an_apply_needs_the_previews_etag_and_an_explicit_confirmation(client, world):
+    # Covers: FR-CFG-10
+    before = world.sources_file.read_text(encoding="utf-8")
+    etag = preview(client, EDIT_SPACES).json()["etag"]
+    assert apply(client, EDIT_SPACES, etag, confirm=False).status_code == 400
+    assert client.post("/api/sources/apply", headers=CSRF, json={"change": EDIT_SPACES, "confirm": True}).status_code == 400
+    assert world.sources_file.read_text(encoding="utf-8") == before
+
+
+def test_a_file_changed_after_the_preview_is_a_conflict_not_an_overwrite(client, world):
+    # Covers: FR-CFG-10
+    etag = preview(client, EDIT_SPACES).json()["etag"]
+    world.sources_file.write_text(world.sources_file.read_text(encoding="utf-8") + "# by hand\n", encoding="utf-8")
+    response = apply(client, EDIT_SPACES, etag)
+    assert response.status_code == 409 and response.json()["error"]["type"] == "conflict"
+    assert world.sources_file.read_text(encoding="utf-8").endswith("# by hand\n")
+    assert "OPS" not in world.sources_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("change, fragment", [
+    ({"action": "create", "config": {"id": "form", "kind": "jira", "jql": "x"}}, "reserved"),
+    ({"action": "create", "config": {"id": "n", "kind": "gitlab", "base_url": "https://g", "token_env": "glpat-secret123"}}, "token_env"),
+    ({"action": "update", "id": "nope", "config": {}}, "no source"),
+    ({"action": "explode"}, "not understood"),
+    ({"nonsense": True}, "not understood"),
+])
+def test_an_invalid_change_is_refused_with_the_reason(client, world, change, fragment):
+    # Covers: FR-CFG-10, FR-CFG-11
+    before = world.sources_file.read_text(encoding="utf-8")
+    response = client.post("/api/sources/preview", headers=CSRF, json={"change": change})
+    assert response.status_code == 400 and fragment in response.json()["error"]["message"]
+    assert world.sources_file.read_text(encoding="utf-8") == before
+
+
+def test_a_new_source_can_be_added_and_is_marked_as_made_in_the_console(client, world):
+    # Covers: FR-ADM-11, FR-CFG-12
+    change = {"action": "create", "config": {"id": "wiki-ops", "kind": "confluence", "spaces": ["OPS"]}}
+    etag = preview(client, change).json()["etag"]
+    assert apply(client, change, etag).status_code == 200
+    cards = {c["id"]: c for c in client.get("/api/sources").json()["sources"]}
+    assert cards["wiki-ops"]["origin"] == "ui" and cards["wiki-ops"]["enabled"] is False
+    assert cards["confluence-eng"]["origin"] == "yaml"
+
+
+def test_syncing_can_be_switched_off_and_on_from_the_console(client, world):
+    # Covers: FR-ADM-11, FR-CFG-05
+    off = {"action": "approved", "value": False}
+    body = preview(client, off).json()
+    assert any(w["level"] == "danger" for w in body["warnings"])
+    apply(client, off, body["etag"])
+    assert client.get("/api/overview").json()["approved"] == {"value": False, "from": "file"}
+    on = {"action": "approved", "value": True}
+    apply(client, on, preview(client, on).json()["etag"])
+    assert client.get("/api/overview").json()["approved"]["value"] is True
+
+
+def test_a_hand_edit_of_the_file_is_noticed_and_recorded(client, world):
+    # Covers: FR-CFG-12
+    client.get("/api/sources")
+    world.sources_file.write_text(world.sources_file.read_text(encoding="utf-8").replace("[ENG]", "[ENG, BIZ]"), encoding="utf-8")
+    client.get("/api/sources")
+    revisions = client.get("/api/sources/revisions").json()["revisions"]
+    assert revisions[0]["action"] == "file" and revisions[0]["actor"] == "file"
+    assert "+    spaces: [ENG, BIZ]" in revisions[0]["diff"]
+
+
+def test_a_file_the_console_cannot_write_is_reported_not_silently_ignored(client, world, monkeypatch):
+    # Covers: FR-ADM-11
+    monkeypatch.setattr(FileSourcesFile, "writable", lambda self: False)
+    assert client.get("/api/sources").json()["editable"] is False
+    etag = preview(client, EDIT_SPACES).json()["etag"]
+    response = apply(client, EDIT_SPACES, etag)
+    assert response.status_code == 409 and response.json()["error"]["type"] == "not_writable"
+    assert "OPS" not in world.sources_file.read_text(encoding="utf-8")
+
+
+def test_editing_is_unavailable_when_the_console_is_not_wired_for_it(client, world):
+    # Covers: FR-ADM-11
+    world.sources_editor = None
+    assert client.get("/api/sources").json()["editable"] is False
+    assert preview(client, EDIT_SPACES).status_code == 400
+
+
+def test_entries_of_a_source_that_is_no_longer_configured_are_listed_apart(client, world):
+    # Covers: FR-ADM-16
+    data = client.get("/api/sources").json()
+    assert data["orphans"] == [{"source_id": "retired-wiki", "entries": 3}], "the manual records' own source is not an orphan"
+
+
+def test_retiring_a_gone_sources_entries_is_a_request_to_the_scheduler(client, world):
+    # Covers: FR-ADM-16
+    response = client.post("/api/sources/retired-wiki/retire", headers=CSRF)
+    assert response.status_code == 202
+    [queued] = world.queue.requests
+    assert (queued.kind.value, queued.source_id) == ("retire_source", "retired-wiki")
+    assert client.post("/api/sources/no-such/retire", headers=CSRF).status_code == 400
+    # Twice is once.
+    client.post("/api/sources/retired-wiki/retire", headers=CSRF)
+    assert len(world.queue.requests) == 1
+
+
+def test_a_source_card_separates_what_it_says_from_what_it_inherits(client, world):
+    # Covers: FR-ADM-11
+    # The edit form needs it: saving must not copy every default into the file.
+    world.sources_file.write_text(
+        CONFIG.replace("    spaces: [ENG]\n", "    spaces: [ENG]\n    mechanisms:\n      incremental: { every: 5m }\n"),
+        encoding="utf-8",
+    )
+    data = client.get("/api/sources").json()
+    card = next(c for c in data["sources"] if c["id"] == "confluence-eng")
+    assert card["own_mechanisms"] == {"incremental": {"every": "5m"}}
+    assert card["mechanisms"]["incremental"] == {"enabled": True, "every": "5m"}
+    assert data["defaults"]["mechanisms"]["incremental"] == {"enabled": True, "every": "15m"}
+    other = next(c for c in data["sources"] if c["id"] == "jira-product")
+    assert other["own_mechanisms"] == {}

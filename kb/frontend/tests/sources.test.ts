@@ -4,7 +4,7 @@ import { credentialsMissing, describeMechanisms, describeSettings } from '../src
 function card(over: Partial<SourceCard>): SourceCard {
   return {
     id: 's', kind: 'confluence', enabled: true, mechanisms: {}, store_raw_content: false,
-    raw_content_max_bytes: 10, settings: {}, entries: 0, content: { documents: 0, text_bytes: 0 },
+    raw_content_max_bytes: 10, own_raw_content_max_bytes: null, own_mechanisms: {}, settings: {}, entries: 0, content: { documents: 0, text_bytes: 0 },
     last_run: null, credentials: {}, origin: 'yaml', ...over,
   };
 }

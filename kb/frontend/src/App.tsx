@@ -54,7 +54,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       <Header current={current} onNavigate={(name) => navigate(name)} onLogout={onLogout} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
         {current === 'overview' && <OverviewView onNavigate={navigate} />}
-        {current === 'sources' && <SourcesView onNavigate={navigate} />}
+        {current === 'sources' && <SourcesView onNavigate={navigate} focusId={route.param} />}
         {current === 'forms' && <Empty>Manual records arrive in a later step of this build.</Empty>}
         {current === 'schedules' && <SchedulesView onNavigate={navigate} />}
         {current === 'reports' && <RunsView openRunId={runId} onOpenRun={openRun} onCloseRun={() => navigate('reports')} />}

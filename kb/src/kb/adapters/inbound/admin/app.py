@@ -18,6 +18,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping
 
+from pydantic import TypeAdapter, ValidationError
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -27,17 +28,20 @@ from starlette.routing import Route
 
 from kb.adapters.inbound.admin import views
 from kb.adapters.inbound.admin.auth import COOKIE, Auth, csrf_ok, same_origin
+from kb.adapters.outbound.source_factory import missing_credentials
 from kb.application.ports.clock import Clock
 from kb.application.ports.heartbeat import HeartbeatStore
+from kb.application.ports.source_files import FileNotWritable, SourceChange
 from kb.application.ports.run_log import RunLog
 from kb.application.ports.sync_queue import RequestStatus, SyncQueue
 from kb.application.use_cases.console_status import assess
+from kb.application.use_cases.edit_sources import Conflict, InvalidChange, NotConfirmed
 from kb.application.use_cases.request_sync import InvalidRequest, RequestSync
 from kb.application.use_cases.schedule import ScheduleState, next_due
 from kb.config import AdminSettings
 from kb.domain.entry import EntryType
 from kb.domain.runs import RunStatus
-from kb.sources_config import ConfigError, SourcesConfig, load
+from kb.sources_config import FORM_SOURCE_ID, ConfigError, SourcesConfig, load
 
 logger = logging.getLogger("kb.admin")
 
@@ -61,6 +65,8 @@ class AdminServices:
     languages: tuple[str, ...] = ("en",)
     #: Has `check()`; None when no summarizer is configured.
     summarizer: Any = None
+    #: `EditSources`; None when the console is not wired to edit the file.
+    sources_editor: Any = None
     extras: dict[str, Any] = field(default_factory=dict)
 
 
@@ -120,6 +126,14 @@ def build_app(
                 return await handler(request)
             except InvalidRequest as exc:
                 return _error(400, "invalid_request", str(exc))
+            except InvalidChange as exc:
+                return _error(400, "invalid_change", str(exc))
+            except NotConfirmed as exc:
+                return _error(400, "not_confirmed", str(exc))
+            except Conflict as exc:
+                return _error(409, "conflict", str(exc))
+            except FileNotWritable as exc:
+                return _error(409, "not_writable", str(exc))
             except Exception:
                 logger.exception("%s %s failed", request.method, request.url.path)
                 return _error(500, "internal", "the console hit an unexpected error; see its log")
@@ -128,7 +142,10 @@ def build_app(
 
     def config() -> tuple[SourcesConfig | None, str | None]:
         try:
-            return load(services.sources_file), None
+            # Lenient: this process has no source credentials, so the variables
+            # that carry them cannot be resolved here. The scheduler, which can,
+            # is the authority on whether the file is complete.
+            return load(services.sources_file, lenient=True), None
         except ConfigError as exc:
             return None, str(exc)
 
@@ -252,11 +269,22 @@ def build_app(
         )
 
     async def sources(_: Request) -> Response:
+        editor = services.sources_editor
+        if editor is not None:
+            # Notice a hand edit of the file, and catch the copy up to it.
+            editor.sync_mirror()
+        origins = editor.origins() if editor is not None else {}
         loaded, error = config()
         if loaded is None:
-            return _json({"sources": [], "config_error": error})
+            return _json({"sources": [], "config_error": error, "editable": False, "orphans": []})
         status = services.store.status()
         entries = {row["source_id"]: row["entries"] for row in status["by_source"]}
+        configured = {s.id for s in loaded.sources}
+        orphans = [
+            {"source_id": row["source_id"], "entries": row["entries"]}
+            for row in status["by_source"]
+            if row["source_id"] not in configured and row["source_id"] != FORM_SOURCE_ID
+        ]
         content = services.store.content_by_source()
         latest = services.runs.latest_per_source()
         beat = services.heartbeats.last_beat()
@@ -264,7 +292,13 @@ def build_app(
         return _json(
             {
                 "config_error": None,
+                "editable": editor is not None and editor.writable(),
+                "defaults": {
+                    "mechanisms": views._without_empty(loaded.defaults.mechanisms.model_dump(exclude_none=True)),
+                    "raw_content_max_bytes": loaded.defaults.raw_content_max_bytes,
+                },
                 "approved": {"value": loaded.approved, "from": loaded.approved_from},
+                "orphans": orphans,
                 "sources": [
                     views.source_card(
                         source,
@@ -273,6 +307,7 @@ def build_app(
                         content=content.get(source.id),
                         last_run=latest.get(source.id),
                         credentials=credentials.get(source.id),
+                        origin=origins.get(source.id, "yaml"),
                     )
                     for source in loaded.sources
                 ],
@@ -349,7 +384,7 @@ def build_app(
         if loaded and beat:
             for source in loaded.enabled_sources():
                 variables = beat.credentials.get(source.id, {})
-                if variables and not _credentials_satisfied(source.kind, variables):
+                if variables and missing_credentials(source, variables):
                     missing.append({"source_id": source.id, "kind": source.kind, "variables": variables})
         return _json(
             {
@@ -443,6 +478,50 @@ def build_app(
         )
         return _json({"request_id": request_id}, 202)
 
+    # -- changing the source configuration (FR-CFG-10) ---------------------------
+    def editor():
+        if services.sources_editor is None:
+            raise InvalidRequest("this console is not set up to edit the source configuration")
+        return services.sources_editor
+
+    def parse_change(payload: dict[str, Any]) -> SourceChange:
+        try:
+            return TypeAdapter(SourceChange).validate_python(payload.get("change"))
+        except ValidationError as exc:
+            problems = "; ".join(f"{'.'.join(str(p) for p in d['loc'])}: {d['msg']}" for d in exc.errors())
+            raise InvalidRequest(f"the change is not understood: {problems}") from exc
+
+    async def sources_preview(request: Request) -> Response:
+        change = parse_change(await _body(request))
+        return _json(editor().preview(change))
+
+    async def sources_apply(request: Request) -> Response:
+        payload = await _body(request)
+        change = parse_change(payload)
+        etag = payload.get("etag")
+        if not isinstance(etag, str) or not etag:
+            raise InvalidRequest("apply the preview you were shown: send its etag")
+        client = request.client.host if request.client else "unknown"
+        applied = editor().apply(
+            change, etag=etag, actor=f"admin ({client})", confirmed=payload.get("confirm") is True
+        )
+        return _json(applied)
+
+    async def sources_revisions(request: Request) -> Response:
+        try:
+            limit = max(1, min(int(request.query_params.get("limit", 50)), 200))
+        except ValueError as exc:
+            raise InvalidRequest("limit must be a number") from exc
+        editor().sync_mirror()
+        return _json({"revisions": editor().revisions(limit=limit)})
+
+    async def retire_source(request: Request) -> Response:
+        live = {row["source_id"] for row in services.store.status()["by_source"]}
+        request_id = request_sync.retire_source(
+            source_id=request.path_params["source_id"], sources_with_entries=live
+        )
+        return _json({"request_id": request_id}, 202)
+
     # -- the single-page app -------------------------------------------------
     async def spa(request: Request) -> Response:
         path = request.path_params.get("path", "")
@@ -468,7 +547,11 @@ def build_app(
         Route("/api/config", api(get_config)),
         Route("/api/overview", api(overview)),
         Route("/api/sources", api(sources)),
+        Route("/api/sources/preview", api(sources_preview), methods=["POST"]),
+        Route("/api/sources/apply", api(sources_apply), methods=["POST"]),
+        Route("/api/sources/revisions", api(sources_revisions)),
         Route("/api/sources/{source_id}/purge-content", api(purge_content), methods=["POST"]),
+        Route("/api/sources/{source_id}/retire", api(retire_source), methods=["POST"]),
         Route("/api/schedules", api(schedules)),
         Route("/api/runs", api(runs_list)),
         Route("/api/runs/{run_id}", api(run_get)),
@@ -497,23 +580,3 @@ def build_app(
     app = Starlette(routes=routes)
     app.add_middleware(BaseHTTPMiddleware, dispatch=harden)
     return app
-
-
-def _credentials_satisfied(kind: str, variables: Mapping[str, bool]) -> bool:
-    """Whether the scheduler's environment has what a source of this kind needs.
-
-    Mirrors `source_factory.build_source`, which is the authority; this only
-    decides whether to warn before a run fails for want of them."""
-    def has(*names: str) -> bool:
-        return any(variables.get(name) for name in names)
-
-    if kind in {"confluence", "jira"}:
-        prefix = kind.upper()
-        return has(f"KB_{prefix}_BASE_URL", f"{prefix}_BASE_URL") and (
-            has(f"KB_{prefix}_PAT", f"{prefix}_PAT")
-            or (
-                has(f"KB_{prefix}_USERNAME", f"{prefix}_USERNAME")
-                and has(f"KB_{prefix}_PASSWORD", f"{prefix}_PASSWORD")
-            )
-        )
-    return all(variables.values()) if variables else True
