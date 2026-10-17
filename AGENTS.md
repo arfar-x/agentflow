@@ -111,6 +111,10 @@ requirement the spec marks `done` has no test claiming it (or a test claims
 an id the spec doesn't define). Add the requirement to the spec first, then
 the test's `# Covers: FR-...` line.
 
+`make kb-e2e` runs the admin console, the scheduler and the MCP server as real
+processes against a throwaway database and a browser (needs Postgres and
+Chromium; see [`kb/e2e/README.md`](kb/e2e/README.md)). It is not part of CI.
+
 The other command runs `agent-skills`' own `mcp-server` test suite inside
 the built image, as a way to verify that submodule pin is sound in this
 stack's actual runtime:

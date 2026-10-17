@@ -45,7 +45,10 @@ The Postgres-backed tests run against a throwaway container:
 make kb-test                    # from the repo root; cleans up after itself
 ```
 
-The root `make test` still runs only `agent-skills`' suite.
+`make kb-e2e` starts the console, scheduler and MCP server for real against a
+throwaway database and a browser (`e2e/README.md`); run it after changing how
+they talk to each other. The root `make test` still runs only `agent-skills`'
+suite.
 
 ## Layout and the dependency rule
 
