@@ -40,7 +40,8 @@ def store(dsn):
     with store._connection.transaction(), store._connection.cursor() as cursor:
         cursor.execute(
             "TRUNCATE entry, entry_override, entry_search, search_miss, "
-            "source_checkpoint, sync_run RESTART IDENTITY CASCADE"
+            "source_checkpoint, sync_run, sync_request, scheduler_heartbeat, kb_source, "
+            "kb_source_revision, form_record RESTART IDENTITY CASCADE"
         )
     try:
         yield store

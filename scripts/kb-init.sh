@@ -72,6 +72,28 @@ for migration in kb/migrations/*.sql; do
   applied=$((applied + 1))
 done
 
+# The admin console is opt-in, so its role is too: created only when a password
+# is set. The grants are applied here, after the migrations, because the role may
+# be created long after the tables it reads (kb/grants/admin.sql).
+if [ -n "${KB_ADMIN_DB_PASSWORD:-}" ]; then
+  echo "==> Ensuring the kb_admin role exists..."
+  psql_kb -q <<SQL
+DO \$\$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'kb_admin') THEN
+        EXECUTE format('ALTER ROLE kb_admin WITH LOGIN PASSWORD %L', '${KB_ADMIN_DB_PASSWORD}');
+    ELSE
+        EXECUTE format('CREATE ROLE kb_admin WITH LOGIN PASSWORD %L', '${KB_ADMIN_DB_PASSWORD}');
+    END IF;
+END
+\$\$;
+SQL
+  psql_kb -q -f - < kb/grants/admin.sql
+fi
+
 echo "==> Done (${applied} migration(s) applied)."
 echo "    The query path connects as kb_reader (read-only, plus the gap log);"
 echo "    sync connects as ${KB_POSTGRES_USER}. See docs/CONFIGURATION.md."
+if [ -n "${KB_ADMIN_DB_PASSWORD:-}" ]; then
+  echo "    the admin console connects as kb_admin (reads everything, writes only its own tables)."
+fi

@@ -63,6 +63,10 @@ class ScheduleState(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     last_run: dict[str, datetime] = {}
+    #: When this state began -- the scheduler's start. A nightly job with no
+    #: recorded run counts as having "run" then, so the first one is the next
+    #: time of day rather than never (see `_daily_is_due`).
+    since: datetime | None = None
     #: Keys currently executing. A long full scrape must not be started again
     #: on the next tick just because its cadence came round.
     running: frozenset[str] = frozenset()
@@ -178,10 +182,140 @@ def _daily_is_due(
     if now < scheduled_today:
         return False
 
-    last = state.last_run.get(key)
+    # A scheduler that starts at 09:00 must not immediately run a nightly job it
+    # "missed" -- but it also must not wait forever for a record that never
+    # comes. With no run on record, treat the moment it began as the last one:
+    # today's window is satisfied and the first nightly run is tomorrow's.
+    last = state.last_run.get(key) or state.since
     if last is None:
-        # A scheduler that starts at 09:00 must not immediately run a nightly
-        # job it "missed" -- but it also must not wait a whole day with no
-        # record. Treat today's window as satisfied and start tomorrow.
         return False
     return last < scheduled_today
+
+
+class ScheduleRow(BaseModel):
+    """One line of the schedule view: a mechanism of a source, and when it is
+    next due (FR-ADM-07)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: JobKind
+    #: None for the refresh drain, which belongs to no one source.
+    source_id: str | None = None
+    #: Whether it will run at all.
+    enabled: bool
+    #: Why not, when it will not.
+    reason: str | None = None
+    cadence: str
+    last_run: datetime | None = None
+    #: When it falls due; at or before `now` means it runs on the next tick.
+    #: None for what has no clock (a mechanism that is off, or lazy refresh,
+    #: which runs when somebody reads a stale entry).
+    due_at: datetime | None = None
+    running: bool = False
+
+
+def next_due(
+    config: SourcesConfig,
+    state: ScheduleState,
+    now: datetime,
+    *,
+    refresh_drain_seconds: float = DEFAULT_REFRESH_DRAIN_SECONDS,
+) -> list[ScheduleRow]:
+    """Every source's mechanisms and when each is next due (FR-SCH-13).
+
+    Written beside `due()` rather than derived from it so the answer for a time
+    in the future does not need a clock to be stepped; the two are held
+    together by a test that asks `due()` at each reported instant.
+    """
+    rows: list[ScheduleRow] = []
+    for source in config.sources:
+        mechanisms = config.mechanisms_for(source)
+        off = _why_off(config, source.enabled)
+
+        inc = mechanisms.incremental
+        interval = parse_duration(inc.every, default=DEFAULT_INCREMENTAL_SECONDS)
+        key = ScheduleState.key(JobKind.INCREMENTAL, source.id)
+        last = state.last_run.get(key)
+        rows.append(
+            ScheduleRow(
+                kind=JobKind.INCREMENTAL,
+                source_id=source.id,
+                enabled=bool(inc.enabled) and off is None,
+                reason=off or (None if inc.enabled else "mechanism disabled"),
+                cadence=f"every {inc.every or '15m'}",
+                last_run=last,
+                due_at=_incremental_due(last, interval, now) if inc.enabled and off is None else None,
+                running=key in state.running,
+            )
+        )
+
+        full = mechanisms.full_scrape
+        at = parse_time_of_day(full.at) or DEFAULT_FULL_SCRAPE_AT
+        key = ScheduleState.key(JobKind.FULL_SCRAPE, source.id)
+        last = state.last_run.get(key)
+        rows.append(
+            ScheduleRow(
+                kind=JobKind.FULL_SCRAPE,
+                source_id=source.id,
+                enabled=bool(full.enabled) and off is None,
+                reason=off or (None if full.enabled else "mechanism disabled"),
+                cadence=f"daily at {at[0]:02d}:{at[1]:02d}",
+                last_run=last,
+                due_at=_daily_due(last or state.since, at, now) if full.enabled and off is None else None,
+                running=key in state.running,
+            )
+        )
+
+        lazy = mechanisms.lazy_refresh
+        rows.append(
+            ScheduleRow(
+                kind=JobKind.LAZY_REFRESH,
+                source_id=source.id,
+                enabled=bool(lazy.enabled) and off is None,
+                reason=off or (None if lazy.enabled else "mechanism disabled"),
+                cadence=f"on read, stale after {lazy.stale_after or '24h'}",
+            )
+        )
+
+    drain_on = config.approved and _any_lazy_refresh_enabled(config)
+    key = ScheduleState.key(JobKind.LAZY_REFRESH, None)
+    last = state.last_run.get(key)
+    rows.append(
+        ScheduleRow(
+            kind=JobKind.LAZY_REFRESH,
+            source_id=None,
+            enabled=drain_on,
+            reason=None if drain_on else _why_off(config, True) or "no source uses lazy refresh",
+            cadence=f"drain every {int(refresh_drain_seconds)}s",
+            last_run=last,
+            due_at=_incremental_due(last, refresh_drain_seconds, now) if drain_on else None,
+            running=key in state.running,
+        )
+    )
+    return rows
+
+
+def _why_off(config: SourcesConfig, source_enabled: bool) -> str | None:
+    if not config.approved:
+        return "syncing is switched off"
+    if not source_enabled:
+        return "source disabled"
+    return None
+
+
+def _incremental_due(last: datetime | None, interval: float | None, now: datetime) -> datetime | None:
+    if not interval:
+        return None
+    if last is None:
+        return now
+    return last + timedelta(seconds=interval)
+
+
+def _daily_due(last: datetime | None, at: tuple[int, int], now: datetime) -> datetime | None:
+    scheduled_today = now.replace(hour=at[0], minute=at[1], second=0, microsecond=0)
+    if last is None:
+        # Nothing on record and no start time: `due()` has no basis to start it.
+        return None
+    # Ran already today (at or after the hour): tomorrow's. Otherwise one is
+    # owed -- now, if the hour has passed, else when it does.
+    return scheduled_today if last < scheduled_today else scheduled_today + timedelta(days=1)

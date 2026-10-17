@@ -295,3 +295,76 @@ def test_a_dry_run_sync_does_not_gate_on_the_summarizer(wired, capsys, monkeypat
     payload = run(capsys, "sync", "--source", "whatever", "--dry-run")
 
     assert payload["error"]["type"] == "unknown_source"
+
+
+def _syncing(wired, monkeypatch, tmp_path, documents, *, fail=None):
+    """The CLI wired to sync a fake source into the fake store."""
+    from kb.application.ports.knowledge_source import SourceDocument  # noqa: F401
+    from kb.application.use_cases.reconcile_document import ReconcileDocument
+    from kb.application.use_cases.sync_source import SyncSource
+    from tests.application.fakes import FakeKnowledgeSource, FakeRunLog, FakeSummarizer
+
+    sources_file = tmp_path / "kb-sources.yaml"
+    sources_file.write_text(
+        "approved: true\nsources:\n  - {id: confluence-eng, kind: confluence, enabled: true, spaces: [ENG]}\n"
+    )
+    wired.settings = Settings(database_url="postgresql://fake/kb", sources_file=str(sources_file))
+    wired.clock = FakeClock(NOW)
+    wired.runs = FakeRunLog()
+    reconcile = ReconcileDocument(wired.store, FakeSummarizer(), wired.clock)
+    wired.sync = SyncSource(wired.store, reconcile, wired.clock)
+
+    def build_source(config, env=None):
+        if fail:
+            raise fail
+        return FakeKnowledgeSource("confluence-eng", documents, checkpoint="cp")
+
+    monkeypatch.setattr("kb.adapters.outbound.source_factory.build_source", build_source)
+    return wired
+
+
+def _page(external_id="42"):
+    from kb.application.ports.knowledge_source import SourceDocument
+
+    return SourceDocument(
+        source_id="confluence-eng", external_id=external_id, title="Page", body="b",
+        location=Location(kind="confluence", ref={"page_id": external_id}, url="https://wiki/1"),
+        version="1",
+    )
+
+
+def test_a_cli_sync_leaves_the_same_record_as_a_scheduled_one(wired, capsys, monkeypatch, tmp_path):
+    # Covers: FR-CLI-06
+    from kb.domain.runs import RunStatus, Trigger
+
+    _syncing(wired, monkeypatch, tmp_path, [_page()])
+    payload = run(capsys, "sync", "--source", "confluence-eng", "--mode", "full", "--force")
+
+    assert payload["created"] == 1
+    [recorded] = wired.runs.runs
+    assert recorded.triggered_by is Trigger.CLI and recorded.status is RunStatus.SUCCESS
+    assert (recorded.mode, recorded.forced, recorded.dry_run) == ("full", True, False)
+    assert recorded.created == 1 and recorded.checkpoint == "cp"
+    assert recorded.finished_at is not None
+
+
+def test_a_cli_dry_run_is_recorded_as_one(wired, capsys, monkeypatch, tmp_path):
+    # Covers: FR-CLI-06
+    _syncing(wired, monkeypatch, tmp_path, [_page()])
+    run(capsys, "sync", "--source", "confluence-eng", "--dry-run")
+    [recorded] = wired.runs.runs
+    assert recorded.dry_run is True and recorded.created == 0 and recorded.seen == 1
+
+
+def test_a_cli_sync_that_fails_is_recorded_with_its_error(wired, capsys, monkeypatch, tmp_path):
+    # Covers: FR-CLI-06
+    from kb.domain.runs import RunStatus
+
+    _syncing(wired, monkeypatch, tmp_path, [_page()])
+    wired.sync.execute = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("wiki is down"))
+
+    payload = run(capsys, "sync", "--source", "confluence-eng")
+
+    assert payload["error"]["type"] == "source_unavailable"
+    [recorded] = wired.runs.runs
+    assert recorded.status is RunStatus.ERROR and recorded.error == "wiki is down"

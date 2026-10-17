@@ -4,8 +4,8 @@
 |---|---|
 | **Spec ID** | SPEC-KB-001 |
 | **Status** | Active — implemented (see §12; two source kinds deferred by choice) |
-| **Version** | 2.7.0 |
-| **Last updated** | 2026-10-11 |
+| **Version** | 2.8.0 |
+| **Last updated** | 2026-10-14 |
 | **Implements** | `kb/` module, `mcp-kb` service |
 | **Related** | [`AGENTS.md`](../../AGENTS.md), [`docs/CONFIGURATION.md`](../CONFIGURATION.md), [`kb/README.md`](../../kb/README.md) |
 
@@ -51,6 +51,9 @@ inventing one.
   `store_raw_content` has its documents' text kept beside their entries, so
   agents can read it (§6.10, C6).
 - N2. Not an authoring tool: knowledge stays where its authors already write it.
+  The one deliberate exception is the `form` source (FR-SRC-07): short records an
+  operator writes in the admin console for knowledge that has no home anywhere
+  else.
 - N3. Not an access-control system: source systems enforce their own
   permissions, and the catalog holds nothing restricted (see §10, C4).
 
@@ -108,7 +111,7 @@ case.
 | id | Requirement | Status |
 |---|---|---|
 | FR-ENT-01 | An entry MUST record what a document is and where it lives, and MUST NOT store the document's body. Text kept for an opted-in source lives in the separate content store (§6.10), never in the entry. | done |
-| FR-ENT-02 | An entry whose document could never be fetched MUST be rejected when it is built: a known source kind missing its reference key, or an unknown kind with no URL. | done |
+| FR-ENT-02 | An entry whose document could never be fetched MUST be rejected when it is built: a known source kind missing its reference key, or an unknown kind with no URL. The catalog's own kind, `form`, needs its `record` reference instead of a URL: it is read through `kb_get` (FR-CNT-12). | done |
 | FR-ENT-03 | `title` and `summary` MUST be language-keyed maps, and an entry MUST have non-empty title text in at least one language. | done |
 | FR-ENT-04 | Every entry MUST name the source that produced it. | done |
 | FR-ENT-05 | Entry ids MUST be deterministic: the same document yields the same id from every mechanism and every run, and two sources MUST NOT collide. | done |
@@ -172,6 +175,12 @@ case.
 | FR-SCH-05 | A run MUST NOT start while another run for the same source is still going, however slow that one is. | done |
 | FR-SCH-06 | A scheduled time of day MUST be interpreted in the deployment's own timezone (`KB_TIMEZONE`, an IANA name, default UTC), and an unknown zone MUST fail at startup naming the value. Every timestamp MUST be timezone-aware, so everything that compares instants stays correct regardless. | done |
 | FR-SCH-07 | When a summarizer is configured, a scheduled run that would summarize (an incremental or full sync, or a lazy refresh) MUST first confirm the summarizer passes the same check `sync` requires (FR-CFG-09), and MUST NOT run, recording the failure as that run's error, when it does not. The verdict MAY be reused for a short while so several jobs due together cost one probe. | done |
+| FR-SCH-08 | A run MUST be recorded when it starts, with status `running`, and updated when it ends with its final status (`success`, `warning` when documents were rejected, or `error`). A run still `running` when the scheduler starts MUST be closed as an error saying it was interrupted. | done |
+| FR-SCH-09 | A run record MUST say what started it (`scheduled`, `manual`, `webhook` or `cli`), its mode, whether it was a dry run or forced, which documents were rejected and why, how many texts were stored and purged, and the checkpoint it ended on. | done |
+| FR-SCH-10 | At startup the scheduler MUST seed each cadence's last-run time from the recorded runs, so a restart does not make every source due at once, nor make a nightly job wait another day. | done |
+| FR-SCH-11 | A sync, or a purge of stored text, requested from outside the scheduler MUST be queued and executed by the scheduler, one job at a time and never alongside another run of the same source (FR-SCH-05). A request MUST be cancellable until it starts, and MUST record the run it produced. | done |
+| FR-SCH-12 | The scheduler MUST publish a heartbeat on every tick: when it last ran, whether syncing is approved and where that came from, the summarizer's verdict, and for each credential variable the source configuration names, whether it is set -- names and yes/no only, never a value. | done |
+| FR-SCH-13 | When each source's mechanisms are next due MUST be computable as a pure function of the same inputs as FR-SCH-02, and MUST agree with it: a job `next_due` reports for "now" is a job `due` returns. | done |
 
 ### 6.5 Overrides — `FR-OVR`
 
@@ -197,6 +206,9 @@ case.
 | FR-CFG-08 | The summarizer URL MUST be an OpenAI-compatible **base** URL, normalized on the way in (a trailing `/chat/completions` or slash is accepted and stripped), and rejected at startup if it is not a URL at all. Compatibility MUST be verifiable against the running endpoint, not assumed. | done |
 | FR-CFG-07 | Each freshness mechanism MUST be switchable globally and per source, and a disabled mechanism MUST do nothing. | done |
 | FR-CFG-09 | Compatibility verification (FR-CFG-08) MUST include a real completions round-trip proving the endpoint honors `response_format` and the `system` role — reachability and a served model id are not sufficient, since an endpoint can answer both while silently ignoring the rest of the request. `sync` MUST refuse to run against a summarizer that fails this, rather than degrading every document to undescribed. | done |
+| FR-CFG-10 | The admin console MUST change the source configuration only in two steps: a preview that validates the edited file with the same models the scheduler loads it with and returns a readable diff and warnings, then an apply that carries the preview's file fingerprint and an explicit confirmation. A changed fingerprint MUST refuse the apply. Nothing invalid MUST be savable. | planned |
+| FR-CFG-11 | An edit made from the console MUST preserve the file's comments and its `${VAR}` placeholders, MUST NOT write a resolved value, and MUST NOT accept a literal credential where a variable name is expected (FR-CFG-04). | planned |
+| FR-CFG-12 | Every change to the source configuration MUST be kept as a revision (what, when, before and after), and a change made to the file by hand MUST be detected and recorded the same way. The database copy of the sources MUST never override the file: the file is what the scheduler reads. | planned |
 
 ### 6.7 Front doors — `FR-CLI`, `FR-MCP`
 
@@ -209,6 +221,7 @@ they parse input, call a use case, and serialize the result.
 | FR-CLI-02 | The CLI MUST expose, at minimum: search, get, override (set and clear), gaps, migrate, and status. | done |
 | FR-CLI-03 | A failure the operator can act on (no database, a malformed argument) MUST be reported as a structured error naming what failed, never as a traceback. | done |
 | FR-CLI-05 | A `check` command MUST report whether each dependency is actually usable — the database, the summarizer endpoint, the source configuration — and name the one that is not, rather than leaving it to be discovered by a sync that quietly produces undescribed entries. | done |
+| FR-CLI-06 | A `sync` run from the CLI MUST be recorded like a scheduled one (FR-SCH-08, FR-SCH-09), with trigger `cli`. | done |
 | FR-CLI-04 | `status` MUST report what the catalog actually contains — entry counts by source and type, soft-deleted count, override count, the applied migrations, and the recorded gaps — so "is this thing working" is answerable without SQL. | done |
 | FR-MCP-01 | The MCP server MUST expose exactly two tools, `kb_search` and `kb_get`, both read-only. | done |
 | FR-MCP-02 | Each tool's schema MUST describe its arguments well enough for a model to call it correctly without reading the spec, and `kb_search` MUST accept several query strings in one call. | done |
@@ -230,6 +243,7 @@ something concrete has to be catalogued through them.
 | FR-SRC-04 | An internal HTTP API, with field mapping in config. | deferred |
 | FR-SRC-05 | Local files under configured paths. | deferred |
 | FR-SRC-06 | Adding a source MUST require only one adapter and one config entry. No source's name may appear in `domain/` or `application/`, with one deliberate exception: the fetch-hint map in `entry.py`, where adding a kind means adding a tool an agent can call — a decision, not a side effect. | done |
+| FR-SRC-07 | The built-in source `form` MUST present the manual records written in the admin console (§6.11) as documents, so they reach the catalog through the same funnel as every other source (FR-REC-01). A record removed from it MUST be soft-deleted by the next full pass (FR-REC-09). Its text MUST always be kept (§6.10), and `form` MUST NOT be usable as the id of a configured source. | planned |
 
 ### 6.9 Agent integration — `FR-AGT`
 
@@ -262,6 +276,32 @@ stated in C6.
 | FR-CNT-12 | When no tool in this stack can read a document live (FR-ENT-09 gives no fetch hint) but its text is stored, its search hit and `kb_get` result MUST name `kb_get` as the fetch hint. A document with a live, per-user tool keeps that tool. | done |
 | FR-CNT-13 | `kb_get`'s description MUST tell an agent to answer from `content` when present, to say when it is truncated and point to the location for the rest, and otherwise to follow the fetch hint or location. | done |
 
+### 6.11 Admin console — `FR-ADM`
+
+A web console for the operator, in its own service (NFR-DEP-08). It is a human's
+front door, not an agent's: nothing here is an MCP tool, and the one component
+that holds source credentials, the scheduler, stays the only one that writes the
+catalog -- the console asks it to, through a queue (FR-SCH-11). Designed in
+[`specs/002-kb-admin-console/`](../../specs/002-kb-admin-console/).
+
+| id | Requirement | Status |
+|---|---|---|
+| FR-ADM-01 | The console MUST refuse to start without an admin token of at least 32 characters, and MUST compare tokens in constant time. Without a valid session or the token, every endpoint but the health check MUST answer 401. | planned |
+| FR-ADM-02 | Login MUST issue a signed, `HttpOnly`, `SameSite=Strict` session cookie that stops working when the token changes. Repeated failed logins MUST be slowed down. | planned |
+| FR-ADM-03 | A request that changes anything MUST carry the console's own header and, when the browser sends an `Origin`, one that matches the console; otherwise it MUST be refused with 403. | planned |
+| FR-ADM-04 | The console MUST NOT write the catalog (entries, kept text, overrides, checkpoints). Its database role MUST be able to read everything and write only the console's own tables. | done |
+| FR-ADM-05 | The overview MUST report what `status` reports (FR-CLI-04) and, besides, whether the scheduler is alive (FR-SCH-12), whether syncing is approved and where that came from (FR-CFG-05), what is queued, and how the last day's runs went. | planned |
+| FR-ADM-06 | Runs MUST be listable by source, status and mode, newest first and paged, and each run MUST be readable in full (FR-SCH-09). | planned |
+| FR-ADM-07 | The schedule view MUST list, for every source and mechanism, its cadence, its last run and its next due time (FR-SCH-13), and MUST show a disabled mechanism as disabled rather than omit it. | planned |
+| FR-ADM-08 | An operator MUST be able to request a sync of one source or of every enabled source, as incremental or full, as a dry run, and forced (FR-REC-12), and to cancel a request that has not started. The request MUST return at once; its progress and result are read from the run it produces. | planned |
+| FR-ADM-09 | An operator MUST be able to request that a source's kept text be purged (FR-CNT-05). The request MUST warn that the next sync restores it while the source still keeps text. | planned |
+| FR-ADM-10 | The console MUST list what needs attention: failed and warning runs with the documents they rejected, failed refreshes, and the gap log (FR-SRCH-07): what people searched for and did not find. | planned |
+| FR-ADM-11 | An operator MUST be able to create, edit and delete sources through the two-step flow of FR-CFG-10, including a source's mechanisms, its kept-text setting and the global approval switch. Turning kept text on MUST warn that every catalog user can then read that text (C6). | planned |
+| FR-ADM-12 | An operator MUST be able to create, edit and delete manual records for the `form` source, each with a title and a summary per configured language, a body, a type, tags, keywords and an owner, and MUST be told the record's text is readable by every catalog user. Saving MUST queue the sync that publishes it. | planned |
+| FR-ADM-13 | An operator MUST be able to ask for a summary of a record's content on demand. The result MUST be a draft: nothing is stored until the operator saves it, and a stored draft MUST reach the entry without another model call. Saving only the summary MUST still update the entry. | planned |
+| FR-ADM-14 | An operator MUST be able to read a stored record the way an agent does: in pages with the same offsets and totals as `kb_get` (FR-CNT-08). | planned |
+| FR-ADM-15 | No response MUST contain the value of an environment variable, a token or a password; a credential is reported only as set or not set. | planned |
+
 ## 7. Non-functional requirements
 
 ### 7.1 Architecture — `NFR-ARC`
@@ -284,6 +324,7 @@ stated in C6.
 | NFR-DEP-05 | The query path MUST use a least-privilege database role. | done |
 | NFR-DEP-06 | The index MUST be rebuildable from sources; only the gap log and checkpoints require backup. | done |
 | NFR-DEP-07 | A completed write MUST be committed: visible to other connections, and surviving the writing connection closing. | done |
+| NFR-DEP-08 | The admin console MUST be its own service, off unless its compose profile is enabled, published only on a loopback address by default, given no source credentials and no `env_file`, and connected as its own least-privilege role (FR-ADM-04). | planned |
 
 ### 7.3 Performance and cost — `NFR-PRF`
 
@@ -401,8 +442,9 @@ on every tick.
 Embeddings; per-team enforcement; per-user or per-team access to stored
 content (C6 is all or nothing per source); chunk-level indexing of document
 bodies, including searching stored content (FR-CNT-09);
-Confluence and Jira webhooks; write tools that let agents create entries; a
-spec-driven-workflow toolset.
+Confluence and Jira webhooks; write tools that let agents create entries (the
+admin console, §6.11, is operated by a person and is not a tool an agent can
+call); a spec-driven-workflow toolset.
 
 **A graph source is the expected next step** and nothing here blocks it: code
 entities extracted into a graph database become entries of type `system` whose
@@ -453,6 +495,7 @@ which a flat catalog cannot answer.
 | Version | Date | Change |
 |---|---|---|
 | 1.0.0 | 2026-09-24 | First specification. Phases 1–3 implemented against it. |
+| 2.8.0 | 2026-10-14 | Added §6.11 (FR-ADM-01..15), FR-SCH-08..13, FR-CFG-10..12, FR-CLI-06, FR-SRC-07 and NFR-DEP-08: an admin console for the operator, in its own opt-in service. It reads run history and the catalog, queues syncs for the scheduler to run, edits the source configuration after an explicit approval, and holds manual `form` records with on-demand summaries. FR-ENT-02 now admits the catalog's own `form` kind; N2 and §11 say what that does and does not change. Run history gained a start-of-run record, a status and the trigger, because "is it running now, and who asked" was not answerable from the end-of-run row alone. |
 | 2.7.0 | 2026-10-11 | Added FR-REC-13: a label-only change re-classifies the entry without re-summarizing. Adding or swapping a wiki label changes neither the page's text nor its version, so the content-hash gate treated it as unchanged and the entry kept its old type and tags until the text next changed. |
 | 2.6.0 | 2026-10-11 | FR-AGT-02 narrowed: the front door searches the catalog before answering itself, not before delegating. Found in a live trial of the product-spec flow: the front door searched, then handed off to a specialist that searched the same question again, before doing everything itself. The front door is now a router with no write tools; the specialist it hands to grounds the work (FR-AGT-03). |
 | 2.5.0 | 2026-10-06 | Added FR-SCH-07: the scheduler applies FR-CFG-09's summarizer check before any run that summarizes, as `sync` already did. Found live: with the summarizer's endpoint answering 403 to completions, the scheduler catalogued 39 new documents undescribed (a warning per document, nothing refused), and they had to be recovered with `sync --force`. |

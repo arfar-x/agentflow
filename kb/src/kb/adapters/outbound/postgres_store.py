@@ -103,6 +103,12 @@ class PostgresEntryStore:
         self._connection = connection
         self._connection.row_factory = dict_row
 
+    @property
+    def connection(self) -> psycopg.Connection:
+        """For the other stores over the same database (run history, the request
+        queue): one connection per process, not one per concern."""
+        return self._connection
+
     @classmethod
     def connect(cls, dsn: str, *, connect_timeout: int = 5) -> "PostgresEntryStore":
         """A search must fail fast rather than hang a tool call, so the connect
@@ -553,55 +559,6 @@ class PostgresEntryStore:
                     "UPDATE refresh_queue SET last_error = %s WHERE entry_id = %s",
                     (error[:500], entry_id),
                 )
-
-    # -- run history -------------------------------------------------------
-    def record_run(
-        self,
-        *,
-        source_id: str,
-        mechanism: str,
-        started_at: datetime,
-        finished_at: datetime,
-        counts: dict[str, int] | None = None,
-        error: str | None = None,
-    ) -> None:
-        """One row per run, so "is this still working?" is answerable without
-        reading logs that have already rotated away (FR-SCH-04)."""
-        counts = counts or {}
-        with self._connection.transaction(), self._connection.cursor() as cursor:
-            cursor.execute(
-                """
-                INSERT INTO sync_run (source_id, mechanism, started_at, finished_at,
-                                      created, updated, unchanged, revived, missing,
-                                      summarized, error)
-                VALUES (%(source_id)s, %(mechanism)s, %(started_at)s, %(finished_at)s,
-                        %(created)s, %(updated)s, %(unchanged)s, %(revived)s, %(missing)s,
-                        %(summarized)s, %(error)s)
-                """,
-                {
-                    "source_id": source_id,
-                    "mechanism": mechanism,
-                    "started_at": started_at,
-                    "finished_at": finished_at,
-                    "created": counts.get("created", 0),
-                    "updated": counts.get("updated", 0),
-                    "unchanged": counts.get("unchanged", 0),
-                    "revived": counts.get("revived", 0),
-                    "missing": counts.get("missing", 0),
-                    "summarized": counts.get("summarized", 0),
-                    "error": error[:2000] if error else None,
-                },
-            )
-
-    def recent_runs(self, *, limit: int = 20) -> list[dict[str, object]]:
-        with self._connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT source_id, mechanism, started_at, finished_at, created, updated,"
-                " unchanged, revived, missing, summarized, error"
-                " FROM sync_run ORDER BY started_at DESC LIMIT %s",
-                (limit,),
-            )
-            return [dict(row) for row in cursor.fetchall()]
 
     # -- checkpoints (used by the incremental mechanism, phase 7) -----------
     def get_checkpoint(self, source_id: str) -> str | None:

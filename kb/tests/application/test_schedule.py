@@ -217,3 +217,117 @@ def test_timestamps_from_different_zones_still_compare(config_=None):
     state = ScheduleState(last_run={"incremental:confluence-eng": last})
     assert JobKind.INCREMENTAL not in kinds(due(config(), state, NOON + timedelta(minutes=14)))
     assert JobKind.INCREMENTAL in kinds(due(config(), state, NOON + timedelta(minutes=16)))
+
+
+# -- the schedule view (FR-SCH-13) -------------------------------------------
+
+
+def rows(state: ScheduleState, now: datetime = NOON, **overrides):
+    from kb.application.use_cases.schedule import next_due
+
+    return next_due(config(**overrides), state, now)
+
+
+def row(found, kind: JobKind, source_id: str | None = "confluence-eng"):
+    return next(r for r in found if r.kind is kind and r.source_id == source_id)
+
+
+def test_every_mechanism_of_every_source_is_listed_even_when_off():
+    # Covers: FR-SCH-13
+    found = rows(
+        ScheduleState(),
+        sources=[
+            {"id": "a", "kind": "confluence", "enabled": True, "spaces": ["ENG"]},
+            {"id": "b", "kind": "jira", "enabled": False, "jql": "project = X"},
+        ],
+    )
+    assert {(r.source_id, r.kind) for r in found} >= {
+        (sid, kind)
+        for sid in ("a", "b")
+        for kind in (JobKind.INCREMENTAL, JobKind.FULL_SCRAPE, JobKind.LAZY_REFRESH)
+    }
+    off = row(found, JobKind.INCREMENTAL, "b")
+    assert off.enabled is False and off.reason == "source disabled" and off.due_at is None
+
+
+def test_a_switched_off_mechanism_says_so_instead_of_vanishing():
+    # Covers: FR-SCH-13
+    found = rows(ScheduleState(), defaults={"mechanisms": {"full_scrape": {"enabled": False}}})
+    nightly = row(found, JobKind.FULL_SCRAPE)
+    assert nightly.enabled is False
+    assert nightly.reason == "mechanism disabled"
+
+
+def test_the_kill_switch_shows_on_every_row():
+    # Covers: FR-SCH-13, FR-CFG-05
+    found = rows(ScheduleState(), approved=False)
+    assert all(not r.enabled and r.reason == "syncing is switched off" for r in found)
+
+
+def test_the_next_incremental_run_is_one_interval_after_the_last():
+    # Covers: FR-SCH-13
+    state = ScheduleState(last_run={"incremental:confluence-eng": NOON - timedelta(minutes=5)})
+    assert row(rows(state), JobKind.INCREMENTAL).due_at == NOON + timedelta(minutes=10)
+
+
+def test_a_source_that_never_ran_is_due_now():
+    # Covers: FR-SCH-13
+    assert row(rows(ScheduleState()), JobKind.INCREMENTAL).due_at == NOON
+
+
+@pytest.mark.parametrize(
+    "now_offset_hours, last_run_offset_hours",
+    [
+        (0, None),      # noon, no history
+        (0, -9),        # noon, ran at 03:00 today
+        (0, -33),       # noon, last ran the day before yesterday: owed
+        (-11, -24),     # 01:00, ran yesterday at noon: the hour has not come yet
+        (-11, -33),     # 01:00, last ran the night before last
+    ],
+)
+def test_next_due_agrees_with_due_at_every_instant_it_reports(now_offset_hours, last_run_offset_hours):
+    # Covers: FR-SCH-13
+    # The two are written separately, so this is what keeps them from drifting:
+    # whatever `next_due` says is due now, `due` returns; whatever it says is
+    # due later, `due` returns only at that later time.
+    now = NOON + timedelta(hours=now_offset_hours)
+    last = {} if last_run_offset_hours is None else {
+        "full_scrape:confluence-eng": NOON + timedelta(hours=last_run_offset_hours),
+        "incremental:confluence-eng": NOON + timedelta(hours=last_run_offset_hours),
+    }
+    # No history means "since the scheduler started", which is now.
+    state = ScheduleState(last_run=last, since=now)
+    for r in rows(state, now):
+        if r.due_at is None or r.kind is JobKind.LAZY_REFRESH:
+            continue
+        job = (r.kind, r.source_id)
+        due_now = {(j.kind, j.source_id) for j in due(config(), state, now)}
+        assert (job in due_now) == (r.due_at <= now), (r.kind, r.due_at)
+        at_due = {(j.kind, j.source_id) for j in due(config(), state, max(r.due_at, now))}
+        assert job in at_due, (r.kind, r.due_at)
+
+
+def test_a_running_job_is_reported_as_running():
+    # Covers: FR-SCH-13
+    state = ScheduleState(running=frozenset({"incremental:confluence-eng"}))
+    assert row(rows(state), JobKind.INCREMENTAL).running is True
+
+
+def test_a_nightly_job_with_no_history_first_runs_at_the_next_hour_not_never():
+    # Covers: FR-SCH-10
+    # Found while writing the schedule view: with nothing on record `due()`
+    # never started a nightly job, and a freshly started scheduler has nothing
+    # on record, so a deployment's nightly scrape would never have run.
+    start = NOON
+    state = ScheduleState(since=start)
+
+    assert JobKind.FULL_SCRAPE not in kinds(due(config(), state, start)), "not a missed job"
+    tomorrow_3am = datetime(2026, 9, 25, 3, 0, tzinfo=timezone.utc)
+    assert JobKind.FULL_SCRAPE not in kinds(due(config(), state, tomorrow_3am - timedelta(minutes=1)))
+    assert JobKind.FULL_SCRAPE in kinds(due(config(), state, tomorrow_3am))
+    assert row(rows(state), JobKind.FULL_SCRAPE).due_at == tomorrow_3am
+
+
+def test_without_a_start_time_or_history_a_nightly_job_has_no_time():
+    # Covers: FR-SCH-13
+    assert row(rows(ScheduleState()), JobKind.FULL_SCRAPE).due_at is None

@@ -8,8 +8,8 @@ the design telling you something is in the wrong layer.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable
 
 from kb.application.ports.clock import SystemClock
 from kb.application.ports.summarizer import SummaryDraft
@@ -46,8 +46,20 @@ class Container:
     #: funnel sync does rather than building a second one.
     reconcile: ReconcileDocument
     clock: SystemClock
+    #: Run history, the request queue and the scheduler's heartbeat: operational
+    #: state beside the catalog (see adapters/outbound/postgres_runs.py).
+    runs: Any = None
+    queue: Any = None
+    heartbeats: Any = None
+    #: Closes whatever else was opened for the above.
+    _closers: list[Callable[[], None]] = field(default_factory=list)
 
     def close(self) -> None:
+        for close in self._closers:
+            try:
+                close()
+            except Exception:  # shutting down; nothing useful left to do with it
+                pass
         self.store.close()
 
 
@@ -58,10 +70,21 @@ def build(settings: Settings | None = None) -> Container:
     `kb.container` -- which the CLI does to read `--help`, and tests do to check
     wiring -- doesn't require the driver to be installed.
     """
+    import psycopg
+
+    from kb.adapters.outbound.postgres_runs import (
+        PostgresHeartbeat,
+        PostgresRunLog,
+        PostgresSyncQueue,
+    )
     from kb.adapters.outbound.postgres_store import PostgresEntryStore
 
     settings = settings or Settings.from_env()
     store = PostgresEntryStore.connect(settings.database_url)
+    # The heartbeat is written from its own thread while a long sync holds the
+    # main connection, so it gets a connection of its own rather than sharing
+    # one across threads mid-transaction.
+    beat_connection = psycopg.connect(settings.database_url, connect_timeout=5, autocommit=True)
     clock = SystemClock(settings.tzinfo)
     reconcile = ReconcileDocument(store, build_summarizer(settings), clock)
     return Container(
@@ -74,6 +97,10 @@ def build(settings: Settings | None = None) -> Container:
         sync=SyncSource(store, reconcile, clock),
         reconcile=reconcile,
         clock=clock,
+        runs=PostgresRunLog(store.connection),
+        queue=PostgresSyncQueue(store.connection),
+        heartbeats=PostgresHeartbeat(beat_connection),
+        _closers=[beat_connection.close],
     )
 
 

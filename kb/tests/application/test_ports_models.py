@@ -62,3 +62,15 @@ def test_search_depends_on_nothing_that_can_be_slow_or_down():
     assert parameters == {"self", "store", "clock", "default_limit", "stale_after"}
     # …while reconciliation, which may be slow, is where the model lives.
     assert "summarizer" in inspect.signature(ReconcileDocument.__init__).parameters
+
+
+def test_the_fakes_for_run_history_the_queue_and_the_heartbeat_satisfy_their_ports():
+    # Covers: NFR-ARC-04
+    from kb.application.ports.heartbeat import HeartbeatStore
+    from kb.application.ports.run_log import RunLog
+    from kb.application.ports.sync_queue import SyncQueue
+    from tests.application.fakes import FakeHeartbeats, FakeRunLog, FakeSyncQueue
+
+    assert isinstance(FakeRunLog(), RunLog)
+    assert isinstance(FakeSyncQueue(), SyncQueue)
+    assert isinstance(FakeHeartbeats(), HeartbeatStore)

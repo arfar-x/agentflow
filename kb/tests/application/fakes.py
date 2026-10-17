@@ -10,14 +10,18 @@ Postgres adapter's own test.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable, Iterator, Sequence
+from typing import Iterable, Iterator, Mapping, Sequence
 
 from kb.application.ports.entry_store import ContentSlice
+from kb.application.ports.heartbeat import Heartbeat
 from kb.application.ports.knowledge_source import SourceDocument
+from kb.application.ports.run_log import RunRecord, RunStats
+from kb.application.ports.sync_queue import RequestStatus, SyncRequest
 from kb.application.ports.summarizer import SummaryDraft
 from kb.domain.content import RawContent
 from kb.domain.entry import Entry, EntryType
 from kb.domain.merge import Override
+from kb.domain.runs import INTERRUPTED, RunStatus, Trigger, final_status
 from kb.domain.text import normalize, normalize_all
 
 
@@ -39,7 +43,6 @@ class FakeEntryStore:
         self.misses: list[tuple[str, datetime]] = []
         self.refresh_queue: dict[str, dict] = {}
         self.checkpoints: dict[str, str | None] = {}
-        self.runs: list[dict] = []
         #: entry id -> (text as stored, the version it was read at)
         self.contents: dict[str, tuple[RawContent, str | None]] = {}
         self.upserts = 0
@@ -199,11 +202,6 @@ class FakeEntryStore:
     def set_checkpoint(self, source_id: str, cursor_value: str | None) -> None:
         self.checkpoints[source_id] = cursor_value
 
-    def record_run(self, **kwargs) -> None:
-        self.runs.append(kwargs)
-
-    def recent_runs(self, *, limit: int = 20) -> list[dict]:
-        return list(reversed(self.runs))[:limit]
 
 
 class FakeSummarizer:
@@ -249,3 +247,185 @@ class FakeKnowledgeSource:
 
     def checkpoint(self) -> str | None:
         return self._checkpoint
+
+
+
+class FakeRunLog:
+    """Run history in a list, behaving like the Postgres one where it matters:
+    a run exists from `start_run`, and its status is derived when it ends."""
+
+    def __init__(self) -> None:
+        self.runs: list[RunRecord] = []
+
+    def _replace(self, run_id: int, **changes) -> None:
+        for index, run in enumerate(self.runs):
+            if run.id == run_id:
+                self.runs[index] = run.model_copy(update=changes)
+                return
+        raise KeyError(run_id)
+
+    def start_run(
+        self,
+        *,
+        source_id: str,
+        mechanism: str,
+        started_at: datetime,
+        triggered_by: Trigger = Trigger.SCHEDULED,
+        mode: str | None = None,
+        dry_run: bool = False,
+        forced: bool = False,
+    ) -> int:
+        run_id = len(self.runs) + 1
+        self.runs.append(
+            RunRecord(
+                id=run_id, source_id=source_id, mechanism=mechanism, status=RunStatus.RUNNING,
+                triggered_by=triggered_by, mode=mode, dry_run=dry_run, forced=forced,
+                started_at=started_at,
+            )
+        )
+        return run_id
+
+    def finish_run(
+        self,
+        run_id: int,
+        *,
+        finished_at: datetime,
+        counts: Mapping[str, int],
+        rejected: Sequence[str] = (),
+        checkpoint: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        numbers = {
+            name: int(counts.get(name, 0))
+            for name in (
+                "seen", "created", "updated", "unchanged", "revived", "missing",
+                "summarized", "content_stored", "content_purged",
+            )
+        }
+        self._replace(
+            run_id,
+            finished_at=finished_at,
+            status=final_status(error=error, rejected=rejected),
+            rejected=tuple(rejected),
+            checkpoint=checkpoint,
+            error=error,
+            **numbers,
+        )
+
+    def close_interrupted(self, *, at: datetime) -> int:
+        stale = [run.id for run in self.runs if run.status is RunStatus.RUNNING]
+        for run_id in stale:
+            self._replace(run_id, status=RunStatus.ERROR, finished_at=at, error=INTERRUPTED)
+        return len(stale)
+
+    def running_sources(self) -> set[str]:
+        return {run.source_id for run in self.runs if run.status is RunStatus.RUNNING}
+
+    def last_scheduled(self) -> dict[str, datetime]:
+        latest: dict[str, datetime] = {}
+        for run in self.runs:
+            if run.triggered_by is not Trigger.SCHEDULED or run.dry_run:
+                continue
+            if run.status is RunStatus.RUNNING:
+                continue
+            key = f"{run.mechanism}:{run.source_id}"
+            if key not in latest or run.started_at > latest[key]:
+                latest[key] = run.started_at
+        return latest
+
+    def list_runs(
+        self,
+        *,
+        source_id: str | None = None,
+        status: RunStatus | None = None,
+        mode: str | None = None,
+        before_id: int | None = None,
+        limit: int = 50,
+    ) -> list[RunRecord]:
+        found = [
+            run
+            for run in reversed(self.runs)
+            if (source_id is None or run.source_id == source_id)
+            and (status is None or run.status is status)
+            and (mode is None or mode in (run.mode, run.mechanism))
+            and (before_id is None or run.id < before_id)
+        ]
+        return found[:limit]
+
+    def get_run(self, run_id: int) -> RunRecord | None:
+        return next((run for run in self.runs if run.id == run_id), None)
+
+    def run_stats(self, *, since: datetime) -> RunStats:
+        recent = [run for run in self.runs if run.started_at >= since]
+        count = lambda status: sum(1 for run in recent if run.status is status)  # noqa: E731
+        return RunStats(
+            runs=len(recent),
+            succeeded=count(RunStatus.SUCCESS),
+            warned=count(RunStatus.WARNING),
+            failed=count(RunStatus.ERROR),
+            running=count(RunStatus.RUNNING),
+        )
+
+
+class FakeSyncQueue:
+    def __init__(self) -> None:
+        self.requests: list[SyncRequest] = []
+
+    def _replace(self, request_id: int, **changes) -> None:
+        for index, request in enumerate(self.requests):
+            if request.id == request_id:
+                self.requests[index] = request.model_copy(update=changes)
+                return
+        raise KeyError(request_id)
+
+    def enqueue(self, request: SyncRequest, *, at: datetime) -> int:
+        request_id = len(self.requests) + 1
+        self.requests.append(
+            request.model_copy(
+                update={"id": request_id, "requested_at": at, "status": RequestStatus.QUEUED}
+            )
+        )
+        return request_id
+
+    def claim_next(self, *, at: datetime) -> SyncRequest | None:
+        for request in self.requests:
+            if request.status is RequestStatus.QUEUED:
+                self._replace(request.id, status=RequestStatus.RUNNING, started_at=at)
+                return next(r for r in self.requests if r.id == request.id)
+        return None
+
+    def finish_request(
+        self, request_id: int, *, at: datetime, status: RequestStatus,
+        run_ids: Sequence[int] = (), error: str | None = None,
+    ) -> None:
+        self._replace(request_id, status=status, finished_at=at, run_ids=tuple(run_ids), error=error)
+
+    def cancel(self, request_id: int, *, at: datetime) -> bool:
+        request = next((r for r in self.requests if r.id == request_id), None)
+        if request is None or request.status is not RequestStatus.QUEUED:
+            return False
+        self._replace(request_id, status=RequestStatus.CANCELLED, finished_at=at)
+        return True
+
+    def list_requests(
+        self, *, statuses: Sequence[RequestStatus] | None = None, limit: int = 50
+    ) -> list[SyncRequest]:
+        found = [r for r in reversed(self.requests) if statuses is None or r.status in statuses]
+        return found[:limit]
+
+    def fail_running(self, *, at: datetime, error: str) -> int:
+        stuck = [r.id for r in self.requests if r.status is RequestStatus.RUNNING]
+        for request_id in stuck:
+            self._replace(request_id, status=RequestStatus.FAILED, finished_at=at, error=error)
+        return len(stuck)
+
+
+class FakeHeartbeats:
+    def __init__(self) -> None:
+        self.beats: list[Heartbeat] = []
+
+    def beat(self, heartbeat: Heartbeat) -> None:
+        self.beats.append(heartbeat)
+
+    def last_beat(self) -> Heartbeat | None:
+        return self.beats[-1] if self.beats else None

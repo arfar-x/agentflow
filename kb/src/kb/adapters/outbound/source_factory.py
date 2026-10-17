@@ -111,3 +111,29 @@ def build_source(config: AnySource, env: Mapping[str, str] | None = None) -> Kno
         )
 
     raise NotImplementedError(f"no adapter for source kind {config.kind!r}")
+
+
+def credential_variables(config: AnySource) -> tuple[str, ...]:
+    """Every variable `build_source` would read for this source, by name.
+
+    For the scheduler's heartbeat: the console holds no credentials, so it asks
+    the one process that does whether they are *set*. Names only -- reporting a
+    value would turn a status page into a leak.
+    """
+    if isinstance(config, ConfluenceSource):
+        prefix = "CONFLUENCE"
+    elif isinstance(config, JiraSource):
+        prefix = "JIRA"
+    elif isinstance(config, GitLabSource):
+        return (config.token_env,)
+    else:
+        return ()
+    names: list[str] = []
+    for suffix in ("BASE_URL", "PAT", "USERNAME", "PASSWORD"):
+        names.extend((f"KB_{prefix}_{suffix}", f"{prefix}_{suffix}"))
+    return tuple(names)
+
+
+def credential_presence(config: AnySource, env: Mapping[str, str] | None = None) -> dict[str, bool]:
+    environment = os.environ if env is None else env
+    return {name: bool(environment.get(name)) for name in credential_variables(config)}
