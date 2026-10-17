@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 SERVICE ?= api
 
 .PHONY: help bootstrap up down restart ps logs build secrets backup restore test \
-	render-config librechat-migrate kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status user-create user-list user-ban user-delete user-invite user-reset-password \
+	render-config librechat-migrate kb-init kb-setup kb-check kb-test kb-sync kb-sync-all kb-sources kb-sources-discover kb-status kb-admin-up kb-admin-down user-create user-list user-ban user-delete user-invite user-reset-password \
 	agent-export agent-import
 
 help: ## Show this list
@@ -79,6 +79,15 @@ kb-check: ## Is everything the catalog depends on actually usable (database, sum
 
 kb-status: ## What the catalog contains right now
 	docker compose run --rm kb-cli status
+
+kb-admin-up: ## Start the knowledge base admin console on 127.0.0.1 (needs KB_ADMIN_TOKEN and KB_ADMIN_DB_PASSWORD in .env)
+	@[ -f config/kb-sources.yaml ] || cp config/kb-sources.yaml.example config/kb-sources.yaml
+	# kb-init is idempotent and is what creates the console's database role.
+	scripts/kb-init.sh
+	docker compose --profile admin up -d --build kb-admin
+
+kb-admin-down: ## Stop the knowledge base admin console
+	docker compose --profile admin stop kb-admin
 
 kb-test: ## Run kb's own suite, including the Postgres-backed tests, against a throwaway database
 	scripts/kb-test.sh

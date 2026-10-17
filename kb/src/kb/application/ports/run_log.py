@@ -128,4 +128,9 @@ class RunLog(Protocol):
 
     def get_run(self, run_id: int) -> RunRecord | None: ...
 
+    def latest_per_source(self) -> dict[str, RunRecord]:
+        """The most recent run of each source, for one overview instead of one
+        query per source card."""
+        ...
+
     def run_stats(self, *, since: datetime) -> RunStats: ...

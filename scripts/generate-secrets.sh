@@ -31,6 +31,10 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 # that sync writes as, and the read-only role the query path runs as.
 echo "KB_POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 echo "KB_READER_PASSWORD=$(openssl rand -hex 24)"
+# Only needed if you run the admin console (make kb-admin-up): the token that
+# opens it, and the password of the database role it connects as.
+echo "KB_ADMIN_TOKEN=$(openssl rand -hex 32)"
+echo "KB_ADMIN_DB_PASSWORD=$(openssl rand -hex 24)"
 echo "OPENID_SESSION_SECRET=$(openssl rand -hex 32)  # only needed if using Keycloak"
 echo "ADMIN_PASSWORD=$(openssl rand -hex 12)"
 echo "ADMIN_PANEL_SESSION_SECRET=$(openssl rand -hex 32)"

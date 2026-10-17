@@ -286,21 +286,21 @@ catalog -- the console asks it to, through a queue (FR-SCH-11). Designed in
 
 | id | Requirement | Status |
 |---|---|---|
-| FR-ADM-01 | The console MUST refuse to start without an admin token of at least 32 characters, and MUST compare tokens in constant time. Without a valid session or the token, every endpoint but the health check MUST answer 401. | planned |
-| FR-ADM-02 | Login MUST issue a signed, `HttpOnly`, `SameSite=Strict` session cookie that stops working when the token changes. Repeated failed logins MUST be slowed down. | planned |
-| FR-ADM-03 | A request that changes anything MUST carry the console's own header and, when the browser sends an `Origin`, one that matches the console; otherwise it MUST be refused with 403. | planned |
+| FR-ADM-01 | The console MUST refuse to start without an admin token of at least 32 characters, and MUST compare tokens in constant time. Without a valid session or the token, every endpoint but the health check MUST answer 401. | done |
+| FR-ADM-02 | Login MUST issue a signed, `HttpOnly`, `SameSite=Strict` session cookie that stops working when the token changes. Repeated failed logins MUST be slowed down. | done |
+| FR-ADM-03 | A request that changes anything MUST carry the console's own header and, when the browser sends an `Origin`, one that matches the console; otherwise it MUST be refused with 403. | done |
 | FR-ADM-04 | The console MUST NOT write the catalog (entries, kept text, overrides, checkpoints). Its database role MUST be able to read everything and write only the console's own tables. | done |
-| FR-ADM-05 | The overview MUST report what `status` reports (FR-CLI-04) and, besides, whether the scheduler is alive (FR-SCH-12), whether syncing is approved and where that came from (FR-CFG-05), what is queued, and how the last day's runs went. | planned |
-| FR-ADM-06 | Runs MUST be listable by source, status and mode, newest first and paged, and each run MUST be readable in full (FR-SCH-09). | planned |
-| FR-ADM-07 | The schedule view MUST list, for every source and mechanism, its cadence, its last run and its next due time (FR-SCH-13), and MUST show a disabled mechanism as disabled rather than omit it. | planned |
-| FR-ADM-08 | An operator MUST be able to request a sync of one source or of every enabled source, as incremental or full, as a dry run, and forced (FR-REC-12), and to cancel a request that has not started. The request MUST return at once; its progress and result are read from the run it produces. | planned |
-| FR-ADM-09 | An operator MUST be able to request that a source's kept text be purged (FR-CNT-05). The request MUST warn that the next sync restores it while the source still keeps text. | planned |
-| FR-ADM-10 | The console MUST list what needs attention: failed and warning runs with the documents they rejected, failed refreshes, and the gap log (FR-SRCH-07): what people searched for and did not find. | planned |
+| FR-ADM-05 | The overview MUST report what `status` reports (FR-CLI-04) and, besides, whether the scheduler is alive (FR-SCH-12), whether syncing is approved and where that came from (FR-CFG-05), what is queued, and how the last day's runs went. | done |
+| FR-ADM-06 | Runs MUST be listable by source, status and mode, newest first and paged, and each run MUST be readable in full (FR-SCH-09). | done |
+| FR-ADM-07 | The schedule view MUST list, for every source and mechanism, its cadence, its last run and its next due time (FR-SCH-13), and MUST show a disabled mechanism as disabled rather than omit it. | done |
+| FR-ADM-08 | An operator MUST be able to request a sync of one source or of every enabled source, as incremental or full, as a dry run, and forced (FR-REC-12), and to cancel a request that has not started. The request MUST return at once; its progress and result are read from the run it produces. | done |
+| FR-ADM-09 | An operator MUST be able to request that a source's kept text be purged (FR-CNT-05). The request MUST warn that the next sync restores it while the source still keeps text. | done |
+| FR-ADM-10 | The console MUST list what needs attention: failed and warning runs with the documents they rejected, failed refreshes, and the gap log (FR-SRCH-07): what people searched for and did not find. | done |
 | FR-ADM-11 | An operator MUST be able to create, edit and delete sources through the two-step flow of FR-CFG-10, including a source's mechanisms, its kept-text setting and the global approval switch. Turning kept text on MUST warn that every catalog user can then read that text (C6). | planned |
 | FR-ADM-12 | An operator MUST be able to create, edit and delete manual records for the `form` source, each with a title and a summary per configured language, a body, a type, tags, keywords and an owner, and MUST be told the record's text is readable by every catalog user. Saving MUST queue the sync that publishes it. | planned |
 | FR-ADM-13 | An operator MUST be able to ask for a summary of a record's content on demand. The result MUST be a draft: nothing is stored until the operator saves it, and a stored draft MUST reach the entry without another model call. Saving only the summary MUST still update the entry. | planned |
 | FR-ADM-14 | An operator MUST be able to read a stored record the way an agent does: in pages with the same offsets and totals as `kb_get` (FR-CNT-08). | planned |
-| FR-ADM-15 | No response MUST contain the value of an environment variable, a token or a password; a credential is reported only as set or not set. | planned |
+| FR-ADM-15 | No response MUST contain the value of an environment variable, a token or a password; a credential is reported only as set or not set. | done |
 
 ## 7. Non-functional requirements
 
@@ -324,7 +324,7 @@ catalog -- the console asks it to, through a queue (FR-SCH-11). Designed in
 | NFR-DEP-05 | The query path MUST use a least-privilege database role. | done |
 | NFR-DEP-06 | The index MUST be rebuildable from sources; only the gap log and checkpoints require backup. | done |
 | NFR-DEP-07 | A completed write MUST be committed: visible to other connections, and surviving the writing connection closing. | done |
-| NFR-DEP-08 | The admin console MUST be its own service, off unless its compose profile is enabled, published only on a loopback address by default, given no source credentials and no `env_file`, and connected as its own least-privilege role (FR-ADM-04). | planned |
+| NFR-DEP-08 | The admin console MUST be its own service, off unless its compose profile is enabled, published only on a loopback address by default, given no source credentials and no `env_file`, and connected as its own least-privilege role (FR-ADM-04). | done |
 
 ### 7.3 Performance and cost — `NFR-PRF`
 

@@ -116,3 +116,50 @@ def build_summarizer(settings: Settings):
         api_key=settings.summarizer_api_key,
         languages=settings.summary_languages,
     )
+
+
+@dataclass(slots=True)
+class AdminContainer:
+    """What the admin console is wired to: reads of everything, and the few
+    tables it may write -- never the catalog (FR-ADM-04), which the database
+    role enforces whatever this object is handed."""
+
+    settings: Settings
+    store: "PostgresEntryStore"
+    runs: Any
+    queue: Any
+    heartbeats: Any
+    clock: SystemClock
+    #: Has `check()`; None when no summarizer is configured.
+    summarizer: Any = None
+    #: Room for what later parts of the console add (forms, sources).
+    extras: dict[str, Any] = field(default_factory=dict)
+
+    def close(self) -> None:
+        self.store.close()
+
+
+def build_admin(settings: Settings | None = None) -> AdminContainer:
+    """Wire the console against the database as `kb_admin`.
+
+    One connection, used from one event-loop thread (see admin/app.py), so no
+    pool and no cross-thread transactions.
+    """
+    from kb.adapters.outbound.postgres_runs import (
+        PostgresHeartbeat,
+        PostgresRunLog,
+        PostgresSyncQueue,
+    )
+    from kb.adapters.outbound.postgres_store import PostgresEntryStore
+
+    settings = settings or Settings.from_env()
+    store = PostgresEntryStore.connect(settings.database_url)
+    return AdminContainer(
+        settings=settings,
+        store=store,
+        runs=PostgresRunLog(store.connection),
+        queue=PostgresSyncQueue(store.connection),
+        heartbeats=PostgresHeartbeat(store.connection),
+        clock=SystemClock(settings.tzinfo),
+        summarizer=build_summarizer(settings) if settings.summarizer_configured else None,
+    )

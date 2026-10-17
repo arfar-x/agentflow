@@ -355,6 +355,12 @@ class FakeRunLog:
     def get_run(self, run_id: int) -> RunRecord | None:
         return next((run for run in self.runs if run.id == run_id), None)
 
+    def latest_per_source(self) -> dict[str, RunRecord]:
+        latest: dict[str, RunRecord] = {}
+        for run in self.runs:  # in order, so a later run replaces an earlier one
+            latest[run.source_id] = run
+        return latest
+
     def run_stats(self, *, since: datetime) -> RunStats:
         recent = [run for run in self.runs if run.started_at >= since]
         count = lambda status: sum(1 for run in recent if run.status is status)  # noqa: E731

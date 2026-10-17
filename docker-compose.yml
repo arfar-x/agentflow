@@ -432,6 +432,70 @@ services:
     command: ["python3", "-m", "kb.adapters.inbound.scheduler"]
     mem_limit: 512m
 
+  # The knowledge base's admin console (spec §6.11): a web UI for sync status and
+  # reports, schedules, sources and manual "form" records. Off unless you ask
+  # for it (`make kb-admin-up`) -- it is a write-capable web surface, so a
+  # deployment that does not want one never runs one.
+  #
+  # What keeps it safe to run:
+  #  - It opens only with KB_ADMIN_TOKEN and refuses to start without one.
+  #  - Published on loopback only by default; put a TLS-terminating proxy in
+  #    front (and set KB_ADMIN_COOKIE_SECURE) before binding it wider.
+  #  - Its database role, kb_admin, reads everything and writes only its own
+  #    tables. It cannot touch the catalog: the scheduler remains the one
+  #    component that writes entries, because it is the one that holds source
+  #    credentials. The console asks it to, through a queue.
+  #  - Deliberately NO env_file: it is handed exactly the variables below, so
+  #    no source credential ever reaches a web-facing process.
+  kb-admin:
+    build:
+      context: ./kb
+    profiles: ["admin"]
+    restart: unless-stopped
+    depends_on:
+      kb-db:
+        condition: service_healthy
+    # Needs to rewrite config/kb-sources.yaml, a host-owned bind mount `nobody`
+    # cannot write -- the same reason kb-cli runs as root. Set KB_ADMIN_USER to
+    # the file's owner (uid:gid) to run unprivileged instead.
+    user: "${KB_ADMIN_USER:-0:0}"
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      KB_DATABASE_URL: postgresql://kb_admin:${KB_ADMIN_DB_PASSWORD:?set KB_ADMIN_DB_PASSWORD in .env}@kb-db:5432/${KB_POSTGRES_DB:-agentflow_kb}
+      KB_SOURCES_FILE: /opt/kb/config/kb-sources.yaml
+      KB_ADMIN_TOKEN: ${KB_ADMIN_TOKEN:?set KB_ADMIN_TOKEN in .env -- scripts/generate-secrets.sh makes one}
+      KB_ADMIN_HOST: 0.0.0.0
+      KB_ADMIN_PORT: "8324"
+      KB_ADMIN_COOKIE_SECURE: ${KB_ADMIN_COOKIE_SECURE:-false}
+      KB_TIMEZONE: ${KB_TIMEZONE:-UTC}
+      KB_SUMMARY_LANGUAGES: ${KB_SUMMARY_LANGUAGES:-en}
+      # The summarizer, for the on-demand summaries in the form editor. This is
+      # the model endpoint only; it is not a source credential.
+      KB_SUMMARIZER_URL: ${KB_SUMMARIZER_URL:-}
+      KB_SUMMARIZER_MODEL: ${KB_SUMMARIZER_MODEL:-}
+      KB_SUMMARIZER_API_KEY: ${KB_SUMMARIZER_API_KEY:-}
+      PYTHONDONTWRITEBYTECODE: "1"
+    extra_hosts:
+      - "${MODEL_HOSTNAME:-your-model-host}:${MODEL_HOST_IP:-192.0.2.1}"
+    volumes:
+      - ./config/kb-sources.yaml:/opt/kb/config/kb-sources.yaml
+    ports:
+      - "${KB_ADMIN_BIND:-127.0.0.1}:${KB_ADMIN_PORT:-8324}:8324"
+    networks: [backend]
+    command: ["python3", "-m", "kb.adapters.inbound.admin"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8324/health', timeout=3)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 512m
+
   # GitLab push events, for seconds-fresh updates instead of the 15-minute
   # tick. The one component that accepts an inbound connection, so: its own
   # service, bound to 127.0.0.1 (put a reverse proxy in front if GitLab lives

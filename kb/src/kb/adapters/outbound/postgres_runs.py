@@ -155,6 +155,17 @@ class PostgresRunLog(_Base):
             row = cursor.fetchone()
         return _run(row) if row else None
 
+    def latest_per_source(self) -> dict[str, RunRecord]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                SELECT DISTINCT ON (source_id) {_RUN_COLUMNS}
+                  FROM sync_run
+                 ORDER BY source_id, id DESC
+                """
+            )
+            return {row["source_id"]: _run(row) for row in cursor.fetchall()}
+
     def run_stats(self, *, since: datetime) -> RunStats:
         with self._connection.cursor() as cursor:
             cursor.execute(

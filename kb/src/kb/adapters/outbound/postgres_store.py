@@ -507,6 +507,42 @@ class PostgresEntryStore:
             "checkpoints": checkpoints,
         }
 
+    # -- read models for the admin console ----------------------------------
+    def content_by_source(self) -> dict[str, dict[str, int]]:
+        """Kept text per source: how many documents and how many bytes."""
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT e.source_id,
+                       count(*)                                AS documents,
+                       coalesce(sum(octet_length(c.body)), 0)  AS text_bytes
+                  FROM entry_content c JOIN entry e ON e.id = c.entry_id
+                 GROUP BY e.source_id
+                """
+            )
+            return {
+                row["source_id"]: {"documents": row["documents"], "text_bytes": int(row["text_bytes"])}
+                for row in cursor.fetchall()
+            }
+
+    def refresh_queue_summary(self, *, max_attempts: int = 5, failures: int = 20) -> dict[str, object]:
+        """What readers asked to have refreshed, and what keeps failing."""
+        with self._connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FILTER (WHERE attempts < %(max)s) AS pending,"
+                "       count(*) FILTER (WHERE attempts >= %(max)s) AS gave_up"
+                "  FROM refresh_queue",
+                {"max": max_attempts},
+            )
+            counts = dict(cursor.fetchone())
+            cursor.execute(
+                "SELECT entry_id, attempts, last_error, requested_at FROM refresh_queue"
+                " WHERE last_error IS NOT NULL ORDER BY requested_at DESC LIMIT %s",
+                (failures,),
+            )
+            counts["failures"] = [dict(row) for row in cursor.fetchall()]
+        return counts
+
     # -- lazy refresh ------------------------------------------------------
     def queue_refresh(self, entry_id: str, *, at: datetime) -> None:
         """Record that somebody read this entry and it looked stale.

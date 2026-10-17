@@ -135,6 +135,54 @@ def test_the_webhook_receiver_is_separate_and_off_by_default(compose):
     assert "webhook" not in mcp, "mcp-kb keeps its no-published-port rule"
 
 
+def test_the_admin_console_is_separate_opt_in_and_holds_no_source_credentials(compose):
+    # Covers: NFR-DEP-08
+    assert "\n  kb-admin:" in compose
+    block = _service_block(compose, "kb-admin")
+
+    assert 'profiles: ["admin"]' in block, "off unless asked for: it is a write-capable web surface"
+    # Published, but on loopback unless the operator says otherwise.
+    assert "${KB_ADMIN_BIND:-127.0.0.1}" in block
+    assert block.count("ports:") == 1
+    # Handed exactly what it needs, never the whole environment: a web-facing
+    # process must not be one `env_file` away from every source credential.
+    assert "env_file" not in block
+    for credential in ("CONFLUENCE_", "JIRA_", "GITLAB_", "KB_WEBHOOK_SECRET", "VLLM_API_KEY"):
+        assert credential not in block, f"{credential} must not reach the console"
+    # Its own least-privilege role -- not the owner's, not the query path's.
+    assert "postgresql://kb_admin:" in block
+    assert "KB_POSTGRES_PASSWORD" not in block and "KB_READER_PASSWORD" not in block
+    # It refuses to start without a token rather than serve without one.
+    assert "KB_ADMIN_TOKEN: ${KB_ADMIN_TOKEN:?" in block
+    assert "kb.adapters.inbound.admin" in block
+    assert "healthcheck:" in block and "/health" in block
+    assert "no-new-privileges" in block
+
+
+def test_the_catalogs_other_services_are_untouched_by_the_console(compose):
+    # Covers: NFR-DEP-08
+    for name in ("mcp-kb", "kb-scheduler"):
+        block = _service_block(compose, name)
+        assert "kb_admin" not in block and "KB_ADMIN" not in block, name
+    assert "ports:" not in _service_block(compose, "mcp-kb"), "mcp-kb still publishes nothing"
+
+
+def test_the_console_role_and_token_are_generated_documented_and_created():
+    # Covers: NFR-DEP-08
+    env_example = (REPO_ROOT / ".env.example").read_text(encoding="utf-8")
+    secrets = (REPO_ROOT / "scripts" / "generate-secrets.sh").read_text(encoding="utf-8")
+    init = (REPO_ROOT / "scripts" / "kb-init.sh").read_text(encoding="utf-8")
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    for name in ("KB_ADMIN_TOKEN", "KB_ADMIN_DB_PASSWORD"):
+        assert name in env_example and name in secrets, name
+    # The role exists only when asked for, and gets exactly the checked-in grants.
+    assert "KB_ADMIN_DB_PASSWORD:-" in init and "kb/grants/admin.sql" in init
+    assert "kb-admin-up:" in makefile and "--profile admin" in makefile
+    # Turning it on creates the role first, so the service never starts without it.
+    assert "scripts/kb-init.sh" in makefile[makefile.index("kb-admin-up:") :]
+
+
 AGENT_DIR = REPO_ROOT / "agents"
 
 

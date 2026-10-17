@@ -151,3 +151,62 @@ class MissingSetting(RuntimeError):
     def __init__(self, variable: str) -> None:
         self.variable = variable
         super().__init__(f"{variable} is not set")
+
+
+class AdminSettings(BaseModel):
+    """What the admin console needs beyond the catalog's own settings.
+
+    A separate class on purpose: `Settings` is read by every service, and the
+    admin token must not be a field any of them could be handed.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The one shared secret that opens the console (FR-ADM-01). Long enough that
+    #: guessing it is not a plan; `scripts/generate-secrets.sh` makes one.
+    token: str
+    #: Loopback by default. The container needs 0.0.0.0 to be reachable through
+    #: its published port, and docker-compose.yml sets that explicitly.
+    host: str = "127.0.0.1"
+    port: int = Field(default=8324, ge=1, le=65535)
+    #: Where the built single-page app lives.
+    static_dir: str = "/opt/kb/web"
+    #: Hours a login lasts. Not a security boundary on its own -- changing the
+    #: token ends every session at once.
+    session_hours: float = Field(default=12.0, gt=0, le=168)
+    #: Mark the cookie `Secure`. Off by default because the stack serves plain
+    #: HTTP on a loopback address; turn it on behind a TLS-terminating proxy.
+    cookie_secure: bool = False
+
+    @field_validator("token")
+    @classmethod
+    def _long_enough(cls, value: str) -> str:
+        if len(value.strip()) < MIN_ADMIN_TOKEN_LENGTH:
+            raise ValueError(
+                f"must be at least {MIN_ADMIN_TOKEN_LENGTH} characters -- "
+                "scripts/generate-secrets.sh generates one"
+            )
+        return value.strip()
+
+    @classmethod
+    def from_env(cls, env: dict[str, str] | None = None) -> "AdminSettings":
+        source = os.environ if env is None else env
+        if not source.get("KB_ADMIN_TOKEN"):
+            raise MissingSetting("KB_ADMIN_TOKEN")
+        values: dict[str, object] = {}
+        for field, variable in (
+            ("token", "KB_ADMIN_TOKEN"),
+            ("host", "KB_ADMIN_HOST"),
+            ("port", "KB_ADMIN_PORT"),
+            ("static_dir", "KB_ADMIN_STATIC_DIR"),
+            ("session_hours", "KB_ADMIN_SESSION_HOURS"),
+        ):
+            raw = source.get(variable)
+            if raw not in (None, ""):
+                values[field] = raw
+        if (source.get("KB_ADMIN_COOKIE_SECURE") or "").strip().lower() in {"1", "true", "yes", "on"}:
+            values["cookie_secure"] = True
+        return cls.model_validate(values)
+
+
+MIN_ADMIN_TOKEN_LENGTH = 32
