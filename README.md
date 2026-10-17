@@ -28,6 +28,7 @@ sitting in front of every write. See
 | `mcp-agent-skills` | this repo's `agent-skills` submodule, built and served as an MCP server -- **internal only, no published port** |
 | `admin-panel` | [ClickHouse/librechat-admin-panel](https://github.com/ClickHouse/librechat-admin-panel) -- users/groups/roles/grants UI, see "Managing users" below |
 | `mcp-kb` | the knowledge catalog's MCP server (`kb_search`, `kb_get`) -- **internal only, no published port** |
+| `kb-admin` | the knowledge catalog's admin console (sync status and reports, triggering syncs, editing sources, manual records) -- **opt-in** (`make kb-admin-up`), published on `127.0.0.1:8324` only, signs in with `KB_ADMIN_TOKEN`; see [`docs/KNOWLEDGE_BASE.md`](docs/KNOWLEDGE_BASE.md#the-admin-console) |
 | `kb-db` | the knowledge catalog's own Postgres (`kb/`, see [`docs/spec/knowledge-base.md`](docs/spec/knowledge-base.md)) -- **internal only, no published port** |
 | `searxng` | self-hosted search backing LibreChat's native Web Search tool -- **internal only, no published port** |
 | `crw` | [fastcrw/crw](https://github.com/fastcrw/crw), a Firecrawl-compatible page scraper: fetches the pages web search found and returns them as markdown -- **internal only, no published port** |

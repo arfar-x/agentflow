@@ -23,6 +23,7 @@ true. Change the spec first, then the code.
 | 7 | Freshness mechanisms, scheduler, webhook receiver | done |
 | 8 | Agent tools and instructions | done |
 | 9 | Operator documentation and setup automation | done |
+| 10 | Admin console: run history, request queue, source editing, manual records | done |
 
 **The catalog fills and refreshes itself.** Configure the sources, review the
 file, and `kb-scheduler` does the rest: incremental runs on the cadence you set,
@@ -171,9 +172,35 @@ from `config/kb-sources.yaml`, per source.
 | full scrape | on, nightly 03:00 | The only pass that can detect deletions, moves and missed events |
 | webhook | off | GitLab push events, for seconds instead of minutes |
 
-Every run lands in `sync_run` with its counts and any error — `make kb-status`
-and `python -m kb status` read it, so "was this working last week?" survives log
-rotation.
+Every run — scheduled, requested from the admin console, or started with
+`make kb-sync` — is written to `sync_run` when it starts and finished when it
+ends, with its counts, rejected documents and any error, so "was this working
+last week?" survives log rotation. The admin console is where it is read;
+`make kb-status` reports the catalog, not the run history.
+
+### The admin console
+
+An opt-in web console for the operator (spec §6.11): sync status and reports,
+the schedule, triggering syncs, editing `config/kb-sources.yaml`, and manual
+records with on-demand summaries.
+
+```bash
+# .env: KB_ADMIN_TOKEN and KB_ADMIN_DB_PASSWORD (scripts/generate-secrets.sh makes both)
+make kb-init            # creates the kb_admin role
+make kb-admin-up        # http://127.0.0.1:8324
+```
+
+It is `src/kb/adapters/inbound/admin/` (a Starlette app) plus `frontend/` (React,
+Vite, Tailwind). It never writes the catalog — its database role cannot — so
+anything that changes entries is a row in `sync_request` that `kb-scheduler`
+executes. Working on the front end:
+
+```bash
+cd frontend && npm ci
+npm run dev        # Vite, proxying nothing: point it at a running kb-admin
+npm test           # vitest
+npm run build      # typecheck, then dist/ (the image copies it to /opt/kb/web)
+```
 
 The webhook is the one inbound port, so it is opt-in and separate:
 
@@ -266,13 +293,18 @@ src/kb/
 │   ranking.py     reciprocal rank fusion
 │   merge.py       overrides layered on generated entries
 │   policies.py    is_stale / needs_resummarize / is_indexable
+│   runs.py        run status and trigger
 ├── application/
-│   ports/         protocols: EntryStore, KnowledgeSource, Summarizer, Clock
-│   use_cases/     search_catalog, reconcile_document
+│   ports/         protocols: EntryStore, KnowledgeSource, Summarizer, Clock,
+│                  RunLog, SyncQueue, HeartbeatStore, SourcesFile, FormRecords
+│   use_cases/     search_catalog, reconcile_document, sync_source, schedule,
+│                  request_sync, edit_sources, manage_forms, draft_summary
 └── adapters/
-    outbound/      postgres_store.py  (phase 6+: confluence, gitlab, jira, api)
-    inbound/       (phase 5: mcp server, cli, scheduler)
-migrations/        001_initial.sql -- applied by `make kb-init`
+    outbound/      postgres_*, the source kinds, llm_summarizer, sources_editor
+                   (ruamel), form_source (the built-in manual records)
+    inbound/       cli, mcp_server, scheduler, webhook, admin/ (the console)
+frontend/          the console's React app, built into the image
+migrations/        001..004 -- applied by `make kb-init`
 ```
 
 Dependencies point inward: `adapters → application → domain`. `domain` and

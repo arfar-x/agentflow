@@ -54,7 +54,9 @@ src/kb/
 ├── domain/        pure rules: entry, text, identity, ranking, merge, policies
 ├── application/   ports/ (protocols) + use_cases/
 └── adapters/
-    └── outbound/  postgres_store.py (the only adapter so far)
+    ├── outbound/  postgres_*, the source kinds, llm_summarizer, sources_editor, form_source
+    └── inbound/   cli, mcp_server, scheduler, webhook, admin/
+frontend/          the admin console's React app
 migrations/        SQL applied by `make kb-init`; append-only -- a shipped file
                    is never edited, a change is a new numbered file
 ```
@@ -105,6 +107,33 @@ Dependencies point inward only: `adapters → application → domain`.
 - **A new port** goes in `application/ports/` as a `Protocol`, and its fake must
   satisfy it (`tests/application/test_ports_models.py` asserts this with
   `isinstance`).
+
+## The admin console
+
+`adapters/inbound/admin/` (Starlette) and `frontend/` (React, Vite).
+
+- **It never writes the catalog.** Its database role (`grants/admin.sql`)
+  cannot, and a test proves it. Anything that changes entries -- a sync, a
+  purge, retiring a source, publishing a manual record -- is a `sync_request`
+  row, and `adapters/inbound/scheduler.py` is the one place that carries it
+  out. A new console action that wants to write an entry is a new request kind,
+  not a new grant.
+- **It holds no source credentials** and no response may contain one
+  (FR-ADM-15). What it knows about them comes from the scheduler's heartbeat:
+  variable names and whether each is set.
+- **`config/kb-sources.yaml` stays the only truth.** The console edits it
+  through `EditSources` (preview, then apply with the etag), keeping comments
+  and `${VAR}` placeholders (`sources_editor.py`, ruamel). `kb_source` and
+  `kb_source_revision` are history, not a second configuration.
+- **Manual records are the one place the catalog holds an author's words**
+  (spec N2). They enter through `FormKnowledgeSource` and `ReconcileDocument`
+  like any source; `PresetSummarizer` uses the operator's approved summary
+  instead of asking the model again. The reserved source id is `form`.
+- Handlers are `async` on purpose: one event-loop thread, one database
+  connection. Anything slow that touches no database (a model call) goes to a
+  worker thread.
+- The front end's tests are `cd frontend && npm test`; CI also typechecks and
+  builds it.
 
 ## Front doors
 
@@ -160,8 +189,8 @@ Dependencies point inward only: `adapters → application → domain`.
 
 ## Not built yet
 
-The scheduler and the webhook receiver are phases 7–9 in
-[`README.md`](README.md#status).
+Nothing is staged: the scheduler, the webhook receiver and the admin console
+are built (see [`README.md`](README.md#status)).
 
 The `http_api` and `local_files` sources are **deferred, not missing**: the
 config shape is settled and tested, and the adapter gets written when a real

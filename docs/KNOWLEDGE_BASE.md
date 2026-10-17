@@ -18,6 +18,7 @@ internals are [`kb/README.md`](../kb/README.md).
 | `kb-scheduler` | Syncs on the configured cadences, drains the refresh queue | no port |
 | `kb-cli` | One command and exits (`make kb-*`). Connects as the database owner | not running |
 | `kb-webhook` | GitLab push events. Opt-in (`--profile webhook`) | loopback only |
+| `kb-admin` | The admin console. Opt-in (`--profile admin`) | loopback only |
 
 `make up` starts the first three and runs `scripts/kb-bootstrap.sh`, which
 creates the schema, the least-privilege query role, and `config/kb-sources.yaml`
@@ -251,11 +252,87 @@ KB_SOURCES_APPROVED=false
 Per-source `enabled:` is the everyday control; `approved` is the one switch for
 an incident. Every command reports which of the two it used.
 
+## The admin console
+
+A web page for what the commands above do, plus the things that are awkward at a
+prompt. It is off until you ask for it:
+
+```bash
+scripts/generate-secrets.sh      # prints KB_ADMIN_TOKEN and KB_ADMIN_DB_PASSWORD; paste into .env
+make kb-init                     # creates the kb_admin database role
+make kb-admin-up                 # http://127.0.0.1:8324 -- sign in with KB_ADMIN_TOKEN
+```
+
+It listens on `127.0.0.1` only. To reach it from elsewhere use an SSH tunnel, or
+put a TLS-terminating proxy you control in front of it and set
+`KB_ADMIN_COOKIE_SECURE=true`; the token is the only credential, so do not
+expose it plain. Rotating the token is changing `.env` and restarting `kb-admin`
+(every session ends).
+
+| Screen | What it is for |
+|---|---|
+| Overview | Is the scheduler alive, is syncing on (and whether the file or `KB_SOURCES_APPROVED` says so), the last day's runs, what is queued, and a dependency check |
+| Sources | Every source with its policy, counts and last run. Add, edit, enable, disable, delete, change a cadence, purge kept text, switch syncing off |
+| Form records | Knowledge you write by hand (below) |
+| Schedules | Each source's mechanisms: cadence, last run, next due. Cadences are edited on the source |
+| Reports | Every run — scheduled, requested, webhook or CLI — with counts, the documents it rejected, and the error |
+| Issues | Failed runs, sources the scheduler cannot authenticate, refreshes that keep failing, and **searches that found nothing**, each with a shortcut to write the missing record |
+
+**What it can and cannot do.** The console never writes the catalog; its
+database role cannot. Triggering a sync, purging kept text, retiring a source's
+entries and publishing a record are *requests* that `kb-scheduler` executes on
+its next tick (about ten seconds), one at a time, so a request waits behind a
+sync that is already running. The screens say "queued", then "running", then
+show the run.
+
+**Editing sources.** Every change is two steps. The console shows the exact
+diff to `config/kb-sources.yaml` and a warning for anything that matters — most
+of all that a source with `store_raw_content` makes its full text readable by
+every catalog user — and writes only after you tick that you have read it. It
+keeps your comments and your `${VAR}` placeholders, never writes a secret
+(credentials stay `*_env` names), refuses to overwrite a file that changed since
+the preview, and records each change, with the file before and after, so it can
+be undone by hand (History). A change made to the file outside the console is
+noticed and recorded too; **the file always wins**. The file is edited in place,
+which is why `kb-admin` runs as root by default (`KB_ADMIN_USER` changes that);
+if it cannot write the file, the console says so and stays read-only.
+
+**Entries of a source you deleted** stay searchable, because only a sync can
+retire an entry and nothing syncs a deleted source. The console offers to remove
+them when you delete the source, and lists any it finds afterwards. Removal
+hides them (and drops their kept text); it is reversible.
+
+### Form records
+
+For knowledge that is written nowhere else. A record has a title and a summary
+per configured language (Persian is laid out right to left), a text in
+Markdown, a type, tags, keywords, other names and an owner. Saving it queues a
+sync of the built-in `form` source, and it then behaves like any other entry:
+searchable in every language, readable with `kb_get`, soft-deleted when you
+delete the record.
+
+- **Everyone who uses the catalog can read it**, whatever their access
+  elsewhere. A record's text is always kept (that is how agents read it), so
+  the editor says so before you write; do not put a secret or a restricted
+  document in one.
+- **Generate summary** asks the summarizer model to describe the text and fills
+  the fields. It is a draft: nothing is saved until you save, you can undo it,
+  and it only fills the languages and keyword lists, never replacing a title you
+  wrote. What you save is used as written — the model is not asked again when
+  the record is synced, and editing only the summary still republishes the
+  entry. With no summarizer configured, write the summary by hand; the record
+  is still findable by its title and keywords.
+- **Read as an agent** shows the record the way `kb_get` returns it, a page at
+  a time with the same offsets and totals, once it is published.
+- Records are in the `form_record` table, so they are in `make backup` — and,
+  unlike entries, they are **not** rebuildable from any source.
+
 ## Backup and restore
 
 `kb_data` is in `make backup` like every other volume. What is actually
-irreplaceable in it is small: the **overrides**, the **gap log** and the **sync
-checkpoints**. Entries, the search index and kept document text are derived —
+irreplaceable in it is small: the **overrides**, the **gap log**, the **sync
+checkpoints**, and — if you use the console — the **form records** and the
+**source configuration history**. Entries, the search index and kept document text are derived —
 losing them costs one `make kb-sync` per source, not a restore.
 
 Schema changes are migrations in `kb/migrations/`, applied by `make kb-init`
@@ -274,6 +351,10 @@ an upgrade is always "apply what is new, skip what is recorded".
 | A scheduled run fails with "summarizer is not usable" | The scheduler runs the same check as `make kb-check` before any run that summarizes, and refuses rather than catalogue documents undescribed. Fix the endpoint or `KB_SUMMARIZER_MODEL`/`KB_SUMMARIZER_API_KEY` (the error carries the endpoint's own message, e.g. a 403); the next cadence tries again with no action needed |
 | Entries exist but have no summaries | `KB_SUMMARIZER_URL`/`KB_SUMMARIZER_MODEL` are unset, or the endpoint was down when they were catalogued. Re-syncing after fixing it fills them in |
 | The nightly pass runs at the wrong hour | `KB_TIMEZONE`. `at: "03:00"` is read in that zone; the default is UTC |
+| The console says the scheduler has not reported, or a request stays queued | `make logs SERVICE=kb-scheduler`. Requests are served by the scheduler; a stopped one means nothing runs. A sync already running delays them |
+| The console cannot sign you in | `KB_ADMIN_TOKEN` must be at least 32 characters and is compared exactly; repeated failures lock the address out for a few minutes |
+| The console is read-only for sources | The file is mounted read-only or owned by someone `kb-admin` does not run as — see `KB_ADMIN_USER` in `.env.example` |
+| A saved record never becomes "published" | The scheduler has to run the `form` source: check its logs. Records publish even with syncing switched off or an unreadable sources file |
 | An agent answers without searching | `make agent-import` — the instruction and the two tools live in `agents/*.yaml` |
 | `kb_get` returns `content: null` for a source with `store_raw_content: true` | The source has not been fully synced since the flag was turned on (`make kb-sync SOURCE=<id>`), or the document changed since the last sync — text is only served at the version its summary describes. `make kb-sources` shows the effective setting under `raw_content` |
 

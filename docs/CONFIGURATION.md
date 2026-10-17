@@ -94,6 +94,24 @@ run the CLI (`python -m kb status`) against the catalog from elsewhere:
 | `KB_SUMMARIZER_API_KEY` | no | none | Optional: sent as `Authorization: Bearer …` when set, omitted when empty — many self-hosted endpoints need no key. Its own variable so the catalog can use a different credential from the chat endpoint, or none. |
 | `KB_SUMMARY_LANGUAGES` | no | `en` | Comma-separated, e.g. `en,fa`. Every entry is catalogued in each, which is what lets a question in one language find a document written in another. |
 
+### Admin console (optional)
+
+Off unless started with `make kb-admin-up` (compose profile `admin`). See
+[`KNOWLEDGE_BASE.md`](KNOWLEDGE_BASE.md#the-admin-console).
+`scripts/generate-secrets.sh` generates the first two.
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `KB_ADMIN_TOKEN` | to run it | none | The one credential for the console, at least 32 characters; it refuses to start without it. Sessions are signed with a key derived from it, so changing it signs everyone out. |
+| `KB_ADMIN_DB_PASSWORD` | to run it | none | Password for `kb_admin`, the database role the console uses: it reads everything and writes only its own tables, never the catalog. `make kb-init` creates the role when this is set. |
+| `KB_ADMIN_PORT` / `KB_ADMIN_BIND` | no | `8324` / `127.0.0.1` | Where it is published. Widen the bind only behind a TLS proxy you control. |
+| `KB_ADMIN_COOKIE_SECURE` | no | `false` | Set `true` behind TLS so the session cookie is never sent in the clear. |
+| `KB_ADMIN_SESSION_HOURS` | no | `12` | How long a login lasts. |
+| `KB_ADMIN_USER` | no | `0:0` | The user the container runs as. It rewrites the bind-mounted `config/kb-sources.yaml` in place, which a host-owned file only allows as root; set the file's owner here (e.g. `1000:1000`) to avoid that. |
+
+The console reads `KB_SUMMARIZER_*` and `KB_SUMMARY_LANGUAGES` too (for "generate
+summary" and the languages of a record). It is given no source credentials.
+
 Sources themselves live in `config/kb-sources.yaml` (gitignored; the template is
 `config/kb-sources.yaml.example`). `make kb-sources-discover` drafts it from
 what Confluence and Jira actually contain, writing every candidate disabled, and

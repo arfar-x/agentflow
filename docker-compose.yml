@@ -469,6 +469,7 @@ services:
       KB_ADMIN_HOST: 0.0.0.0
       KB_ADMIN_PORT: "8324"
       KB_ADMIN_COOKIE_SECURE: ${KB_ADMIN_COOKIE_SECURE:-false}
+      KB_ADMIN_SESSION_HOURS: ${KB_ADMIN_SESSION_HOURS:-12}
       KB_TIMEZONE: ${KB_TIMEZONE:-UTC}
       KB_SUMMARY_LANGUAGES: ${KB_SUMMARY_LANGUAGES:-en}
       # The summarizer, for the on-demand summaries in the form editor. This is
