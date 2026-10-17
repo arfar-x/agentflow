@@ -20,15 +20,22 @@ from kb.adapters.outbound.source_factory import BUILDABLE_KINDS, missing_credent
 from kb.adapters.outbound.sources_editor import RuamelSourceEditor
 from kb.adapters.outbound.sources_file import FileSourcesFile
 from kb.application.ports.heartbeat import Heartbeat
+from kb.application.use_cases.draft_summary import DraftSummary
 from kb.application.use_cases.edit_sources import EditSources
+from kb.application.use_cases.get_entry import GetEntry
+from kb.application.use_cases.manage_forms import ManageForms
+from kb.application.use_cases.request_sync import RequestSync
 from kb.application.ports.sync_queue import RequestStatus, SyncRequest
 from kb.config import AdminSettings, MissingSetting
 from kb.domain.runs import RunStatus, Trigger
 from tests.application.fakes import (
     FakeClock,
+    FakeEntryStore,
+    FakeFormRecords,
     FakeHeartbeats,
     FakeRunLog,
     FakeSourceHistory,
+    FakeSummarizer,
     FakeSyncQueue,
 )
 
@@ -56,10 +63,11 @@ sources:
 """
 
 
-class ConsoleStore:
+class ConsoleStore(FakeEntryStore):
     """What the console reads from the catalog."""
 
     def __init__(self) -> None:
+        super().__init__()
         self.gap_rows = [{"query": "hiring plan", "times": 3, "last_seen": NOW}]
 
     def status(self):
@@ -110,6 +118,12 @@ def world(tmp_path):
         languages=("en", "fa"),
         summarizer=Summarizer(),
     )
+    services.forms = FakeFormRecords()
+    services.manage_forms = ManageForms(
+        services.forms, RequestSync(services.queue, services.clock), services.clock
+    )
+    services.draft_summary = DraftSummary(FakeSummarizer())
+    services.get_entry = GetEntry(services.store, services.clock, queue_refresh=False)
     services.sources_editor = EditSources(
         FileSourcesFile(sources),
         RuamelSourceEditor(),
@@ -172,11 +186,16 @@ def test_every_endpoint_but_the_health_check_needs_a_login(anon):
     # Covers: FR-ADM-01
     assert anon.get("/health").status_code == 200
     for path in ("/api/overview", "/api/sources", "/api/schedules", "/api/runs", "/api/runs/1",
-                 "/api/issues", "/api/gaps", "/api/config", "/api/sync/requests"):
+                 "/api/issues", "/api/gaps", "/api/config", "/api/sync/requests", "/api/forms",
+                 "/api/forms/x", "/api/forms/x/content"):
         assert anon.get(path).status_code == 401, path
     assert anon.post("/api/sync", json={}, headers=CSRF).status_code == 401
     assert anon.delete("/api/sync/requests/1", headers=CSRF).status_code == 401
     assert anon.post("/api/check", headers=CSRF).status_code == 401
+    assert anon.post("/api/forms", json={}, headers=CSRF).status_code == 401
+    assert anon.put("/api/forms/x", json={}, headers=CSRF).status_code == 401
+    assert anon.delete("/api/forms/x", headers=CSRF).status_code == 401
+    assert anon.post("/api/forms/draft-summary", json={}, headers=CSRF).status_code == 401
     assert anon.get("/api/session").json() == {"authenticated": False}
 
 
@@ -273,6 +292,10 @@ def test_every_state_changing_endpoint_needs_the_header(client, world):
         ("post", "/api/sources/retired-wiki/retire"),
         ("post", "/api/sources/preview"),
         ("post", "/api/sources/apply"),
+        ("post", "/api/forms"),
+        ("put", "/api/forms/x"),
+        ("delete", "/api/forms/x"),
+        ("post", "/api/forms/draft-summary"),
         ("delete", f"/api/sync/requests/{request_id}"),
     ):
         assert getattr(client, method)(path).status_code == 403, path
@@ -571,7 +594,8 @@ def test_no_response_contains_a_credential_value(client, world, monkeypatch):
 
     seen = []
     for path in ("/api/overview", "/api/sources", "/api/schedules", "/api/runs", "/api/runs/1",
-                 "/api/issues", "/api/gaps", "/api/config", "/api/sync/requests"):
+                 "/api/issues", "/api/gaps", "/api/config", "/api/sync/requests", "/api/forms",
+                 "/api/forms/x", "/api/forms/x/content"):
         seen.append(client.get(path).text)
     seen.append(client.post("/api/check", headers=CSRF).text)
 

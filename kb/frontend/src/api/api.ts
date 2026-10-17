@@ -1,7 +1,12 @@
-import { del, get, post } from './client';
+import { del, get, post, request } from './client';
 import type {
   ChangePreview,
   CheckResponse,
+  DraftSummaryResponse,
+  FormContent,
+  FormInput,
+  FormRecord,
+  FormsResponse,
   ConfigResponse,
   IssuesResponse,
   Overview,
@@ -72,6 +77,15 @@ export const api = {
     post<{ request_id: number }>(`/api/sources/${encodeURIComponent(sourceId)}/retire`),
   purgeContent: (sourceId: string) =>
     post<{ request_id: number }>(`/api/sources/${encodeURIComponent(sourceId)}/purge-content`),
+  forms: () => get<FormsResponse>('/api/forms'),
+  createForm: (record: FormInput) => post<{ record: FormRecord }>('/api/forms', record as unknown as Record<string, unknown>),
+  updateForm: (slug: string, record: FormInput) =>
+    request<{ record: FormRecord }>('PUT', `/api/forms/${encodeURIComponent(slug)}`, record as unknown as Record<string, unknown>),
+  deleteForm: (slug: string) => del<{ deleted: string }>(`/api/forms/${encodeURIComponent(slug)}`),
+  draftSummary: (body: { title: Record<string, string>; body: string; type: string }) =>
+    post<DraftSummaryResponse>('/api/forms/draft-summary', body),
+  formContent: (slug: string, offset = 0) =>
+    get<FormContent>(`/api/forms/${encodeURIComponent(slug)}/content${query({ offset: offset || undefined })}`),
   syncRequests: (statuses?: RequestStatus[]) =>
     get<{ requests: SyncRequestView[] }>(
       `/api/sync/requests${query({ status: statuses?.join(',') })}`,

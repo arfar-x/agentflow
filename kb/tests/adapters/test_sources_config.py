@@ -409,6 +409,7 @@ def test_a_token_setting_must_be_the_name_of_a_variable_not_a_secret():
 
 @pytest.mark.parametrize("bad", ["form", "has space", "-leading", "a/b"])
 def test_a_source_id_is_a_slug_and_never_the_reserved_manual_records_id(bad):
+    # Covers: FR-SRC-07
     from kb.sources_config import ConfigError, parse
 
     with pytest.raises(ConfigError, match="id"):

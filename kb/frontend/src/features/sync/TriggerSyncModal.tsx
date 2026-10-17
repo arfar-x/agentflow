@@ -76,6 +76,7 @@ export function TriggerSyncModal({ initialSourceId, onClose, onOpenRun }: Props)
           </label>
           <select id="sync-source" value={sourceId} onChange={(e) => setSourceId(e.target.value)} className={input}>
             <option value="*">All enabled sources{sources.data ? ` (${enabled.length})` : ''}</option>
+            {sources.data?.manual ? <option value="form">form (manual records, built in)</option> : null}
             {list.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.id} ({s.kind}){s.enabled ? '' : ' — disabled'}

@@ -20,3 +20,32 @@ body {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* The record preview renders sanitized Markdown; Tailwind's reset leaves it
+   unstyled, and a typography plugin for one pane is more than it is worth. */
+.prose-preview h1,
+.prose-preview h2,
+.prose-preview h3 {
+  margin: 1em 0 0.4em;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+.prose-preview h1 { font-size: 1.25rem; }
+.prose-preview h2 { font-size: 1.1rem; }
+.prose-preview h3 { font-size: 1rem; }
+.prose-preview p,
+.prose-preview ul,
+.prose-preview ol,
+.prose-preview pre,
+.prose-preview blockquote,
+.prose-preview table { margin: 0.6em 0; }
+.prose-preview ul { list-style: disc; padding-inline-start: 1.4em; }
+.prose-preview ol { list-style: decimal; padding-inline-start: 1.4em; }
+.prose-preview a { color: #818cf8; text-decoration: underline; }
+.prose-preview code { border-radius: 4px; background: #1e293b; padding: 0.1em 0.35em; font-size: 0.95em; }
+.prose-preview pre { overflow-x: auto; border-radius: 8px; background: #0f172a; padding: 0.8em; }
+.prose-preview pre code { background: none; padding: 0; }
+.prose-preview blockquote { border-inline-start: 3px solid #334155; padding-inline-start: 0.8em; color: #94a3b8; }
+.prose-preview table { border-collapse: collapse; }
+.prose-preview th,
+.prose-preview td { border: 1px solid #334155; padding: 0.25em 0.6em; }

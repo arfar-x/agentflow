@@ -5,8 +5,9 @@ import { setUnauthorizedHandler } from './api/client';
 import { ConsoleProvider, useConsole } from './components/ConsoleContext';
 import { Header, NAV } from './components/Header';
 import { LoginScreen } from './components/LoginScreen';
-import { Empty, Loading } from './components/ui/Page';
+import { Loading } from './components/ui/Page';
 import { ToastProvider } from './components/ui/Toast';
+import { FormsView } from './features/forms/FormsView';
 import { IssuesView } from './features/issues/IssuesView';
 import { OverviewView } from './features/overview/OverviewView';
 import { RunsView } from './features/runs/RunsView';
@@ -55,10 +56,10 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
         {current === 'overview' && <OverviewView onNavigate={navigate} />}
         {current === 'sources' && <SourcesView onNavigate={navigate} focusId={route.param} />}
-        {current === 'forms' && <Empty>Manual records arrive in a later step of this build.</Empty>}
+        {current === 'forms' && <FormsView param={route.param} onNavigate={navigate} />}
         {current === 'schedules' && <SchedulesView onNavigate={navigate} />}
         {current === 'reports' && <RunsView openRunId={runId} onOpenRun={openRun} onCloseRun={() => navigate('reports')} />}
-        {current === 'issues' && <IssuesView onOpenRun={openRun} />}
+        {current === 'issues' && <IssuesView onOpenRun={openRun} onWriteRecord={(query) => navigate('forms', `new:${query}`)} />}
       </main>
       {triggerSync.open ? (
         <TriggerSyncModal initialSourceId={triggerSync.sourceId} onClose={closeTrigger} onOpenRun={openRun} />

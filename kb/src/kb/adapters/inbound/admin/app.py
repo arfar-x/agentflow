@@ -35,11 +35,20 @@ from kb.application.ports.source_files import FileNotWritable, SourceChange
 from kb.application.ports.run_log import RunLog
 from kb.application.ports.sync_queue import RequestStatus, SyncQueue
 from kb.application.use_cases.console_status import assess
+from kb.application.use_cases.draft_summary import NothingToSummarize
 from kb.application.use_cases.edit_sources import Conflict, InvalidChange, NotConfirmed
+from kb.application.use_cases.manage_forms import (
+    FormExists,
+    FormInvalid,
+    FormNotFound,
+    publication_state,
+)
 from kb.application.use_cases.request_sync import InvalidRequest, RequestSync
 from kb.application.use_cases.schedule import ScheduleState, next_due
 from kb.config import AdminSettings
+from kb.domain.content import DEFAULT_RAW_CONTENT_MAX_BYTES
 from kb.domain.entry import EntryType
+from kb.domain.identity import entry_id_for
 from kb.domain.runs import RunStatus
 from kb.sources_config import FORM_SOURCE_ID, ConfigError, SourcesConfig, load
 
@@ -67,6 +76,12 @@ class AdminServices:
     summarizer: Any = None
     #: `EditSources`; None when the console is not wired to edit the file.
     sources_editor: Any = None
+    #: Manual records (FR-ADM-12..14): the records, `ManageForms`, `DraftSummary`
+    #: (None without a summarizer) and a `GetEntry` that queues no refresh.
+    forms: Any = None
+    manage_forms: Any = None
+    draft_summary: Any = None
+    get_entry: Any = None
     extras: dict[str, Any] = field(default_factory=dict)
 
 
@@ -132,6 +147,14 @@ def build_app(
                 return _error(400, "not_confirmed", str(exc))
             except Conflict as exc:
                 return _error(409, "conflict", str(exc))
+            except FormInvalid as exc:
+                return _error(400, "invalid_record", str(exc))
+            except NothingToSummarize as exc:
+                return _error(400, "nothing_to_summarize", str(exc))
+            except FormExists as exc:
+                return _error(409, "exists", str(exc))
+            except FormNotFound:
+                return _error(404, "not_found", "no such record")
             except FileNotWritable as exc:
                 return _error(409, "not_writable", str(exc))
             except Exception:
@@ -151,7 +174,8 @@ def build_app(
 
     def known_sources() -> set[str]:
         loaded, _ = config()
-        return {s.id for s in loaded.sources} if loaded else set()
+        # The built-in source is always there to be synced, configured or not.
+        return ({s.id for s in loaded.sources} if loaded else set()) | {FORM_SOURCE_ID}
 
     # -- session -------------------------------------------------------------
     async def health(_: Request) -> Response:
@@ -210,6 +234,7 @@ def build_app(
                 "sources_file": services.sources_file.name,
                 "config_error": error,
                 "kinds": ["confluence", "jira", "gitlab"],
+                "manual_records": services.manage_forms is not None,
             }
         )
 
@@ -268,6 +293,26 @@ def build_app(
             }
         )
 
+    def manual_card(entries: int | None = None) -> dict[str, Any] | None:
+        """The built-in source, shown beside the configured ones."""
+        if services.forms is None:
+            return None
+        records = services.forms.list()
+        pending = sum(1 for r in records if publication_state(r, services.store) == "pending")
+        if entries is None:
+            entries = next(
+                (row["entries"] for row in services.store.status()["by_source"]
+                 if row["source_id"] == FORM_SOURCE_ID), 0,
+            )
+        latest = services.runs.latest_per_source().get(FORM_SOURCE_ID)
+        return {
+            "id": FORM_SOURCE_ID,
+            "records": len(records),
+            "pending": pending,
+            "entries": entries,
+            "last_run": views.run_summary(latest),
+        }
+
     async def sources(_: Request) -> Response:
         editor = services.sources_editor
         if editor is not None:
@@ -276,7 +321,10 @@ def build_app(
         origins = editor.origins() if editor is not None else {}
         loaded, error = config()
         if loaded is None:
-            return _json({"sources": [], "config_error": error, "editable": False, "orphans": []})
+            return _json(
+                {"sources": [], "config_error": error, "editable": False, "orphans": [],
+                 "manual": manual_card()}
+            )
         status = services.store.status()
         entries = {row["source_id"]: row["entries"] for row in status["by_source"]}
         configured = {s.id for s in loaded.sources}
@@ -299,6 +347,7 @@ def build_app(
                 },
                 "approved": {"value": loaded.approved, "from": loaded.approved_from},
                 "orphans": orphans,
+                "manual": manual_card(entries.get(FORM_SOURCE_ID, 0)),
                 "sources": [
                     views.source_card(
                         source,
@@ -473,6 +522,8 @@ def build_app(
         return _json({"cancelled": request_id})
 
     async def purge_content(request: Request) -> Response:
+        if request.path_params["source_id"] == FORM_SOURCE_ID:
+            raise InvalidRequest("manual records are always kept readable: that is how agents read them")
         request_id = request_sync.purge_content(
             source_id=request.path_params["source_id"], known_sources=known_sources()
         )
@@ -516,11 +567,119 @@ def build_app(
         return _json({"revisions": editor().revisions(limit=limit)})
 
     async def retire_source(request: Request) -> Response:
+        if request.path_params["source_id"] == FORM_SOURCE_ID:
+            raise InvalidRequest("manual records are retired by deleting them, one by one")
         live = {row["source_id"] for row in services.store.status()["by_source"]}
         request_id = request_sync.retire_source(
             source_id=request.path_params["source_id"], sources_with_entries=live
         )
         return _json({"request_id": request_id}, 202)
+
+    # -- manual records (FR-ADM-12..14) --------------------------------------------
+    def forms_service():
+        if services.manage_forms is None:
+            raise InvalidRequest("this console is not set up for manual records")
+        return services.manage_forms
+
+    def record_view(record: Any) -> dict[str, Any]:
+        return {
+            **record.model_dump(mode="json"),
+            "publication": publication_state(record, services.store),
+        }
+
+    async def forms_list(_: Request) -> Response:
+        forms_service()
+        return _json(
+            {
+                "records": [record_view(r) for r in services.forms.list()],
+                "languages": list(services.languages),
+                "summarizer_configured": services.draft_summary is not None,
+                "max_bytes": DEFAULT_RAW_CONTENT_MAX_BYTES,
+            }
+        )
+
+    async def forms_create(request: Request) -> Response:
+        saved = forms_service().create(await _body(request))
+        return _json({"record": record_view(saved)}, 201)
+
+    async def forms_get(request: Request) -> Response:
+        forms_service()
+        record = services.forms.get(request.path_params["slug"])
+        if record is None:
+            return _error(404, "not_found", "no such record")
+        return _json({"record": record_view(record)})
+
+    async def forms_update(request: Request) -> Response:
+        saved = forms_service().update(request.path_params["slug"], await _body(request))
+        return _json({"record": record_view(saved)})
+
+    async def forms_delete(request: Request) -> Response:
+        forms_service().delete(request.path_params["slug"])
+        return _json({"deleted": request.path_params["slug"]})
+
+    async def forms_draft_summary(request: Request) -> Response:
+        forms_service()
+        if services.draft_summary is None:
+            return _error(
+                409, "no_summarizer",
+                "no summarizer is configured (KB_SUMMARIZER_URL and KB_SUMMARIZER_MODEL), "
+                "so a summary has to be written by hand",
+            )
+        payload = await _body(request)
+        title, body = payload.get("title", {}), payload.get("body", "")
+        if not isinstance(title, dict) or not isinstance(body, str):
+            raise InvalidRequest("title must be an object of languages and body a string")
+        try:
+            kind = EntryType(payload.get("type", "doc"))
+        except ValueError as exc:
+            raise InvalidRequest("type is not a known entry type") from exc
+        try:
+            # The model call is slow and touches no database: off the event loop.
+            draft = await run_in_threadpool(
+                lambda: services.draft_summary.execute(
+                    title={str(k): str(v) for k, v in title.items()}, body=body, entry_type=kind
+                )
+            )
+        except NothingToSummarize:
+            raise
+        except Exception:
+            # What a model endpoint says back is not for the browser: it can echo
+            # the prompt, the URL or a key. The log has it.
+            logger.exception("draft summary failed")
+            return _error(502, "summarizer_failed", "the summarizer did not answer; see the console's log")
+        return _json(
+            {
+                "draft": draft.model_dump(mode="json"),
+                # The port degrades to a bare title when the model fails (FR-REC-06),
+                # so an empty summary means "nothing usable came back", not success.
+                "usable": bool(draft.summary),
+            }
+        )
+
+    async def forms_content(request: Request) -> Response:
+        forms_service()
+        slug = request.path_params["slug"]
+        try:
+            offset = int(request.query_params.get("offset", 0))
+        except ValueError as exc:
+            raise InvalidRequest("offset must be a number") from exc
+        record = services.forms.get(slug)
+        if record is None:
+            return _error(404, "not_found", "no such record")
+        view = services.get_entry.execute(entry_id_for(FORM_SOURCE_ID, slug), offset=offset)
+        return _json(
+            {
+                "slug": slug,
+                "publication": publication_state(record, services.store),
+                # What `kb_get` would hand an agent -- None until the record is published.
+                "content": view.content.model_dump(mode="json") if view and view.content else None,
+                "entry": (
+                    {"id": view.entry.id, "summary": view.entry.summary, "title": view.entry.title,
+                     "hidden": view.hidden}
+                    if view else None
+                ),
+            }
+        )
 
     # -- the single-page app -------------------------------------------------
     async def spa(request: Request) -> Response:
@@ -552,6 +711,13 @@ def build_app(
         Route("/api/sources/revisions", api(sources_revisions)),
         Route("/api/sources/{source_id}/purge-content", api(purge_content), methods=["POST"]),
         Route("/api/sources/{source_id}/retire", api(retire_source), methods=["POST"]),
+        Route("/api/forms", api(forms_list), methods=["GET"]),
+        Route("/api/forms", api(forms_create), methods=["POST"]),
+        Route("/api/forms/draft-summary", api(forms_draft_summary), methods=["POST"]),
+        Route("/api/forms/{slug}", api(forms_get), methods=["GET"]),
+        Route("/api/forms/{slug}", api(forms_update), methods=["PUT"]),
+        Route("/api/forms/{slug}", api(forms_delete), methods=["DELETE"]),
+        Route("/api/forms/{slug}/content", api(forms_content)),
         Route("/api/schedules", api(schedules)),
         Route("/api/runs", api(runs_list)),
         Route("/api/runs/{run_id}", api(run_get)),

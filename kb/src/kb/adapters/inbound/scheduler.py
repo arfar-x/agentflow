@@ -39,7 +39,7 @@ from kb.application.use_cases.schedule import Job, JobKind, ScheduleState, due
 from kb.application.use_cases.sync_source import Mode
 from kb.domain.content import ContentPolicy
 from kb.domain.runs import Trigger
-from kb.sources_config import ConfigError, SourcesConfig, load
+from kb.sources_config import FORM_SOURCE_ID, ConfigError, SourcesConfig, load
 
 logger = logging.getLogger("kb.scheduler")
 
@@ -351,6 +351,8 @@ class Scheduler:
             )
             return _Result(counts={"missing": retired})
 
+        if source_id == FORM_SOURCE_ID and mechanism != JobKind.LAZY_REFRESH.value:
+            return self._publish_forms(dry_run=dry_run, forced=forced)
         if config is None:
             raise RuntimeError("the source configuration cannot be read (see the heartbeat)")
         if manual:
@@ -399,16 +401,50 @@ class Scheduler:
             checkpoint=report.checkpoint,
         )
 
+    def _publish_forms(self, *, dry_run: bool, forced: bool) -> _Result:
+        """The manual records, through the same funnel as any source.
+
+        Neither the `approved` switch nor the summarizer gate applies: nothing
+        here touches an outside system, and an operator-approved summary is
+        used as written -- the model is not asked (FR-SRC-07, FR-ADM-13). A
+        full pass always, so a deleted record is noticed. Works with an
+        unreadable source file too: it does not depend on one.
+        """
+        from kb.adapters.outbound.form_source import FormKnowledgeSource
+
+        source = FormKnowledgeSource(self._container.forms)
+        report = self._container.sync.execute(
+            source,
+            mode=Mode.FULL,
+            dry_run=dry_run,
+            force=forced,
+            content=ContentPolicy(store=True),  # always: this is how agents read them
+        )
+        return _Result(
+            counts=report.model_dump(
+                include={
+                    "seen", "created", "updated", "unchanged", "revived", "missing",
+                    "summarized", "content_stored", "content_purged",
+                }
+            ),
+            rejected=report.rejected,
+        )
+
     def _refresher(self, config: SourcesConfig) -> RefreshEntries:
+        from kb.adapters.outbound.form_source import FormKnowledgeSource
         from kb.adapters.outbound.source_factory import build_source
 
         def resolve(source_id: str):
+            if source_id == FORM_SOURCE_ID:
+                return FormKnowledgeSource(self._container.forms)
             for source in config.enabled_sources():
                 if source.id == source_id:
                     return build_source(source)
             return None
 
         def resolve_content(source_id: str) -> ContentPolicy:
+            if source_id == FORM_SOURCE_ID:
+                return ContentPolicy(store=True)
             for source in config.sources:
                 if source.id == source_id:
                     return config.content_policy_for(source)
@@ -485,9 +521,20 @@ class Scheduler:
     def _targets(self, request: SyncRequest, config: SourcesConfig | None) -> list[str]:
         if request.source_id != ALL_SOURCES:
             return [request.source_id]
-        if config is None:
-            return []
-        return [source.id for source in config.enabled_sources()]
+        configured = [source.id for source in config.enabled_sources()] if config else []
+        # The built-in source has no entry in the file, so "everything" must
+        # name it itself; it is cheap and does nothing when nothing changed.
+        return [*configured, FORM_SOURCE_ID] if self._has_forms() else configured
+
+    def _has_forms(self) -> bool:
+        forms = getattr(self._container, "forms", None)
+        if forms is None:
+            return False
+        try:
+            return bool(forms.list()) or bool(self._container.store.ids_for_source(FORM_SOURCE_ID))
+        except Exception:
+            logger.exception("could not look for manual records")
+            return False
 
 
 def main() -> None:  # pragma: no cover -- the container's entrypoint

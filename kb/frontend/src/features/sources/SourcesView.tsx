@@ -1,4 +1,4 @@
-import { AlertTriangle, Database, HardDrive, History, Pause, Pencil, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, Database, FileText, HardDrive, History, Pause, Pencil, Play, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
 import { api } from '../../api/api';
@@ -199,6 +199,35 @@ export function SourcesView({
           />
         </div>
       </div>
+
+      {sources.data.manual ? (
+        <div className={`${card} flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between`}>
+          <div className="flex items-start gap-3">
+            <span className="rounded-xl bg-indigo-500/10 p-2 text-indigo-400">
+              <FileText className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                Manual records <Badge tone="indigo">built in</Badge>
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {sources.data.manual.records} written here · {sources.data.manual.entries} in the catalog
+                {sources.data.manual.pending ? (
+                  <span className="text-amber-300"> · {sources.data.manual.pending} waiting for the scheduler</span>
+                ) : null}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" className={button.secondary} onClick={() => openTrigger('form')}>
+              <RefreshCw className="h-3.5 w-3.5" /> Sync
+            </button>
+            <button type="button" className={button.primary} onClick={() => onNavigate('forms')}>
+              Manage records
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {shown.length === 0 ? (
         <Empty>No source matches. Sources are added to <code>config/kb-sources.yaml</code> (or discovered with <code>make kb-sources-discover</code>).</Empty>

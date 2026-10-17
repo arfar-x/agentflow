@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Iterable, Iterator, Mapping, Sequence
 
 from kb.application.ports.entry_store import ContentSlice
+from kb.application.ports.form_records import FormRecord
 from kb.application.ports.heartbeat import Heartbeat
 from kb.application.ports.knowledge_source import SourceDocument
 from kb.application.ports.run_log import RunRecord, RunStats
@@ -505,3 +506,31 @@ class FakeSourceHistory:
 
     def origins(self):
         return dict(self._origins)
+
+
+class FakeFormRecords:
+    def __init__(self) -> None:
+        self.records: dict[str, FormRecord] = {}
+
+    def list(self):
+        return sorted(self.records.values(), key=lambda r: r.slug)
+
+    def get(self, slug: str):
+        return self.records.get(slug)
+
+    def create(self, record, *, at):
+        saved = record.model_copy(update={"revision": 1, "created_at": at, "updated_at": at})
+        self.records[record.slug] = saved
+        return saved
+
+    def update(self, record, *, at):
+        if record.slug not in self.records:
+            raise LookupError(record.slug)
+        saved = record.model_copy(
+            update={"revision": self.records[record.slug].revision + 1, "updated_at": at}
+        )
+        self.records[record.slug] = saved
+        return saved
+
+    def delete(self, slug: str) -> bool:
+        return self.records.pop(slug, None) is not None

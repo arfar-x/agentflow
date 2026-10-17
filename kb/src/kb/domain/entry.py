@@ -72,6 +72,11 @@ FETCH_TOOLS: Mapping[str, tuple[str, str]] = {
 #: The catalog's own read tool, named the same unsuffixed way as FETCH_TOOLS.
 CATALOG_READ_TOOL = "kb_get"
 
+#: Kinds whose document the catalog itself holds (manual records, FR-SRC-07):
+#: there is no other system to link to, so what an entry of this kind needs is
+#: its record reference, and it is read through `kb_get` (FR-CNT-12).
+CATALOG_KINDS: Mapping[str, str] = {"form": "record"}
+
 
 def fetch_hint_for(
     entry_id: str, location: Location, *, has_content: bool
@@ -178,6 +183,12 @@ class Entry(BaseModel):
             if not self.location.ref.get(required):
                 raise ValueError(
                     f"location.ref is missing {required!r}, so the document could never be fetched"
+                )
+        elif self.location.kind in CATALOG_KINDS:
+            required = CATALOG_KINDS[self.location.kind]
+            if not self.location.ref.get(required):
+                raise ValueError(
+                    f"location.ref is missing {required!r}, so the record could never be found"
                 )
         elif not self.location.url:
             raise ValueError("location has neither a fetchable ref nor a url")

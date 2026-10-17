@@ -140,3 +140,44 @@ def test_an_entry_has_nowhere_to_put_a_document_body():
     assert not {"body", "content", "text"} & set(Entry.model_fields)
     with pytest.raises(ValidationError):
         make_entry(body="the whole page")
+
+
+# -- the catalog's own kind (FR-ENT-02, FR-SRC-07) ---------------------------------
+
+
+def test_a_manual_record_needs_its_reference_not_a_url():
+    # Covers: FR-ENT-02
+    from kb.domain.entry import CATALOG_READ_TOOL, Entry, EntryType, Location, fetch_hint_for
+
+    entry = Entry(
+        id="form:adr-1", type=EntryType.SPEC, title={"en": "ADR 1"}, source_id="form",
+        location=Location(kind="form", ref={"record": "adr-1"}),
+    )
+    assert entry.location.url is None
+    # Nothing outside the catalog can read it, so its text is the way in.
+    assert fetch_hint_for(entry.id, entry.location, has_content=True) == {
+        "tool": CATALOG_READ_TOOL, "args": {"id": "form:adr-1"},
+    }
+    assert fetch_hint_for(entry.id, entry.location, has_content=False) is None
+
+
+def test_a_manual_record_without_its_reference_is_still_rejected():
+    # Covers: FR-ENT-02
+    import pytest
+    from pydantic import ValidationError
+
+    from kb.domain.entry import Entry, EntryType, Location
+
+    with pytest.raises(ValidationError, match="record"):
+        Entry(id="form:x", type=EntryType.DOC, title={"en": "X"}, source_id="form", location=Location(kind="form"))
+
+
+def test_an_unknown_kind_still_needs_a_url():
+    # Covers: FR-ENT-02
+    import pytest
+    from pydantic import ValidationError
+
+    from kb.domain.entry import Entry, EntryType, Location
+
+    with pytest.raises(ValidationError, match="url"):
+        Entry(id="x:1", type=EntryType.DOC, title={"en": "X"}, source_id="x", location=Location(kind="wiki"))

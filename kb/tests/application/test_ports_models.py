@@ -74,3 +74,11 @@ def test_the_fakes_for_run_history_the_queue_and_the_heartbeat_satisfy_their_por
     assert isinstance(FakeRunLog(), RunLog)
     assert isinstance(FakeSyncQueue(), SyncQueue)
     assert isinstance(FakeHeartbeats(), HeartbeatStore)
+
+
+def test_the_fake_for_manual_records_satisfies_its_port():
+    # Covers: NFR-ARC-04
+    from kb.application.ports.form_records import FormRecords
+    from tests.application.fakes import FakeFormRecords
+
+    assert isinstance(FakeFormRecords(), FormRecords)

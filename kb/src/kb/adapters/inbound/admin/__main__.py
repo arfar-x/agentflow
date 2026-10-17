@@ -35,6 +35,10 @@ def main() -> None:  # pragma: no cover -- wiring and uvicorn
         languages=settings.summary_languages,
         summarizer=container.summarizer,
         sources_editor=container.sources_editor,
+        forms=container.forms,
+        manage_forms=container.manage_forms,
+        draft_summary=container.draft_summary,
+        get_entry=container.get_entry,
         extras=container.extras,
     )
     try:

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from kb.adapters.inbound.scheduler import Scheduler
+from kb.adapters.outbound.form_source import PresetSummarizer
 from kb.application.use_cases.reconcile_document import ReconcileDocument
 from kb.application.use_cases.schedule import JobKind
 from kb.application.use_cases.sync_source import SyncSource
@@ -23,6 +24,7 @@ from kb.domain.runs import INTERRUPTED, RunStatus, Trigger
 from tests.application.fakes import (
     FakeClock,
     FakeEntryStore,
+    FakeFormRecords,
     FakeHeartbeats,
     FakeKnowledgeSource,
     FakeRunLog,
@@ -66,7 +68,7 @@ class StubContainer:
         self.runs = FakeRunLog()
         self.queue = FakeSyncQueue()
         self.heartbeats = FakeHeartbeats()
-        self.reconcile = ReconcileDocument(store, FakeSummarizer(), clock)
+        self.reconcile = ReconcileDocument(store, PresetSummarizer(FakeSummarizer()), clock)
         self.sync = SyncSource(store, self.reconcile, clock)
         self.source = source or FakeKnowledgeSource("confluence-eng", [document()])
         self.fail_with = fail_with
@@ -602,3 +604,66 @@ def test_the_entries_of_a_source_that_is_gone_can_be_retired_on_request(wired):
     assert entry.deleted_at is not None, "soft-deleted, not erased (FR-REC-05)"
     run = container.runs.get_run(request.run_ids[0])
     assert (run.mechanism, run.missing, run.triggered_by) == ("retire", 1, Trigger.MANUAL)
+
+
+def with_forms(container):
+    from kb.application.ports.form_records import FormRecord
+    from tests.application.fakes import FakeFormRecords
+
+    container.forms = FakeFormRecords()
+    container.forms.create(
+        FormRecord(slug="glossary", title={"en": "Glossary"}, body="Terms we use.",
+                   summary={"en": "Our terms."}),
+        at=NOON,
+    )
+    return container.forms
+
+
+def test_manual_records_are_published_on_request_even_when_the_source_file_is_broken(wired):
+    # Covers: FR-SRC-07, FR-SCH-11
+    container, store, scheduler, path = wired
+    with_forms(container)
+    path.write_text("sources: [this is not valid", encoding="utf-8")
+
+    request = serve(container, scheduler, source_id="form", mode="full")
+
+    assert request.status is RequestStatus.DONE, request.error
+    [entry] = store.entries.values()
+    assert (entry.source_id, entry.summary) == ("form", {"en": "Our terms."})
+    run = container.runs.get_run(request.run_ids[0])
+    assert (run.source_id, run.created, run.content_stored) == ("form", 1, 1)
+
+
+def test_manual_records_are_published_while_syncing_is_switched_off(wired):
+    # Covers: FR-SRC-07
+    container, store, scheduler, path = wired
+    with_forms(container)
+    path.write_text(CONFIG.replace("approved: true", "approved: false"), encoding="utf-8")
+
+    request = serve(container, scheduler, source_id="form", mode="full")
+
+    assert request.status is RequestStatus.DONE, request.error
+    assert len(store.entries) == 1
+
+
+def test_syncing_everything_includes_the_manual_records(wired):
+    # Covers: FR-SRC-07, FR-SCH-11
+    container, store, scheduler, _ = wired
+    with_forms(container)
+
+    request = serve(container, scheduler, source_id="*", mode="full")
+
+    assert request.status is RequestStatus.DONE, request.error
+    assert sorted(container.runs.get_run(i).source_id for i in request.run_ids) == [
+        "confluence-eng", "form",
+    ]
+
+
+def test_syncing_everything_skips_the_manual_records_when_there_are_none(wired):
+    # Covers: FR-SRC-07
+    container, _, scheduler, _ = wired
+    container.forms = FakeFormRecords()
+
+    request = serve(container, scheduler, source_id="*", mode="full")
+
+    assert [container.runs.get_run(i).source_id for i in request.run_ids] == ["confluence-eng"]

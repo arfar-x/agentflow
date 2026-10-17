@@ -51,6 +51,8 @@ class Container:
     runs: Any = None
     queue: Any = None
     heartbeats: Any = None
+    #: Manual records, the `form` source's documents (FR-SRC-07).
+    forms: Any = None
     #: Closes whatever else was opened for the above.
     _closers: list[Callable[[], None]] = field(default_factory=list)
 
@@ -77,6 +79,8 @@ def build(settings: Settings | None = None) -> Container:
         PostgresRunLog,
         PostgresSyncQueue,
     )
+    from kb.adapters.outbound.form_source import PresetSummarizer
+    from kb.adapters.outbound.postgres_forms import PostgresFormRecords
     from kb.adapters.outbound.postgres_store import PostgresEntryStore
 
     settings = settings or Settings.from_env()
@@ -86,7 +90,9 @@ def build(settings: Settings | None = None) -> Container:
     # one across threads mid-transaction.
     beat_connection = psycopg.connect(settings.database_url, connect_timeout=5, autocommit=True)
     clock = SystemClock(settings.tzinfo)
-    reconcile = ReconcileDocument(store, build_summarizer(settings), clock)
+    # Manual records arrive with the wording their author approved; the model
+    # is asked only for what does not (adapters/outbound/form_source.py).
+    reconcile = ReconcileDocument(store, PresetSummarizer(build_summarizer(settings)), clock)
     return Container(
         settings=settings,
         store=store,
@@ -100,6 +106,7 @@ def build(settings: Settings | None = None) -> Container:
         runs=PostgresRunLog(store.connection),
         queue=PostgresSyncQueue(store.connection),
         heartbeats=PostgresHeartbeat(beat_connection),
+        forms=PostgresFormRecords(store.connection),
         _closers=[beat_connection.close],
     )
 
@@ -134,6 +141,13 @@ class AdminContainer:
     summarizer: Any = None
     #: `EditSources`: how the console changes kb-sources.yaml.
     sources_editor: Any = None
+    #: `ManageForms`, `DraftSummary` and the records themselves (FR-ADM-12/13).
+    forms: Any = None
+    manage_forms: Any = None
+    draft_summary: Any = None
+    #: What `kb_get` returns, without queueing a refresh: the console's role may
+    #: not write the refresh queue.
+    get_entry: Any = None
     #: Room for what later parts of the console add.
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -159,12 +173,19 @@ def build_admin(settings: Settings | None = None) -> AdminContainer:
     from kb.adapters.outbound.source_factory import BUILDABLE_KINDS, missing_credentials
     from kb.adapters.outbound.sources_editor import RuamelSourceEditor
     from kb.adapters.outbound.sources_file import FileSourcesFile
+    from kb.adapters.outbound.postgres_forms import PostgresFormRecords
+    from kb.application.use_cases.draft_summary import DraftSummary
     from kb.application.use_cases.edit_sources import EditSources
+    from kb.application.use_cases.manage_forms import ManageForms
+    from kb.application.use_cases.request_sync import RequestSync
 
     settings = settings or Settings.from_env()
     store = PostgresEntryStore.connect(settings.database_url)
     heartbeats = PostgresHeartbeat(store.connection)
     clock = SystemClock(settings.tzinfo)
+    queue = PostgresSyncQueue(store.connection)
+    forms = PostgresFormRecords(store.connection)
+    summarizer = build_summarizer(settings) if settings.summarizer_configured else None
 
     def scheduler_credentials():
         beat = heartbeats.last_beat()
@@ -174,10 +195,16 @@ def build_admin(settings: Settings | None = None) -> AdminContainer:
         settings=settings,
         store=store,
         runs=PostgresRunLog(store.connection),
-        queue=PostgresSyncQueue(store.connection),
+        queue=queue,
         heartbeats=heartbeats,
         clock=clock,
-        summarizer=build_summarizer(settings) if settings.summarizer_configured else None,
+        summarizer=summarizer,
+        forms=forms,
+        manage_forms=ManageForms(forms, RequestSync(queue, clock), clock),
+        draft_summary=DraftSummary(summarizer) if summarizer is not None else None,
+        get_entry=GetEntry(
+            store, clock, stale_after=settings.stale_after, queue_refresh=False
+        ),
         sources_editor=EditSources(
             FileSourcesFile(Path(settings.sources_file)),
             RuamelSourceEditor(),

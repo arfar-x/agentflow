@@ -102,11 +102,11 @@ CREATE TABLE IF NOT EXISTS form_record (
     keywords    TEXT[]      NOT NULL DEFAULT '{}',
     aliases     TEXT[]      NOT NULL DEFAULT '{}',
     owner_team  TEXT,
-    audience    TEXT[]      NOT NULL DEFAULT '{all}',
     revision    INTEGER     NOT NULL DEFAULT 1,
-    -- The operator-approved SummaryDraft, as JSON. Null means "describe it for
-    -- me" (a model call) or, with no model, the real title alone (FR-REC-06).
-    draft       JSONB,
+    -- What the operator approved the entry should say, per language. A record
+    -- is never summarized behind the operator's back: the model is asked only
+    -- when they press the button, and what they keep is stored here (FR-ADM-13).
+    summary     JSONB       NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

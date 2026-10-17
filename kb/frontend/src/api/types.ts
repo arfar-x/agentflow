@@ -117,7 +117,18 @@ export interface SourcesResponse {
   defaults?: { mechanisms: Record<string, MechanismSettings>; raw_content_max_bytes: number };
   /** Entries whose source is no longer configured. */
   orphans: { source_id: string; entries: number }[];
+  /** The built-in source for manual records; null when the console is not set up for them. */
+  manual?: ManualCard | null;
   sources: SourceCard[];
+}
+
+export interface ManualCard {
+  id: 'form';
+  records: number;
+  /** Saved, but the catalog does not yet say what they say. */
+  pending: number;
+  entries: number;
+  last_run: RunSummary | null;
 }
 
 /** One edit of kb-sources.yaml; mirrors the server's SourceChange. */
@@ -213,9 +224,74 @@ export interface ConfigResponse {
   sources_file: string;
   config_error: string | null;
   kinds: SourceKind[];
+  manual_records?: boolean;
 }
 
 export interface CheckResponse {
   ready: boolean;
   checks: Record<string, { ok: boolean; error?: string | null } & Record<string, unknown>>;
+}
+
+export type Publication = 'published' | 'pending';
+
+/** One manual record (kb/application/ports/form_records.py). */
+export interface FormRecord {
+  slug: string;
+  title: Record<string, string>;
+  body: string;
+  type: string;
+  /** What the entry says about itself, per language. */
+  summary: Record<string, string>;
+  tags: string[];
+  keywords: string[];
+  aliases: string[];
+  owner_team: string | null;
+  revision: number;
+  created_at: string | null;
+  updated_at: string | null;
+  publication: Publication;
+}
+
+/** What is sent to create or change a record; the server owns the rest. */
+export type FormInput = Pick<
+  FormRecord,
+  'slug' | 'title' | 'body' | 'type' | 'summary' | 'tags' | 'keywords' | 'aliases' | 'owner_team'
+>;
+
+export interface FormsResponse {
+  records: FormRecord[];
+  languages: string[];
+  summarizer_configured: boolean;
+  /** Text beyond this many bytes is cut when the record is kept. */
+  max_bytes: number;
+}
+
+export interface SummaryDraft {
+  title: Record<string, string>;
+  summary: Record<string, string>;
+  keywords: string[];
+  aliases: string[];
+}
+
+export interface DraftSummaryResponse {
+  draft: SummaryDraft;
+  /** False when the model returned nothing usable and the draft is a bare title. */
+  usable: boolean;
+}
+
+export interface ContentPage {
+  text: string;
+  offset: number;
+  total_chars: number;
+  next_offset: number | null;
+  truncated: boolean;
+  original_bytes: number;
+}
+
+export interface FormContent {
+  slug: string;
+  publication: Publication;
+  /** What `kb_get` would hand an agent; null until the record is published. */
+  content: ContentPage | null;
+  entry: { id: string; summary: Record<string, string>; title: Record<string, string>; hidden: boolean } | null;
 }

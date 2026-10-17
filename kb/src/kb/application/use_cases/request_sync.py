@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Collection
 
 from kb.application.ports.clock import Clock
+from kb.sources_config import FORM_SOURCE_ID
 from kb.application.ports.sync_queue import (
     ALL_SOURCES,
     RequestKind,
@@ -78,6 +79,20 @@ class RequestSync:
             raise InvalidRequest(f"no live entries come from {source_id!r}")
         return self._enqueue(
             SyncRequest(kind=RequestKind.RETIRE_SOURCE, source_id=source_id, requested_by=requested_by)
+        )
+
+    def publish_forms(self, *, requested_by: str = "admin") -> int:
+        """Ask for the manual records to be brought into the catalog: a full
+        pass over the built-in source, which is tiny and costs nothing when
+        nothing changed. A full one, because only a full pass notices a record
+        that was deleted."""
+        return self._enqueue(
+            SyncRequest(
+                kind=RequestKind.SYNC,
+                source_id=FORM_SOURCE_ID,
+                mode="full",
+                requested_by=requested_by,
+            )
         )
 
     def cancel(self, request_id: int) -> bool:
